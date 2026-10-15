@@ -125,14 +125,33 @@ def screenshot(url, target, size, wait_ms=0):
 
 
 def declared_image(project):
+    """The picture the last slice's checks declare, else the last image any check declares.
+
+    With a picture built in parts, earlier slices declare the parts and the last slice the
+    stitched picture; later repair checks may declare the parts again.
+    """
+    found = None
     for brief in project.glob(".visp/features/*/brief.yaml"):
-        for match in re.finditer(r"images:\s*\n((?:\s+-\s+.+\n)+)|images:\s*\[([^\]]+)\]", brief.read_text()):
-            paths = re.findall(r"-\s+(\S+)", match.group(1)) if match.group(1) else \
-                [p.strip().strip("'\"") for p in match.group(2).split(",")]
-            for path in paths:
+        text = brief.read_text()
+        images = {}
+        for block in re.split(r"\n  - id: ", text.split("\nslices:")[0]):
+            check = block.split("\n", 1)[0].strip()
+            listed = re.search(r"images:\s*\n((?:\s+-\s+.+\n?)+)|images:\s*\[([^\]]+)\]", block)
+            if listed:
+                images[check] = re.findall(r"-\s+(\S+)", listed.group(1)) if listed.group(1) else \
+                    [p.strip().strip("'\"") for p in listed.group(2).split(",")]
+        slices = text.split("\nslices:", 1)[1] if "\nslices:" in text else ""
+        last = re.split(r"\n  - id: ", slices)[-1] if slices else ""
+        owned = re.search(r"\n    checks:\s*\n((?:\s+-\s+.+\n?)+)", last)
+        for check in (re.findall(r"-\s+(\S+)", owned.group(1)) if owned else []):
+            for path in images.get(check, []):
                 if (project / path).is_file():
                     return project / path
-    return None
+        for paths in images.values():
+            for path in paths:
+                if (project / path).is_file():
+                    found = project / path
+    return found
 
 
 def newest_image(project):
