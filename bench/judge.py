@@ -28,6 +28,23 @@ from runfacts import final_project, invalid
 
 BENCH = pathlib.Path(__file__).resolve().parent
 CHECKLISTS = {
+    "xbox-controller-svg": {
+        "elements": ["a dark background behind the controller",
+                     "a symmetrical Xbox body shell with grips curving downwards",
+                     "gradient shading that gives the shell 3D curvature and an edge shadow",
+                     "two thumbsticks in the Xbox offset layout (left stick high, right stick low)",
+                     "each thumbstick drawn as a recessed socket, raised base and textured top with grip ridges",
+                     "a faceted dark metallic d-pad in a recessed dish at lower left",
+                     "A, B, X, Y face buttons in a diamond on the right, coloured green A (bottom), red B (right), blue X (left), yellow Y (top)",
+                     "glossy face buttons with centred, legible letter labels",
+                     "a circular Xbox guide button at top centre with a glowing X logo",
+                     "View, Menu and Share buttons placed correctly around the centre",
+                     "the top edges of the LB and RB bumpers visible above the shell"],
+        "styles": ["polished, glossy vector render with convincing depth",
+                   "clean layering with no messy overlapping or broken shapes",
+                   "reads as an Xbox Wireless Controller at a glance"],
+        "deliverable": "xbox-controller.svg",
+    },
     "ps5-controller-svg": {
         "elements": ["the DualSense body shape with its two grips", "a two-tone white shell with black centre and trim",
                      "a large touchpad", "a light bar", "a PS button", "face buttons with triangle, circle, cross and square",
@@ -206,7 +223,9 @@ def judge(name):
         image, source = game_screen(project, directory), "index.html"
         what = "the first screen of a browser game, as a player sees it before the first shot"
     else:
-        image = declared_image(project) or newest_image(project)
+        # A request that names its output file is judged on that file, not on a newer preview.
+        named = checklist.get("deliverable") and project / checklist["deliverable"]
+        image = named if named and named.is_file() else declared_image(project) or newest_image(project)
         source = str(image.relative_to(project)) if image else None
         image = raster(image, directory) if image else None
         what = "one image"

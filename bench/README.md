@@ -18,6 +18,7 @@ Fixed-contract tasks for comparing coding workflows (bare coding, Spec Kit, BMAD
 | `slingshot-game` | New browser game: drag-to-launch slingshot, physics, three levels, test hooks on `window.gameTest` | 22 core + 6 UI |
 | `catapult-game` | New browser game: catapult with four projectile kinds, three materials, per-level ammunition and three levels | request only; hidden checks not yet published |
 | `ps5-controller-svg` | Visual: an SVG of a PS5 controller | none; blind judge, 10 elements + 2 styles |
+| `xbox-controller-svg` | Visual: a detailed, constrained SVG of an Xbox controller saved as `xbox-controller.svg` | none; blind judge, 11 elements + 3 styles |
 | `voxel-pagoda` | Visual: an isometric voxel pagoda garden | none; blind judge, 3 elements + 4 styles |
 | `rainfall-chart` | Visual: a bar chart of Colombo's monthly rainfall from given values | none; blind judge, 7 elements + 2 styles |
 | `lighthouse-pixel` | Visual: 64 × 64 pixel art of a lighthouse at sunset | none; blind judge, 6 elements + 5 styles |
