@@ -1,0 +1,19 @@
+#!/bin/bash
+# Bench wrapper for the claude CLI: runs the real CLI unchanged and, for a print-mode call with
+# JSON output, appends its reported cost and usage to $BENCH_CALL_LOG. The worker and the
+# reviewer and tester VISP launches all resolve `claude` through the worker's PATH.
+real="${BENCH_REAL_CLAUDE:?BENCH_REAL_CLAUDE is not set}"
+print=0
+json=0
+for arg in "$@"; do
+  case "$arg" in
+    -p | --print) print=1 ;;
+    json) json=1 ;;
+  esac
+done
+if [ -z "${BENCH_CALL_LOG:-}" ] || [ "$print" = 0 ] || [ "$json" = 0 ]; then exec "$real" "$@"; fi
+out=$("$real" "$@")
+status=$?
+printf '%s\n' "$out"
+printf '%s' "$out" | python3 -I "$(dirname "$0")/record_call.py" "$BENCH_CALL_LOG" "$@" || true
+exit "$status"
