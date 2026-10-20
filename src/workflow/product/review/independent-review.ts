@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { feedbackResolutionSchema, type ProductFeedback } from "../feedback-model.js";
 import type { ProductOutcome } from "../model.js";
+import { MAX_OPEN_DISPUTES } from "../tester/pinned-dispute-model.js";
 import { normalizeIndependentEvidence } from "./review-citations.js";
 
 const text = z.string().trim().min(1);
@@ -57,7 +58,7 @@ export const independentReviewSchema = z
       .max(3),
     limitations: z.array(text),
     resolutions: z.array(feedbackResolutionSchema),
-    disputes: z.array(disputeRulingSchema).max(5).optional(),
+    disputes: z.array(disputeRulingSchema).max(MAX_OPEN_DISPUTES).optional(),
   })
   .strict();
 export type IndependentReview = z.infer<typeof independentReviewSchema>;
