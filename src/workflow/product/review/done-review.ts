@@ -49,6 +49,9 @@ export interface DoneCriticSummary {
   readonly running?: boolean;
   readonly summary?: string;
   readonly findings: readonly { problem: string; nextCheck?: string; required?: boolean }[];
+  /** Lean mode (`workflow.requestGaps: required`): advisory findings, which the worker need not act on. */
+  readonly notes?: readonly string[];
+  readonly notesAdvice?: string;
   readonly callsRemaining?: number;
   /** Why no review happened: no applicable evidence, exhausted budget, or a failed launch. */
   readonly reason?: string;
@@ -297,10 +300,29 @@ async function launchReview(
     critic.running &&
     !(await pendingReview(workspace, selection.feature, deadline ?? Date.now(), options))
   )
-    return summarize(
-      await runProductCritic(workspace, { operation: "status", feature: selection.feature }),
+    return withNotes(
+      workspace,
+      summarize(
+        await runProductCritic(workspace, { operation: "status", feature: selection.feature }),
+      ),
     );
-  return critic;
+  return withNotes(workspace, critic);
+}
+
+const NOTES_ADVICE =
+  "Notes are not gaps against the request. Do not edit for them; fix the required findings, if any.";
+
+/** Lean mode: only required findings ask for work; the reviewer's other findings become notes. */
+function withNotes(workspace: WorkspaceState, critic: DoneCriticSummary): DoneCriticSummary {
+  if (workspace.config.workflow.requestGaps !== "required") return critic;
+  const notes = critic.findings.filter((finding) => finding.required !== true);
+  if (!notes.length) return critic;
+  return {
+    ...critic,
+    findings: critic.findings.filter((finding) => finding.required === true),
+    notes: notes.map((finding) => finding.problem),
+    notesAdvice: NOTES_ADVICE,
+  };
 }
 
 /** The record after `done`, and whether the slice owes a required review. */

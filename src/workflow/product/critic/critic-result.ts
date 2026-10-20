@@ -72,6 +72,7 @@ export async function finishReview(
         response,
         false,
         adapterCompletionTime(request, pending, adapterReturnedAt),
+        workspace.config.workflow.requestGaps === "required",
       );
   const { result, current, message } = await applyValidatedReview(
     workspace,
@@ -350,6 +351,7 @@ function validateResult(
   response?: HostResponse,
   allowLateAdvice = false,
   adapterReturnedAt?: number,
+  requestGaps = false,
 ): Result<CriticResponse> {
   const reject = (message: string) => err(vispError("EVIDENCE_FAILED", message));
   if (
@@ -366,7 +368,7 @@ function validateResult(
   const hostGap = nativeResultGap(state, pending, response);
   if (hostGap) return reject(hostGap);
   if (!serializableResponse(response.response)) return reject("Critic response must be JSON");
-  const supplied = normalizedResponse(response.response, pending, selected);
+  const supplied = normalizedResponse(response.response, pending, selected, requestGaps);
   const parsed = criticResponseSchema.safeParse(supplied);
   if (!parsed.success)
     return reject(
@@ -419,7 +421,12 @@ function disputeRulingGap(pending: Attempt, response: unknown): string | undefin
     : undefined;
 }
 
-function normalizedResponse(response: unknown, pending: Attempt, selected: CriticSelection) {
+function normalizedResponse(
+  response: unknown,
+  pending: Attempt,
+  selected: CriticSelection,
+  requestGaps: boolean,
+) {
   const independent = independentReviewSchema.safeParse(response);
   return independent.success && pending.selection
     ? {
@@ -428,6 +435,7 @@ function normalizedResponse(response: unknown, pending: Attempt, selected: Criti
             independent.data,
             pending.phase ?? "product",
             selected.record.brief.outcomes,
+            { requestGaps },
           ),
           subjectDigest: pending.subject,
           selection: pending.selection,
