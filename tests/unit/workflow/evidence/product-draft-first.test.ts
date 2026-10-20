@@ -4,7 +4,10 @@ import { afterEach, expect, it } from "vitest";
 import { parse, stringify } from "yaml";
 import { visualRequest } from "../../../../src/workflow/product/draft-first.js";
 import { runProductDone } from "../../../../src/workflow/product/evidence.js";
-import { createProductFeature } from "../../../../src/workflow/product/index.js";
+import {
+  createProductFeature,
+  updateProductBrief,
+} from "../../../../src/workflow/product/index.js";
 import {
   productScopes,
   readProductAuthorizationBaseline,
@@ -127,5 +130,46 @@ it.each([
   expect(next.ok && next.value.command).toContain("--check");
   expect((await runProductWork(await state(), {})).ok).toBe(false);
   const record = await readProductRecord(await state(), { feature });
+  expect(record.ok && record.value.brief.slices).toEqual([]);
+});
+
+it("drafts against an outcome the brief already declares", async () => {
+  const started = await pictureFeature("visual");
+  const declared = await updateProductBrief(await state(), {
+    feature: started.brief.feature,
+    reason: "State what the picture must show",
+    patch: {
+      outcomes: [
+        {
+          id: "O007",
+          kind: "functional",
+          statement: "The controller has the two-tone shell",
+          priority: "must",
+          provenance: "user-stated",
+        },
+      ],
+    },
+  });
+  expect(declared, JSON.stringify(declared)).toMatchObject({ ok: true });
+  expect(await runProductWork(await state(), {})).toMatchObject({
+    ok: true,
+    value: { task: "T001" },
+  });
+  const record = await readProductRecord(await state());
+  if (!record.ok) throw new Error(record.error.message);
+  expect(record.value.brief.outcomes.map((outcome) => outcome.id)).toEqual(["O007"]);
+  expect(record.value.brief.slices[0]?.outcomes).toEqual(["O007"]);
+});
+
+it("leaves an incomplete brief to be completed before any draft", async () => {
+  const started = await pictureFeature("visual");
+  const marked = await updateProductBrief(await state(), {
+    feature: started.brief.feature,
+    reason: "Mark the brief unfinished",
+    patch: { incomplete: true },
+  });
+  expect(marked, JSON.stringify(marked)).toMatchObject({ ok: true });
+  expect((await runProductWork(await state(), {})).ok).toBe(false);
+  const record = await readProductRecord(await state());
   expect(record.ok && record.value.brief.slices).toEqual([]);
 });
