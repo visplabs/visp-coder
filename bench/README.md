@@ -47,8 +47,11 @@ A preset (`presets.py`) fixes every model in a batch. `setup_arm.py --preset` re
 | `default` | `claude-haiku-4-5-20251001`, default effort | `harness: codex`, `launch: codex-exec`, `reasoningEffort: medium`, `webSearch: true` | Sonnet 5.5, high | Opus 5.5, high |
 | `quality-2026-10` | `claude -p --model claude-haiku-5-5 --effort high` | `harness: claude-code`, `launch: claude-exec`, `model: claude-sonnet-5-5`, `reasoningEffort: high` | Sonnet 5.5, high | Opus 5.5, high |
 | `quality-2026-10-sonnet` | `claude-sonnet-5-5`, high effort | as `quality-2026-10` | Sonnet 5.5, high | Opus 5.5, high |
+| `quality-2026-10-haiku-critic` | as `quality-2026-10` | as `quality-2026-10`, with `model: claude-haiku-5-5` | Sonnet 5.5, high | Opus 5.5, high |
 
 Without `--preset` a run uses `default`, the configuration of the published numbers. Every quality batch uses `quality-2026-10`.
+
+`quality-2026-10-haiku-critic` gives VISP's reviewer and tester the worker's own model, to tell how much of VISP's gain comes from its loop and how much from a stronger reviewer. A `bare` arm runs the same under it as under `quality-2026-10`.
 
 ### Batches
 
@@ -68,6 +71,7 @@ python3 bench/report.py --batch q1 --score --runs     # score what is missing, t
 ### Pairwise judge and cost
 
 - `pairwise.py --batch <batch>` (or `report.py --pairwise`) shows the visual judge each picture task's base and candidate images of the same rep, twice in both orders; a pair is a win only when both orders agree, a split verdict is a tie. Verdicts are cached in `batches/<batch>/pairwise.json`. On five identical PS5 pairs two passes gave 1-3-1 and 1-2-2, so read small tallies as direction.
+- `report.py --compare BATCH:LABEL ...` compares arms across batches made under different presets or worker models, for example bare Sonnet 5.5 against VISP with a Haiku 5.5 worker: per task and over all tasks, the mean scores, median wall time, mean cost per run and cost per passed hidden check (the costed runs' summed cost over the hidden checks they passed). Each batch passes its own preset guard and all must use the same judges; it gives no quality-rule verdict, since the arms ran at different times.
 - Every `claude` a run starts (the worker, and VISP's reviewer and tester) goes through `claude_shim/claude`, which runs the real CLI unchanged and appends each print-mode JSON result's reported `total_cost_usd` and usage to `<run>/claude-calls.jsonl`. `report.py` shows the mean cost per run, with VISP's own calls in brackets. VISP itself does not keep its reviewer's usage.
 
 ### Time
