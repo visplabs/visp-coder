@@ -122,6 +122,17 @@ def reviews(project):
     return attempts["reviewed"], attempts["unavailable"], pictures
 
 
+def call_costs(run):
+    """Cost of every claude call the run logged (claude_shim): all of them, and VISP's own."""
+    calls = [json.loads(line) for line in (run / "claude-calls.jsonl").read_text().splitlines() if line.strip()] \
+        if (run / "claude-calls.jsonl").exists() else []
+    if not calls:
+        return None, None
+    total = sum(call.get("cost") or 0 for call in calls)
+    critic = sum(call.get("cost") or 0 for call in calls if call.get("role") == "critic")
+    return round(total, 3), round(critic, 3)
+
+
 def facts(entry):
     run = RUNS / "runs" / entry["name"]
     results = [load(path) or {} for _, path in sessions(run)]
@@ -140,6 +151,7 @@ def facts(entry):
         row["code"], row["codeCriteria"], problem = code_score(project)
         row["problems"] += [problem] if problem else []
     reviewed, unavailable, pictures = reviews(project)
+    cost, critic_cost = call_costs(run)
     split = timing(transcripts(run))
     stage1 = load(run / "session1" / "hidden-stage1.json") if entry["twoSessions"] else None
     return {
@@ -150,6 +162,7 @@ def facts(entry):
         "idle": split.get("idleSeconds"), "model": split.get("modelSeconds"), "visp": split.get("vispSeconds"),
         "own": split.get("ownCommandSeconds"), "legacyIdle": split.get("legacyIdle"),
         "refusals": split.get("refusals"), "reviewed": reviewed, "unavailable": unavailable, "pictures": pictures,
+        "cost": cost, "criticCost": critic_cost,
     }
 
 
@@ -230,6 +243,7 @@ def summarize(rows, needed):
         "reviewed": sum(r["reviewed"] for r in rows), "unavailable": sum(r["unavailable"] for r in rows),
         "pictures": sum(r["pictures"] for r in rows), "refusals": sum(r["refusals"] or 0 for r in rows),
         "timeouts": sum(r["timedOut"] for r in rows),
+        "cost": mean(r["cost"] for r in rows), "criticCost": mean(r["criticCost"] for r in rows),
     }
 
 
@@ -276,16 +290,19 @@ def markdown(manifest, rows, groups, comparisons, excluded, unfinished, show_run
     out.append(f"Worker {worker['model']} ({worker['effort'] or 'default effort'}); "
                f"{len(rows)} valid runs; {len(excluded)} invalid runs excluded; {len(unfinished)} unfinished.")
     out += ["", "| Task | Arm | n | Hidden | Judge | Checklist | Code | Wall s | Idle s | Model s | VISP s | Own s "
-            "| Legacy idle s | Reviews run/unavailable | Pictures | Refusals | Timeouts |",
-            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+            "| Legacy idle s | Reviews run/unavailable | Pictures | Refusals | Timeouts | Cost $ (VISP's) |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
     for (task, arm), s in groups.items():
         out.append(f"| {task} | {arm} | {s['n']} | {fmt(s['hidden'], 'hidden')} | {fmt(s['judge'])} | "
                    f"{fmt(s['checklist'])} | {fmt(s['code'])} | {fmt(s['wall'])} | {fmt(s['idle'])} | "
                    f"{fmt(s['model'])} | {fmt(s['visp'])} | {fmt(s['own'])} | {fmt(s['legacyIdle'])} | "
-                   f"{s['reviewed']}/{s['unavailable']} | {s['pictures']} | {s['refusals']} | {s['timeouts']} |")
+                   f"{s['reviewed']}/{s['unavailable']} | {s['pictures']} | {s['refusals']} | {s['timeouts']} | "
+                   f"{fmt(s['cost'])} ({fmt(s['criticCost'])}) |")
     out.append("")
     out.append("Scores are means over valid runs (– where a run has no score yet); times are medians (wall: all "
-               "sessions; idle, model, VISP and own from the worker transcript; legacy idle: gaps over 240 s).")
+               "sessions; idle, model, VISP and own from the worker transcript; legacy idle: gaps over 240 s). Cost is "
+               "the mean list-price cost the claude CLI reported for every call the run made (claude_shim), with "
+               "VISP's reviewer and tester calls in brackets; – where the run predates the shim.")
     for cand, result in comparisons.items():
         out += ["", f"### {cand} against {result['base']}: {'PASS' if result['passed'] else 'FAIL'}", "",
                 "| Task | Metric | Base | Candidate | Delta | Rule | Result |", "| --- | --- | --- | --- | --- | --- | --- |"]
@@ -305,14 +322,14 @@ def markdown(manifest, rows, groups, comparisons, excluded, unfinished, show_run
         out += [f"- {name}" for name in unfinished]
     if show_runs:
         out += ["", "| Run | Hidden | Stage 1 | Judge | Checklist | Code | Wall s | Idle s | Model s | VISP s | Own s "
-                "| Legacy idle s | Reviews | Pictures | Refusals | Timed out | Missing |",
-                "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+                "| Legacy idle s | Reviews | Pictures | Refusals | Timed out | Cost $ | Missing |",
+                "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
         for r in rows:
             out.append(f"| {r['run']} | {r['hiddenText'] or '–'} | {r['stage1'] or '–'} | {fmt(r['judge'])} | "
                        f"{r['checklistText'] or '–'} | {fmt(r['code'])} | {r['wall']} | {fmt(r['idle'])} | "
                        f"{fmt(r['model'])} | {fmt(r['visp'])} | {fmt(r['own'])} | {fmt(r['legacyIdle'])} | "
                        f"{r['reviewed']}/{r['unavailable']} | {r['pictures']} | {fmt(r['refusals'])} | "
-                       f"{'yes' if r['timedOut'] else 'no'} | {'; '.join(r['problems']) or '–'} |")
+                       f"{'yes' if r['timedOut'] else 'no'} | {fmt(r['cost'])} | {'; '.join(r['problems']) or '–'} |")
     return "\n".join(out) + "\n"
 
 
@@ -323,6 +340,8 @@ def main():
     parser.add_argument("--score-jobs", type=int, default=3)
     parser.add_argument("--base", help="the base arm label (default: the first arm in the manifest)")
     parser.add_argument("--runs", action="store_true", help="also print one row per run")
+    parser.add_argument("--pairwise", action="store_true",
+                        help="also judge each picture task's base and candidate images side by side (pairwise.py)")
     parser.add_argument("--md", type=pathlib.Path)
     parser.add_argument("--json", type=pathlib.Path)
     args = parser.parse_args()
@@ -369,6 +388,10 @@ def main():
         comparisons[cand] = {"base": base, "passed": all(t["status"] == "pass" for t in tasks.values()),
                              "tasks": tasks}
     text = markdown(manifest, rows, groups, comparisons, excluded, unfinished, args.runs)
+    if args.pairwise:
+        import pairwise  # imported here: it reads the judge's images, which --score writes first
+
+        text += pairwise.markdown(*pairwise.run(args.batch, base))
     print(text)
     if args.md:
         args.md.write_text(text)

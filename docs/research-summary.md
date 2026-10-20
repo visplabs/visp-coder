@@ -97,6 +97,20 @@ The mean visual judge score rose from 7.67 to 8.08 and the mean code score on th
 
 A routing loop found in that run was fixed afterwards and checked in a small batch (pp: the final build with and without the fix, slingshot and spreadsheet-extend, three runs each): hidden checks, judge and checklist equal; code scores moved by a third of a point in opposite directions; the loop did not occur in either arm, so the batch shows no effect of the fix either way.
 
+**Improvement round, rejected (pm1, ch2, ex1).** The round had the reviewer add improvement notes on a picture result and required one repair round after the first clean review. A paired batch (pm1: the same Haiku 5.5, Sonnet 5.5 reviewer and Sonnet judge preset, release 0.5.0-beta.4 against the round, five runs per arm on the Xbox and PS5 tasks, three on the rest) was agreed with a merge rule beforehand: no drop on any metric, more pairwise wins than losses over the picture tasks, median wall at most 15% worse unless the gain pays for it. It failed:
+
+| Task | Judge | Checklist | Median wall |
+| --- | --- | --- | --- |
+| xbox-controller-svg | 7.6 → 7.8 | 13 → 13.6 | 483 → 541 s |
+| ps5-controller-svg | 5.6 → 5.8 | 9.2 → 9.2 | 214 → 343 s |
+| voxel-pagoda | 8 → 8.67 | 6.67 → 7 | 431 → 421 s |
+| lighthouse-pixel | 8.33 → 8 | 10.33 → 10.33 | 375 → 327 s |
+| rainfall-chart | 10 → 10 | 9 → 9 | 121 → 228 s |
+
+The pairwise judge (each pair of the same rep, both orders, a split verdict a tie) gave the round 6 wins, 7 losses and 6 ties over the five picture tasks, so the rule "wins exceed losses" failed. Lighthouse's judge score fell by 0.33, and PS5 and rainfall ran 60% to 90% slower, with mean cost per run up as well (PS5 $0.26 → $0.50, rainfall $0.16 → $0.37 for the whole run). Slingshot, spreadsheet-extend and reservations-bundles are incomplete: the weekly usage limit ended one slingshot run of the round and several judge calls, so their rows hold fewer runs or lack scores. That cannot change the verdict, because the picture rules had already failed. The branch `quality/improvement-round` is kept and not merged. Its bench tooling (pairwise judge, per-call cost, the Xbox task, judging the picture the last slice declares) was moved to develop on its own.
+
+Two variants were tried earlier on PS5 only and lost. Reviewing a picture part by part (ch2, five runs per arm against the round, reviewer budget 6): judge 5.6 → 5, checklist 9.2 → 8, median wall 287 → 491 s, reviews 10 → 24, pairwise 1 win, 2 losses and 2 ties. Notes that end in an executable check the worker can run (ex1, four runs per arm against beta.4): judge 5.75 → 5.25, checklist 9.75 → 9.25, wall 323 → 308 s, so no gain over the release; the prose-notes arm in the same batch scored 6.25 and 10.
+
 The weakest visual task, the PS5 controller, failed the judge's parts checklist (two-tone shell, shoulder buttons, PS logo, "reads as a PS5 controller"). Before images reached the reviewer it judged from SVG coordinates; with images it filed missing parts as optional style. Asking the reviewer to list and check identifying parts raised the lighthouse score in both batches (the judge's "waves breaking against the rocks" item) but did not move the PS5 score once both batches are counted: the reviewer named missing parts, and Haiku's drawings still lacked the two-tone shell and shoulder buttons. A worker-side checklist and an extra optional repair round added time without a score change. Per-batch differences of 0.33 reversed between batches, so single three-run batches are not enough to call small effects either way.
 
 ## What made the difference
