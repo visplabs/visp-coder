@@ -50,10 +50,14 @@ A preset (`presets.py`) fixes every model in a batch. `setup_arm.py --preset` re
 | `quality-2026-10` | `claude -p --model claude-haiku-5-5 --effort high` | `harness: claude-code`, `launch: claude-exec`, `model: claude-sonnet-5-5`, `reasoningEffort: high` | Sonnet 5.5, high | Opus 5.5, high |
 | `quality-2026-10-sonnet` | `claude-sonnet-5-5`, high effort | as `quality-2026-10` | Sonnet 5.5, high | Opus 5.5, high |
 | `quality-2026-10-haiku-critic` | as `quality-2026-10` | as `quality-2026-10`, with `model: claude-haiku-5-5` | Sonnet 5.5, high | Opus 5.5, high |
+| `quality-2026-10-low` | `claude-haiku-5-5`, low effort | as `quality-2026-10` | Sonnet 5.5, high | Opus 5.5, high |
+| `quality-2026-10-low-haiku-critic` | `claude-haiku-5-5`, low effort | as `quality-2026-10-haiku-critic` | Sonnet 5.5, high | Opus 5.5, high |
 
 Without `--preset` a run uses `default`, the configuration of the published numbers. Every quality batch uses `quality-2026-10`.
 
 `quality-2026-10-haiku-critic` gives VISP's reviewer and tester the worker's own model, to tell how much of VISP's gain comes from its loop and how much from a stronger reviewer. A `bare` arm runs the same under it as under `quality-2026-10`.
+
+The two `-low` presets repeat the pair with Haiku 5.5 at low effort, a weaker worker: at high effort, bare Haiku 5.5 passed every hidden check in 14 of 16 calibration runs, so hidden checks left VISP no room.
 
 ### Batches
 

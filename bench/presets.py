@@ -32,6 +32,15 @@ PRESETS = {
         "worker": {"model": "claude-haiku-5-5", "effort": "high"},
         "critic": HAIKU_CRITIC, "judge": JUDGE, "codeJudge": CODE_JUDGE,
     },
+    # A weaker worker: Haiku 5.5 at low effort, with the Sonnet critic and with its own model as critic.
+    "quality-2026-10-low": {
+        "worker": {"model": "claude-haiku-5-5", "effort": "low"},
+        "critic": SONNET_CRITIC, "judge": JUDGE, "codeJudge": CODE_JUDGE,
+    },
+    "quality-2026-10-low-haiku-critic": {
+        "worker": {"model": "claude-haiku-5-5", "effort": "low"},
+        "critic": HAIKU_CRITIC, "judge": JUDGE, "codeJudge": CODE_JUDGE,
+    },
 }
 
 
