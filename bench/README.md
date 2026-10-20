@@ -8,8 +8,10 @@ Fixed-contract tasks for comparing coding workflows (bare coding, Spec Kit, BMAD
 | --- | --- | --- |
 | `reservations-api` | New HTTP service: inventory reservations with expiry, idempotency and concurrency | 36 core + 8 extended |
 | `spreadsheet-cli` | New command-line spreadsheet engine: precedence, ranges, error order, cycles | 38 |
+| `recurrence-cli` | New command-line RRULE expander (standard library only): skipped dates, defaults from the start, ordinal weekdays, BYSETPOS, WKST, COUNT, UNTIL and EXDATE order, input errors | 1 library + 45 |
 | `reservations-bundles` | Change to an existing multi-module service (`start/`) | 60, including the prior contract |
 | `spreadsheet-extend` | Larger change to an existing multi-module engine (`start/`) | 37 regression + 26 new |
+| `spreadsheet-audit` | Audit of an existing engine (`start/`, the `spreadsheet-extend` engine plus row insertion and deletion, `COUNTIF` and `SUMIF`) against its README contract: 18 seeded deviations, two reported in the request | 12 regression + 36 (two per deviation) |
 | `conventions-carryover` | Two sessions on the existing reservations service: the first states team API conventions and adds a list and an audit log; a fresh second session adds prices, retirement and a reservations list under those conventions | 20 core + 20 new + 9 code + 8 memory |
 | `sheet-carryover` | Two sessions on the existing spreadsheet engine: AVERAGE and ROUND, then MEDIAN and directed rounding carrying the empty-statistic rule and digits restriction | 22 core + 14 new + 8 memory |
 | `archive-carryover` | Two sessions on the existing reservations service: item archiving and a quantity cap, then bundles and restocking that must preserve those feature decisions | 15 core + 17 new + 7 memory |
@@ -130,16 +132,18 @@ The rubric is fixed: correctness risks, structure, readability, naming, tests (d
 - Repeat variance is small: over 91 paired scores the two repetitions differ by 0.15 on average and by at most 1.
 - Cost: 30 Opus 5.5 calls in all (26 counted here, 3 that ended with `error_max_structured_output_retries` and were redone, and the Oct 13 check), 397k cache-write, 978k cache-read and 90k output tokens, $5.18. `judge.py`'s `ask` now retries that error once.
 
-## Qualifying the spreadsheet oracles
+## Qualifying the oracles
 
 ```bash
 python3 -m unittest bench/test_hidden_oracles.py
 ```
 
-These local checks (spreadsheet-cli, spreadsheet-extend and sheet-carryover) verify that correct references pass, wrong division-error output fails,
-and a nonzero program exit fails even when its output matches. They use temporary copies
-and the standard library, without calling models. Oracle qualification is not a comparison
-of coding workflows.
+These local checks (spreadsheet-cli, spreadsheet-extend, sheet-carryover, spreadsheet-audit and recurrence-cli) verify
+that correct references pass, that faulty variants (wrong division-error output, clamped short
+months) fail some checks but not all, that a nonzero program exit fails even when its output
+matches, that the audit's start fails only its `fix:` checks, and that importing a third-party
+date library fails every recurrence check. They use temporary copies and the standard library,
+without calling models. Oracle qualification is not a comparison of coding workflows.
 
 ## Timing the dashboard
 
