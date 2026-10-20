@@ -119,13 +119,25 @@ export function codexHooksWarning(
     : undefined;
 }
 
-/** Whether the host recorded user prompts that no feature has taken yet. */
-export async function hasUntakenPrompts(workspace: WorkspaceState): Promise<Result<boolean>> {
+/**
+ * Whether the host recorded user prompts that no feature has taken yet; with `since`, only
+ * prompts recorded after that time count.
+ */
+export async function hasUntakenPrompts(
+  workspace: WorkspaceState,
+  since?: string,
+): Promise<Result<boolean>> {
   const text = await workspace.files.readTextIfExists(
     join(workspace.paths.sessionDir, HOST_PROMPTS_FILE),
   );
   if (!text.ok) return text;
-  return ok(text.value !== undefined && promptLines(text.value).length > 0);
+  const prompts = text.value === undefined ? [] : recordedPrompts(text.value);
+  const after = since === undefined ? undefined : Date.parse(since);
+  return ok(
+    prompts.some(
+      (entry) => after === undefined || (entry.at !== undefined && Date.parse(entry.at) > after),
+    ),
+  );
 }
 
 /** The host session that sent the latest user prompt, when the host's hook reports one. */
@@ -158,17 +170,26 @@ export async function currentHostSession(
  */
 const HOST_NOTIFICATION = /^(\s*<task-notification>[\s\S]*?<\/task-notification>)+\s*$/;
 
-function promptLines(text: string): string[] {
+interface RecordedPrompt {
+  readonly prompt: string;
+  readonly at?: string;
+}
+
+function recordedPrompts(text: string): RecordedPrompt[] {
   return text.split("\n").flatMap((line) => {
     try {
-      const prompt = (JSON.parse(line) as { prompt?: unknown }).prompt;
+      const { prompt, at } = JSON.parse(line) as { prompt?: unknown; at?: unknown };
       return typeof prompt === "string" && prompt.trim() && !HOST_NOTIFICATION.test(prompt)
-        ? [prompt]
+        ? [{ prompt, ...(typeof at === "string" ? { at } : {}) }]
         : [];
     } catch {
       return [];
     }
   });
+}
+
+function promptLines(text: string): string[] {
+  return recordedPrompts(text).map((entry) => entry.prompt);
 }
 
 /**

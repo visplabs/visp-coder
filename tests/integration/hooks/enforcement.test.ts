@@ -873,6 +873,16 @@ describe("edit authorization across host sessions", () => {
     const baseline = JSON.parse(await readFile(authorization, "utf8")).baseline;
 
     prompt("session-2", "Add prices to items");
+    const stop = () =>
+      execFileSync(process.execPath, [hook()], {
+        cwd: project.root,
+        input: JSON.stringify({ hook_event_name: "Stop", session_id: "session-2" }),
+        encoding: "utf8",
+        env: env(),
+      });
+    // A session that has not tried to change anything since its prompt, such as one that
+    // answered a question, is left alone.
+    expect(stop()).toBe("");
     const refused = write("src/auth/login.ts", "session-2");
     expect(refused.decision).toBe("deny");
     expect(refused.reason).toContain("earlier session");
@@ -883,13 +893,11 @@ describe("edit authorization across host sessions", () => {
     const next = project.run("next", "--json");
     expect(next.stdout).toContain('visp feature \\"<the user\'s request>\\"');
     expect(next.stdout).not.toMatch(/"task":\s*"T001"/);
-    const stopped = execFileSync(process.execPath, [hook()], {
-      cwd: project.root,
-      input: JSON.stringify({ hook_event_name: "Stop", session_id: "session-2" }),
-      encoding: "utf8",
-      env: env(),
-    });
-    expect(stopped).toBe("");
+    // Its edits were refused, so it is working on the request: the Stop hook sends it on.
+    const stopped = JSON.parse(stop());
+    expect(stopped).toMatchObject({ decision: "block" });
+    expect(stopped.reason).toContain('Run: visp feature "<the user\'s request>"');
+    expect(stopped.reason).not.toContain("--task T001.");
 
     // A follow-up in the same session keeps the authorization it re-confirms.
     const worked = project.run("work", "--task", "T001");

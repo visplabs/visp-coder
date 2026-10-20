@@ -334,9 +334,15 @@ if (input?.hook_event_name === "Stop") {
       }).toString(),
     );
     const next = envelope?.data;
+    // A step for no feature, such as starting one for an untaken request, is for a session
+    // that tried to change the project since the user's latest prompt; one that answered a
+    // question or committed is left alone.
     if (!next?.feature && typeof input.session_id === "string") {
       const edits = join(root, ".visp", "session", "edits", encodeURIComponent(input.session_id) + ".json");
-      try { readFileSync(edits); } catch { process.exit(0); }
+      let tried;
+      try { tried = Date.parse(JSON.parse(readFileSync(edits, "utf8")).at); } catch { process.exit(0); }
+      const prompted = latestPromptAt(root);
+      if (prompted !== undefined && !(tried >= prompted)) process.exit(0);
     }
     if (!envelope?.ok || !next?.action || next.action === "complete") process.exit(0);
     const day = 24 * 60 * 60 * 1000;
@@ -404,6 +410,21 @@ if (input?.hook_event_name === "Stop") {
     process.stdout.write(JSON.stringify({ decision: "block", reason }));
   } catch {}
   process.exit(0);
+}
+
+// When the latest recorded user prompt was sent, or undefined when none is recorded.
+function latestPromptAt(root) {
+  try {
+    const entries = readFileSync(join(root, ".visp", "session", "user-prompts.jsonl"), "utf8")
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+      .filter((entry) => !hostNotification(String(entry?.prompt ?? "")));
+    const at = Date.parse(entries[entries.length - 1]?.at);
+    return Number.isFinite(at) ? at : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 // A prompt that is nothing but host notifications; the same test as host-prompts.ts.
@@ -889,16 +910,18 @@ if (envelope === undefined) {
   process.exit(0);
 }
 
-if (status === 0 && envelope.ok) {
-  if (typeof input?.session_id === "string") {
-    try {
-      const directory = join(root, ".visp", "session", "edits");
-      mkdirSync(directory, { recursive: true });
-      writeFileSync(join(directory, encodeURIComponent(input.session_id) + ".json"), JSON.stringify({ at: new Date().toISOString() }));
-    } catch {}
-  }
-  process.exit(0);
+// The Stop hook reminds only a session that tried to change the project. A refused edit is
+// such a try: a later session refused under an accepted feature stopped with its request
+// unbuilt, because only allowed edits were recorded.
+if (typeof input?.session_id === "string") {
+  try {
+    const directory = join(root, ".visp", "session", "edits");
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(join(directory, encodeURIComponent(input.session_id) + ".json"), JSON.stringify({ at: new Date().toISOString() }));
+  } catch {}
 }
+
+if (status === 0 && envelope.ok) process.exit(0);
 
 let reason = `${path} is outside the scope authorized for the current task.`;
 const first = envelope?.data?.violations?.[0];

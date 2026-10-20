@@ -1,0 +1,6 @@
+> .visp/hooks/claude-pretooluse.mjs {"session_id":"session-1","hook_event_name":"UserPromptSubmit","prompt":"<task-notification>\n<task-id>b0golden</task-id>\n<status>completed</status>\n<summary>Background command \"visp feature\" completed (exit code 0)</summary>\n</task-notification>"}
+--- stdout
+
+--- stderr
+
+--- exit 0

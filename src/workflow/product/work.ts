@@ -103,7 +103,7 @@ export async function runProductWork(
       return next.value
         ? err(
             vispError("STAGE_BLOCKED", next.value.objective, {
-              recovery: next.value.evidence.join("\n"),
+              recovery: next.value.evidence.join("\n") || next.value.command,
             }),
           )
         : ok(undefined);

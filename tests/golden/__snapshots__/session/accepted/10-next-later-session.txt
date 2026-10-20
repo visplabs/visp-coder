@@ -1,0 +1,10 @@
+$ visp next
+--- stdout
+next: {"action":"understand","objective":"The user's latest message came after 001-return-two-from-the-public was accepted, and no feature has taken it. If it asks for a change, start it as its own feature","command":"visp feature \"<the user's request>\"","mayEdit":false}
+Full result: add --json.
+
+Next: visp feature "<the user's request>"
+
+--- stderr
+
+--- exit 0
