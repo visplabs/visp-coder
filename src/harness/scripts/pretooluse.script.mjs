@@ -520,9 +520,10 @@ function authorizationState() {
 // whose files cannot be read is refused while a task is authorized, as a write that cannot
 // be checked is.
 const patchPaths = __HOOK_PATCH_PATHS__;
-const patch = input?.tool_name === "apply_patch" ? input?.tool_input?.command : undefined;
-const patched = patch === undefined ? undefined : patchPaths(Array.isArray(patch) ? patch.join("\n") : patch);
-if (patch !== undefined && patched === undefined) {
+const patching = input?.tool_name === "apply_patch";
+const patch = typeof input?.tool_input === "string" ? input.tool_input : input?.tool_input?.command;
+const patched = patching ? patchPaths(Array.isArray(patch) ? patch.join("\n") : (patch ?? "")) : undefined;
+if (patching && patched === undefined) {
   if (authorizationState() === "inactive") process.exit(0);
   process.stdout.write(
     JSON.stringify(

@@ -1112,6 +1112,21 @@ describe("Codex apply_patch", () => {
     );
   });
 
+  it("refuses an apply_patch call without patch text", () => {
+    const raw = execFileSync(process.execPath, [hook()], {
+      cwd: project.root,
+      input: JSON.stringify({
+        cwd: project.root,
+        hook_event_name: "PreToolUse",
+        tool_name: "apply_patch",
+        tool_input: {},
+      }),
+      encoding: "utf8",
+      env: project.env(),
+    });
+    expect(JSON.parse(raw).hookSpecificOutput.permissionDecision).toBe("deny");
+  });
+
   it("refuses a patch it cannot read only while a slice is authorized", async () => {
     const unreadable = applyPatch("*** Rename File: src/billing/invoice.ts");
     expect(unreadable.decision).toBe("deny");
