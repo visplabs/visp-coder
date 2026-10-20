@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **The tester's browser kit calls a function written as a string, and `waitFor` passes arguments.** In five slingshot-game benchmark runs the pinned suite failed because of the kit, not the game: `page.evaluate("() => window.gameTest.snapshot()")` and `page.evaluate(fn.toString(), ...args)` returned the function itself (an empty object) instead of calling it, and `page.waitFor((l) => ..., options, level)` dropped `level`. `evaluate` now calls a string whose value is a function with the given arguments, and refuses arguments with any other string. `waitFor(fn, options, ...args)` passes them on, rejects a second argument that is not an options object, and its timeout names the last error from the page; a page function that reads a Node variable gets a note to pass it as an argument. Expression and statement strings behave as before. With only the kit replaced, three of those runs' pinned suites go from 15, 13 and 2 failing tests to none on the same products. The tester's kit API lines say how arguments reach page code.
+
 ## 0.5.0-beta.4 - 2026-10-15
 
 ### Security

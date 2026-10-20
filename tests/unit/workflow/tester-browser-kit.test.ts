@@ -89,6 +89,15 @@ describe("tester browser kit gating", () => {
     }
   });
 
+  it("documents how page functions get their arguments", () => {
+    const prompt = testerBrowserKitLines(text("bench/tasks/slingshot-game/task.md")).join("\n");
+    expect(prompt).toContain(
+      "page.waitFor(fn, { timeoutMs = 8000, everyMs = 50 } = {}, ...args) -> Promise<truthy value>; poll fn(...args) in the page.",
+    );
+    expect(prompt).toContain('a string whose value is a function ("(a) => a") is called with args');
+    expect(prompt).toContain("Page code cannot read Node variables: pass them as args.");
+  });
+
   it("lets the tester ignore the kit when HTML, CSS or a UI is only file content or output", () => {
     const prompt = testerBrowserKitLines(
       "Write a Python CLI that renders a report as an HTML file.",
@@ -124,7 +133,7 @@ describe("tester browser kit source", () => {
   it("fits a raw template, stays small and prints no verdict line", () => {
     expect(TESTER_BROWSER_KIT).not.toContain("`");
     expect(TESTER_BROWSER_KIT).not.toContain("${");
-    expect(Buffer.byteLength(TESTER_BROWSER_KIT)).toBeLessThan(12 * 1024);
+    expect(Buffer.byteLength(TESTER_BROWSER_KIT)).toBeLessThan(13 * 1024);
     expect(TESTER_BROWSER_KIT).not.toMatch(/\b(?:FAIL|PASS)\b/);
     expect(TESTER_BROWSER_KIT).not.toContain("console.");
     expect(TESTER_BROWSER_KIT).not.toContain("process.stdout");
