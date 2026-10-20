@@ -1,7 +1,7 @@
 """Report a batch: facts per run and per task x arm, and the base-versus-candidate quality rule.
 
 Usage: report.py --batch <name> [--score] [--score-jobs 3] [--base LABEL] [--runs] [--md FILE] [--json FILE]
-       report.py --compare BATCH:LABEL BATCH:LABEL ... [--score] [--md FILE] [--json FILE]
+       report.py --compare BATCH:LABEL BATCH:LABEL ... [--score] [--runs] [--md FILE] [--json FILE]
 
 Reads $VISP_BENCH_RUNS/batches/<name>/manifest.json (batch.py). Refuses a batch whose runs were
 made under different presets, whose worker model differs from the preset's, or whose judge files
@@ -429,7 +429,7 @@ def cross(specs, score=False, score_jobs=3):
     return batches, arms, tasks, groups, totals
 
 
-def cross_markdown(batches, arms, tasks, groups, totals):
+def cross_markdown(batches, arms, tasks, groups, totals, show_runs=False):
     out = ["## Arms across presets", "", "| Arm | Preset | Worker | Reviewer and tester | Valid runs | Invalid | "
            "Unfinished |", "| --- | --- | --- | --- | --- | --- | --- |"]
     for name, arm in arms:
@@ -470,6 +470,14 @@ def cross_markdown(batches, arms, tasks, groups, totals):
         missing = totals[f"{name}:{arm}"]["missing"]
         if missing:
             out += ["", f"{name}:{arm} runs without a required score:", ""] + [f"- {m}" for m in missing]
+    if show_runs:
+        out += ["", "| Run | Arm | Hidden | Judge | Checklist | Code | Wall s | Cost $ | VISP's $ |",
+                "| --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+        for name, arm in arms:
+            for r in (r for r in batches[name][1] if r["arm"] == arm):
+                out.append(f"| {r['run']} | {name}:{arm} | {r['hiddenText'] or '–'} | {fmt(r['judge'])} | "
+                           f"{r['checklistText'] or '–'} | {fmt(r['code'])} | {r['wall']} | {fmt(r['cost'])} | "
+                           f"{fmt(r['criticCost'])} |")
     return "\n".join(out) + "\n"
 
 
@@ -492,7 +500,7 @@ def main():
         if args.batch or args.base or args.pairwise:
             raise SystemExit("--compare takes no --batch, --base or --pairwise")
         result = cross(args.compare, args.score, args.score_jobs)
-        text = cross_markdown(*result)
+        text = cross_markdown(*result, show_runs=args.runs)
         print(text)
         if args.md:
             args.md.write_text(text)
