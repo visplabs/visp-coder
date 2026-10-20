@@ -103,6 +103,28 @@ describe("generated hooks", () => {
     await rm(join(project.root, ".visp/session/user-prompts.jsonl"));
   });
 
+  // Claude Code delivers a background command's completion as a prompt; VISP took one as the
+  // user's request (bench run co1-conventions-carryover-prose-visp-dev-1).
+  it("does not record a host task notification as a user prompt", async () => {
+    const { readFile } = await import("node:fs/promises");
+    const notification =
+      '<task-notification>\n<task-id>bwvi3ofw5</task-id>\n<status>completed</status>\n<summary>Background command "Create VISP feature" completed (exit code 0)</summary>\n</task-notification>';
+    for (const prompt of ["first request", notification])
+      execFileSync(process.execPath, [join(project.root, ".visp/hooks/claude-pretooluse.mjs")], {
+        cwd: project.root,
+        input: JSON.stringify({ hook_event_name: "UserPromptSubmit", session_id: "s", prompt }),
+        env: { ...project.env(), CLAUDE_PROJECT_DIR: project.root },
+      });
+    const recorded = (
+      await readFile(join(project.root, ".visp/session/user-prompts.jsonl"), "utf8")
+    )
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line).prompt);
+    expect(recorded).toEqual(["first request"]);
+    await rm(join(project.root, ".visp/session/user-prompts.jsonl"));
+  });
+
   it("records a session started in a subdirectory at the initialized root", async () => {
     const { readFile } = await import("node:fs/promises");
     const nested = join(project.root, "src/auth");

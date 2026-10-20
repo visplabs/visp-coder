@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **Host task notifications are no longer recorded as user prompts.** Claude Code delivers a background command's completion (`<task-notification>…`) to the session as a prompt; the prompt hook recorded it, and `visp feature` could take it as the user's request. The hook skips them, and VISP ignores ones an older hook recorded. Rerun `visp install` to update the hook.
+
 ## 0.5.0-beta.4 - 2026-10-15
 
 ### Security

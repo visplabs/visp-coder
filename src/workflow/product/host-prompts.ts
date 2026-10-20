@@ -151,11 +151,20 @@ export async function currentHostSession(
   }
 }
 
+/**
+ * Claude Code delivers a background command's completion to the session as a prompt; one
+ * became a feature's request. The prompt hook no longer records them, and the ones an older
+ * hook recorded are skipped here. The hook script repeats this test.
+ */
+const HOST_NOTIFICATION = /^(\s*<task-notification>[\s\S]*?<\/task-notification>)+\s*$/;
+
 function promptLines(text: string): string[] {
   return text.split("\n").flatMap((line) => {
     try {
       const prompt = (JSON.parse(line) as { prompt?: unknown }).prompt;
-      return typeof prompt === "string" && prompt.trim() ? [prompt] : [];
+      return typeof prompt === "string" && prompt.trim() && !HOST_NOTIFICATION.test(prompt)
+        ? [prompt]
+        : [];
     } catch {
       return [];
     }

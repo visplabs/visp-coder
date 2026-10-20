@@ -283,17 +283,22 @@ function projectRoot() {
 
 // The user's own words are the contract the tester and reviewer judge against; workers
 // paraphrase them. Kept locally in the git-ignored session directory for `visp feature`.
+// Claude Code delivers a background command's completion as a prompt of its own, which
+// `visp feature` then took as the request; host notifications are not recorded.
 if (input?.hook_event_name === "UserPromptSubmit") {
   try {
-    const directory = join(projectRoot(), ".visp", "session");
-    const file = join(directory, "user-prompts.jsonl");
-    mkdirSync(directory, { recursive: true });
-    let lines = [];
-    try {
-      lines = readFileSync(file, "utf8").split("\n").filter(Boolean);
-    } catch {}
-    lines.push(JSON.stringify({ at: new Date().toISOString(), prompt: String(input.prompt ?? "") }));
-    writeFileSync(file, `${lines.slice(-20).join("\n")}\n`);
+    const prompt = String(input.prompt ?? "");
+    if (!hostNotification(prompt)) {
+      const directory = join(projectRoot(), ".visp", "session");
+      const file = join(directory, "user-prompts.jsonl");
+      mkdirSync(directory, { recursive: true });
+      let lines = [];
+      try {
+        lines = readFileSync(file, "utf8").split("\n").filter(Boolean);
+      } catch {}
+      lines.push(JSON.stringify({ at: new Date().toISOString(), prompt }));
+      writeFileSync(file, `${lines.slice(-20).join("\n")}\n`);
+    }
     recordSession();
   } catch {}
   process.exit(0);
@@ -399,6 +404,11 @@ if (input?.hook_event_name === "Stop") {
     process.stdout.write(JSON.stringify({ decision: "block", reason }));
   } catch {}
   process.exit(0);
+}
+
+// A prompt that is nothing but host notifications; the same test as host-prompts.ts.
+function hostNotification(prompt) {
+  return /^(\s*<task-notification>[\s\S]*?<\/task-notification>)+\s*$/.test(prompt);
 }
 
 // A worker deleted .visp and the pinned tests with shell commands to get past a scope
