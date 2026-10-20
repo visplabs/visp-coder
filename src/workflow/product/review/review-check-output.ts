@@ -34,7 +34,7 @@ export function earlierAssertionResults(
   const gaps = named.filter((line) => !FAILURE_RECORD.test(line) && GAP_RECORD.test(line));
   const rest = named.filter((line) => !FAILURE_RECORD.test(line) && !GAP_RECORD.test(line));
   const gapNote = gaps.length
-    ? "VISP: NOT OBSERVED marks an informational coverage gap, not a failure or passing assertion."
+    ? "VISP: NOT OBSERVED is not a passing assertion; a NOT OBSERVED goal the request states is unmet."
     : "";
   let remaining = limit - 350 - gapNote.length;
   for (const line of [...failures, ...gaps, ...rest]) {

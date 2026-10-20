@@ -36,7 +36,7 @@ it("prioritizes unobserved coverage gaps over passing names in bounded output", 
   ].join("\r\n");
   const result = earlierAssertionResults(text, 2000, 700, true);
   expect(result).toContain("NOT OBSERVED: low-power contact: 0 qualifying events");
-  expect(result).toContain("coverage gap");
+  expect(result).toContain("a NOT OBSERVED goal the request states is unmet");
   expect(result).toContain("PASS: assertion 0");
   expect(result).not.toContain("FAIL: damage");
   expect(result.length).toBeLessThanOrEqual(700);
