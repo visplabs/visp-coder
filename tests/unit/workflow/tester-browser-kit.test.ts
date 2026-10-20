@@ -41,7 +41,8 @@ describe("tester browser kit gating", () => {
       for (const prompt of promptsOf(task))
         expect(testerBrowserKitLines(prompt.body), prompt.name).toEqual([]);
     // lighthouse-pixel asks for a "64×64 pixel canvas scaled up", which reads as a browser canvas.
-    const canvas = ["lighthouse-pixel"];
+    // xbox-controller-svg asks for an SVG with a viewBox and a styled interface, which reads as a page.
+    const canvas = ["lighthouse-pixel", "xbox-controller-svg"];
     for (const task of readdirSync(tasks).filter(
       (name) => !name.includes("game") && !canvas.includes(name),
     ))
