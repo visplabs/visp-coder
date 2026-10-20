@@ -150,6 +150,14 @@ Environment failures (a missing browser, or denied process, filesystem or socket
 
 After a failure, `work` includes the failing output and says whether it describes the current version. Repeated identical failures ask for a different hypothesis.
 
+## Lean mode
+
+Three experimental `workflow` switches, off by default, aim to cut ceremony where the worker is already strong. They are not yet measured against the default; `bench/` holds the comparison.
+
+- **`draftFirst: visual`.** For a picture request, `visp feature` names `visp work` as the next step, and bare `visp work` authorizes one slice covering the whole request (scope `**`) with no check. `next` tells the worker to draft the whole picture in one pass, then declare the command that renders or checks it with `visp work --check "<command>"` and run `visp done`, where review starts. The authorization keeps its pre-draft baseline, so the draft is the slice's own change. A request counts as a picture when it names an SVG, PNG, pixel or voxel art, an image, illustration, drawing, painting, poster, logo, icon, sprite, artwork, isometric view or scene, and names no game, app, website, server, API, endpoint, CLI, library, engine, repository, database, form, dashboard, plugin or extension.
+- **`reviewCadence: feature`.** Only the slice that completes the feature starts VISP's reviewer; earlier slices close on their checks, and their outcomes are assessed by that whole-feature review. A middle slice with an open required finding or a pending dispute is still reviewed. After two product reviews, another review runs only while a required finding is open; otherwise `visp next` hands off to `visp pr` as it does for a spent budget.
+- **`requestGaps: required`.** The reviewer is told to list what the request names and to begin a finding about a named thing that is missing, broken or unrecognizable with "Request gap:". VISP makes every such finding required, whatever the reviewer's flag. The `done` and `accept` replies list only required findings; the rest arrive under `critic.notes` with advice not to edit for them, and the feedback plan leaves them out.
+
 ## Repairing a finding
 
 1. Run the declared check that shows the defect.
