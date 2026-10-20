@@ -1,6 +1,7 @@
 """Report a batch: facts per run and per task x arm, and the base-versus-candidate quality rule.
 
 Usage: report.py --batch <name> [--score] [--score-jobs 3] [--base LABEL] [--runs] [--md FILE] [--json FILE]
+       report.py --compare BATCH:LABEL BATCH:LABEL ... [--score] [--runs] [--md FILE] [--json FILE]
 
 Reads $VISP_BENCH_RUNS/batches/<name>/manifest.json (batch.py). Refuses a batch whose runs were
 made under different presets, whose worker model differs from the preset's, or whose judge files
@@ -30,6 +31,10 @@ against none is not a failure). Idle is not compared when neither arm has a Clau
 transcript (Codex workers); when only one has, the task is incomplete. The candidate passes the
 batch only when it passes every task. Prints Markdown and writes JSON (default
 batches/<name>/report.json).
+
+--compare is the one mode that crosses presets: it sets arms of different batches side by side
+(say bare Sonnet against VISP with a Haiku worker), each batch under its own preset guard, with
+cost per run and per passed hidden check, and gives no verdict.
 """
 import argparse
 import collections
@@ -333,19 +338,9 @@ def markdown(manifest, rows, groups, comparisons, excluded, unfinished, show_run
     return "\n".join(out) + "\n"
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--batch", required=True)
-    parser.add_argument("--score", action="store_true")
-    parser.add_argument("--score-jobs", type=int, default=3)
-    parser.add_argument("--base", help="the base arm label (default: the first arm in the manifest)")
-    parser.add_argument("--runs", action="store_true", help="also print one row per run")
-    parser.add_argument("--pairwise", action="store_true",
-                        help="also judge each picture task's base and candidate images side by side (pairwise.py)")
-    parser.add_argument("--md", type=pathlib.Path)
-    parser.add_argument("--json", type=pathlib.Path)
-    args = parser.parse_args()
-    directory = RUNS / "batches" / args.batch
+def load_batch(name, score=False, score_jobs=3):
+    """A batch's manifest, valid rows, invalid and unfinished runs, under the preset guard."""
+    directory = RUNS / "batches" / name
     manifest = load(directory / "manifest.json")
     if not manifest:
         raise SystemExit(f"no manifest at {directory / 'manifest.json'}")
@@ -369,10 +364,159 @@ def main():
             reason = invalid(moved) or {}
             excluded.append((moved.name, f"moved to discarded/ by --rerun-invalid: {reason.get('reason')}, "
                                          f"{reason.get('source')}"))
-    if args.score:
-        score_missing(valid, args.score_jobs)
+    if score:
+        score_missing(valid, score_jobs)
     check_presets(manifest, valid)
-    rows = [facts(entry) for entry in valid]
+    return manifest, [facts(entry) for entry in valid], excluded, unfinished
+
+
+def passed_checks(row):
+    """Hidden checks a run passed (none when its checks gave no result)."""
+    text = row["hiddenText"] or ""
+    return int(text.split("/")[0]) if "/" in text else 0
+
+
+def cross_summary(rows):
+    """Scores, time and cost over one arm's valid runs of one task (or of every task)."""
+    costed = [r for r in rows if r["cost"] is not None]
+    hidden = [r for r in costed if r["hidden"] is not None]
+    passed = sum(passed_checks(r) for r in hidden)
+    scored = [r for r in rows if r["hidden"] is not None]
+    return {
+        "n": len(rows), "costed": len(costed), "missing": [f"{r['run']}: {p}" for r in rows for p in r["problems"]],
+        "hidden": mean(r["hidden"] for r in rows), "judge": mean(r["judge"] for r in rows),
+        "checklist": mean(r["checklist"] for r in rows), "code": mean(r["code"] for r in rows),
+        "wall": median(r["wall"] for r in rows),
+        "cost": mean(r["cost"] for r in costed), "criticCost": mean(r["criticCost"] for r in costed),
+        "passedChecks": sum(passed_checks(r) for r in scored) if scored else None,
+        "costPerPassedCheck": round(sum(r["cost"] for r in hidden) / passed, 4) if passed else None,
+    }
+
+
+def cross(specs, score=False, score_jobs=3):
+    """Compare arms across batches made under different presets or worker models.
+
+    Each spec is BATCH:LABEL. Every batch passes its own preset guard; the arms may differ in
+    worker and critic, but every batch must use the same visual and code judges, or their scores
+    are not comparable. No pass or fail verdict: the quality rule compares arms of one preset.
+    """
+    batches, arms = {}, []
+    for spec in specs:
+        if ":" not in spec:
+            raise SystemExit(f"--compare takes BATCH:LABEL, not {spec!r}")
+        name, arm = spec.split(":", 1)
+        if name not in batches:
+            batches[name] = load_batch(name, score, score_jobs)
+        manifest = batches[name][0]
+        if arm not in [a["label"] for a in manifest["arms"]]:
+            raise SystemExit(f"batch {name} has no arm {arm!r}; arms: "
+                             f"{', '.join(a['label'] for a in manifest['arms'])}")
+        arms.append((name, arm))
+    judges = {name: (m["settings"]["judge"], m["settings"]["codeJudge"]) for name, (m, *_) in batches.items()}
+    if len({json.dumps(j, sort_keys=True) for j in judges.values()}) > 1:
+        raise SystemExit("refusing to compare: the batches use different judges: "
+                         + "; ".join(f"{name}: {j}" for name, j in judges.items()))
+    tasks = []
+    for name, _ in arms:
+        tasks += [t for t in batches[name][0]["tasks"] if t not in tasks]
+    groups, totals = {}, {}
+    for name, arm in arms:
+        rows = [r for r in batches[name][1] if r["arm"] == arm]
+        totals[f"{name}:{arm}"] = cross_summary(rows)
+        for task in tasks:
+            if task in batches[name][0]["tasks"]:
+                groups[(task, f"{name}:{arm}")] = cross_summary([r for r in rows if r["task"] == task])
+    return batches, arms, tasks, groups, totals
+
+
+def cross_markdown(batches, arms, tasks, groups, totals, show_runs=False):
+    out = ["## Arms across presets", "", "| Arm | Preset | Worker | Reviewer and tester | Valid runs | Invalid | "
+           "Unfinished |", "| --- | --- | --- | --- | --- | --- | --- |"]
+    for name, arm in arms:
+        manifest, _, excluded, unfinished = batches[name]
+        settings = manifest["settings"]
+        worker = settings["worker"]
+        spec = next(a["arm"] for a in manifest["arms"] if a["label"] == arm)
+        critic = settings["critic"].get("model") or settings["critic"]["harness"] if spec.startswith("visp") \
+            else "none"
+        names = {entry["name"] for entry in manifest["runs"] if entry["label"] == arm}
+        mine = [run for run, _ in excluded if run in names or run.rsplit("-", 2)[0] in names]
+        out.append(f"| {name}:{arm} | {manifest['preset']} | {worker['model']} ({worker['effort'] or 'default'}) | "
+                   f"{critic} | {totals[f'{name}:{arm}']['n']} | {len(mine)} | "
+                   f"{sum(1 for run in unfinished if run in names)} |")
+    header = ["", "| Task | Arm | n | Hidden | Passed checks | Judge | Checklist | Code | Wall s | Cost $/run "
+              "(VISP's) | Cost $/passed check | Costed runs |",
+              "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+    out += header
+
+    def line(task, arm, s):
+        return (f"| {task} | {arm} | {s['n']} | {fmt(s['hidden'], 'hidden')} | {fmt(s['passedChecks'])} | "
+                f"{fmt(s['judge'])} | {fmt(s['checklist'])} | {fmt(s['code'])} | {fmt(s['wall'])} | "
+                f"{fmt(s['cost'])} ({fmt(s['criticCost'])}) | {fmt(s['costPerPassedCheck'])} | {s['costed']} |")
+    for task in tasks:
+        for name, arm in arms:
+            if (task, f"{name}:{arm}") in groups:
+                out.append(line(task, f"{name}:{arm}", groups[(task, f"{name}:{arm}")]))
+    for name, arm in arms:
+        out.append(line("all tasks", f"{name}:{arm}", totals[f"{name}:{arm}"]))
+    out += ["", "Scores are means over valid runs, wall time the median. Cost is the list-price cost the claude CLI "
+            "reported for every call of a run (claude_shim), VISP's reviewer and tester calls in brackets; cost per "
+            "passed check is the summed cost of the costed runs with hidden checks over the hidden checks they "
+            "passed. Arms in different batches ran at different times; read the difference with the per-run rows."]
+    covered = {frozenset(t for t in tasks if (t, f"{name}:{arm}") in groups) for name, arm in arms}
+    if len(covered) > 1:
+        out += ["", "The arms ran different tasks, so their all-tasks rows are not comparable."]
+    for name, arm in arms:
+        missing = totals[f"{name}:{arm}"]["missing"]
+        if missing:
+            out += ["", f"{name}:{arm} runs without a required score:", ""] + [f"- {m}" for m in missing]
+    if show_runs:
+        out += ["", "| Run | Arm | Hidden | Judge | Checklist | Code | Wall s | Cost $ | VISP's $ |",
+                "| --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+        for name, arm in arms:
+            for r in (r for r in batches[name][1] if r["arm"] == arm):
+                out.append(f"| {r['run']} | {name}:{arm} | {r['hiddenText'] or '–'} | {fmt(r['judge'])} | "
+                           f"{r['checklistText'] or '–'} | {fmt(r['code'])} | {r['wall']} | {fmt(r['cost'])} | "
+                           f"{fmt(r['criticCost'])} |")
+    return "\n".join(out) + "\n"
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--batch")
+    parser.add_argument("--compare", nargs="+", metavar="BATCH:LABEL",
+                        help="compare arms across batches made under different presets or worker models, with "
+                             "cost per run and per passed hidden check; no quality-rule verdict")
+    parser.add_argument("--score", action="store_true")
+    parser.add_argument("--score-jobs", type=int, default=3)
+    parser.add_argument("--base", help="the base arm label (default: the first arm in the manifest)")
+    parser.add_argument("--runs", action="store_true", help="also print one row per run")
+    parser.add_argument("--pairwise", action="store_true",
+                        help="also judge each picture task's base and candidate images side by side (pairwise.py)")
+    parser.add_argument("--md", type=pathlib.Path)
+    parser.add_argument("--json", type=pathlib.Path)
+    args = parser.parse_args()
+    if args.compare:
+        if args.batch or args.base or args.pairwise:
+            raise SystemExit("--compare takes no --batch, --base or --pairwise")
+        result = cross(args.compare, args.score, args.score_jobs)
+        text = cross_markdown(*result, show_runs=args.runs)
+        print(text)
+        if args.md:
+            args.md.write_text(text)
+        if args.json:
+            batches, arms, tasks, groups, totals = result
+            args.json.write_text(json.dumps({
+                "compare": args.compare,
+                "presets": {name: {"preset": m["preset"], "settings": m["settings"]} for name, (m, *_) in batches.items()},
+                "runs": [r for name, arm in arms for r in batches[name][1] if r["arm"] == arm],
+                "groups": [{"task": task, "arm": arm, **s} for (task, arm), s in groups.items()],
+                "totals": totals}, indent=2))
+        return
+    if not args.batch:
+        raise SystemExit("give --batch, or --compare BATCH:LABEL ...")
+    directory = RUNS / "batches" / args.batch
+    manifest, rows, excluded, unfinished = load_batch(args.batch, args.score, args.score_jobs)
     labels = [arm["label"] for arm in manifest["arms"]]
     groups = {}
     for task in manifest["tasks"]:
