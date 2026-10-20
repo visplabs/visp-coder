@@ -113,6 +113,39 @@ Two variants were tried earlier on PS5 only and lost. Reviewing a picture part b
 
 The weakest visual task, the PS5 controller, failed the judge's parts checklist (two-tone shell, shoulder buttons, PS logo, "reads as a PS5 controller"). Before images reached the reviewer it judged from SVG coordinates; with images it filed missing parts as optional style. Asking the reviewer to list and check identifying parts raised the lighthouse score in both batches (the judge's "waves breaking against the rocks" item) but did not move the PS5 score once both batches are counted: the reviewer named missing parts, and Haiku's drawings still lacked the two-tone shell and shoulder buttons. A worker-side checklist and an extra optional repair round added time without a score change. Per-batch differences of 0.33 reversed between batches, so single three-run batches are not enough to call small effects either way.
 
+## Bare Haiku 5.5 and the critic ablation (October 2026)
+
+The October batches compared VISP builds with each other; bare Haiku 5.5 had not been measured. A same-model ablation was planned to settle whether VISP's gain comes from its loop or from its stronger Sonnet reviewer and tester. It first needed a gain to split, and there was none.
+
+**Calibration, bare Haiku 5.5 at high effort** (preset `quality-2026-10`, batches cal1–cal4, two runs per task). 14 of 16 runs passed every hidden check, and the other two missed one check each. That includes three tasks built to land at 40–80% (`spreadsheet-rows`, `recurrence-cli`, and `spreadsheet-audit` with 18 seeded deviations from its README). Code scores were 8 on almost every run, against VISP's pooled October means of 7.65–8.17 on the same tasks:
+
+| Task | Hidden checks | Bare runs 1 and 2 | Code | Cost per run |
+| --- | --- | --- | --- | --- |
+| spreadsheet-cli | 38 | 38, 38 | 8, 8 | $0.07, $0.11 |
+| reservations-api | 44 | 44, 44 | 8, 8 | $0.04, $0.05 |
+| spreadsheet-extend | 63 | 63, 63 | 8, 8 | $0.19, $0.13 |
+| reservations-bundles | 60 | 60, 60 | 8, 9 | $0.02, $0.03 |
+| slingshot-game | 28 | 27, 28 | 8, 7 | $0.55, $0.57 |
+| recurrence-cli | 46 | 46, 46 | 8, 8 | $0.24, $0.40 |
+| spreadsheet-audit | 48 | 48, 47 | 7, 8 | $0.36, $0.67 |
+
+At low effort (`quality-2026-10-low`, batch low1, two runs on each of four tasks) bare Haiku 5.5 still passed 97.6% of hidden checks, in half the time at $0.03–0.05 per run. Its misses were single edge cases. Neither setting is a weak worker on these tasks.
+
+**Picture tasks, four arms** (wave 1: batches ab-q, ab-h, ab-s; five runs per arm; VISP build of develop 573f8b7f). The pooled judge score is the mean over the three tasks:
+
+| | Bare Haiku | VISP, Sonnet critic | VISP, Haiku critic | Bare Sonnet |
+| --- | --- | --- | --- | --- |
+| ps5-controller-svg judge | 5.0 | 5.8 | 5.4 | 6.6 |
+| lighthouse-pixel judge | 8.4 | 8.2 | 8.6 | 8.4 |
+| voxel-pagoda judge | 9.0 | 8.8 | 8.6 | 9.0 |
+| Pooled judge | 7.47 | 7.60 | 7.53 | 8.00 |
+| Mean cost per run | $0.04 | $0.37 | $0.13 | $0.29 |
+| Median wall time | 228 s | 300 s | 314 s | 117 s |
+
+Every VISP difference from bare Haiku is within noise: twice the standard error is about 1.2 on PS5 and 0.46 pooled. The pairwise judge preferred bare Haiku to VISP with the Sonnet critic 9 to 4, with 2 ties (lighthouse 5 to 0). A Haiku critic did no measurable harm at a third of the cost, but with no gain to split, the ablation cannot say whether the loop or the model matters. Bare Sonnet scored best, ran fastest and cost less per run than VISP with the Sonnet critic.
+
+So VISP shows no measured quality gain for Claude Haiku 5.5, at high or low effort, on any current task, and costs 3–9× bare Haiku per run on these tasks. Run traces point to two costs on picture tasks. First drafts were smaller (pagoda generators averaged 243 lines under VISP against 582 bare). And after a review that left only optional findings, the edit hook refused the worker's own polishing ("No task is authorized to write lighthouse.py"). The plan and per-run detail are kept outside the repository with the other batch plans.
+
 ## What made the difference
 
 **The harness must launch the critic itself.** In the first weak-agent pilot (Luna at low effort, a sentiment API with 36 hidden tests), bare coding scored 36 and both VISP arms 34: workers never ran a check that covered errors and never delegated review. A critic launched by VISP (`codex exec`, read-only) on the same code reported the two missing 405 responses, acceptance of `NaN` and a request that can hang without `Content-Length`, each with a next check. VISP now launches the reviewer after checks pass (`critic.launch: codex-exec`).
@@ -219,7 +252,8 @@ Independent studies point the same way: execution feedback against fixed tests i
 - The October batches ran three runs per arm; a one-point judge difference in one run moves a task mean by 0.33, and several 0.33 differences reversed between batches. Hidden checks were at their maximum on every task for both builds with the Haiku 5.5 worker, so these tasks no longer measure accuracy differences; harder tasks are needed.
 
 - Three runs per arm on four tasks the authors wrote; differences of one or two checks are within run-to-run noise.
-- The reviewer is a stronger model than the weak worker. Part of VISP's gain may come from that model rather than the loop; a same-model reviewer ablation has not been run.
+- The reviewer is a stronger model than the weak worker. Part of VISP's September gain may come from that model rather than the loop. The October same-model ablation could not separate them, because VISP showed no gain for Haiku 5.5 to split; only Haiku 4.5 still leaves headroom on these tasks.
+- No current task separates VISP from bare Haiku 5.5. Gains measured with Haiku 4.5, including the multi-session carryover results, have not been repeated with Haiku 5.5 or against bare Claude Code.
 - The opt-in tester for existing codebases needs more trials, including with its newest rule that tests of existing behavior must use every assertion helper the new tests use.
 - Stronger workers gain little on these tasks. On SWE-bench Verified Mini and the catapult game VISP leads by amounts within noise; more runs, a weaker worker on the current build, and blind code review scored separately are still to come.
 - The catapult game's hidden checks are not yet in `bench/`, so its scores cannot be reproduced from this repository.
