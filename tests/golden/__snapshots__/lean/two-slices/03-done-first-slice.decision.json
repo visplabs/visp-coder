@@ -1,0 +1,29 @@
+{
+  "exitCode": 0,
+  "next": {
+    "action": "implement",
+    "command": "visp work --feature 001-return-two-from-the-public --task T002",
+    "mayEdit": false,
+    "task": "T002",
+    "evidence": 0
+  },
+  "product": {
+    "status": "active",
+    "slices": {
+      "T001": "closed",
+      "T002": "pending"
+    },
+    "executions": [
+      "C001/T001: passed"
+    ],
+    "reviews": 0,
+    "openFindings": {
+      "required": 0,
+      "advisory": 0
+    }
+  },
+  "independentTests": {
+    "status": "pinned",
+    "disputes": []
+  }
+}

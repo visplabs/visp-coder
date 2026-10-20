@@ -1,0 +1,22 @@
+{
+  "exitCode": 0,
+  "next": {
+    "action": "implement",
+    "command": "visp work --feature 001-draw-a-ps5-controller --check \"<command that renders or checks the picture>\"",
+    "mayEdit": true,
+    "task": "T001",
+    "evidence": 0
+  },
+  "product": {
+    "status": "active",
+    "slices": {
+      "T001": "in-progress"
+    },
+    "executions": [],
+    "reviews": 0,
+    "openFindings": {
+      "required": 0,
+      "advisory": 0
+    }
+  }
+}

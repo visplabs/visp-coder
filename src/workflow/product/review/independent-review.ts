@@ -173,10 +173,14 @@ export function independentReviewTemplate() {
   };
 }
 
+/** Lean mode: a finding the reviewer tags as a gap against the request is required, whatever its flag. */
+const REQUEST_GAP = /^\s*request gap:/i;
+
 export function independentJudgments(
   review: IndependentReview,
   phase: ProductFeedback["phase"],
   outcomes: readonly ProductOutcome[] = [],
+  options: { readonly requestGaps?: boolean } = {},
 ) {
   review = normalizeIndependentEvidence(review);
   return {
@@ -199,7 +203,8 @@ export function independentJudgments(
           problem: `${finding.problem}\nConsequence: ${finding.consequence}`,
           nextCheck: finding.nextCheck,
           outcomes: finding.outcomes,
-          required: finding.required,
+          required:
+            finding.required || (!!options.requestGaps && REQUEST_GAP.test(finding.problem)),
           evidence: finding.evidence,
         };
       }),

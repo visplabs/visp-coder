@@ -28,6 +28,14 @@ If the UI shows a preview, guide, aim line, ghost or predicted route before an a
 When requestPromises mention a game, play or a rich look (not for plain forms or lists), also judge finish once, as at most one finding after any required ones, and omit it when three findings are already required: does the result look finished for what the request describes (materials or texture, depth, visible feedback for hits or changes) or like debug primitives (flat single-color shapes, an empty scene, no visible response)? Where the request promises content that varies (levels, screens, kinds of items), compare the units: a unit far emptier than the others, or one that leaves a promised kind (a material, tool or ammunition) useless, is a finding. Name the image and two concrete visible improvements. Finish findings are always required: false; never mark one required and never let one fail an outcome.
 Recognizability is not finish and overrides the finish rule: every object or subject the request names for a picture or screen to show, and every concrete look it names (named colours or palette, a named art style such as pixel art, voxel or isometric, a viewpoint), must be recognizable as that thing in the delivered images by someone who has not read the code. One that is missing, hidden behind something else, cut off, or reads as something different is a departure from the request: report it as a required finding that quotes the request words and names the image and region, and do not mark an outcome that covers it satisfied. First list the objects and looks the request names. A real thing it names for a picture or scene to depict (a product or model, vehicle, animal, building, landmark) is recognized by its identifying parts and colouring: list those parts too (for a London bus: red paint, two decks of windows, wheels) and check each in the image. An identifying part that is missing or unrecognizable, so the thing would read as a different thing or, for a named brand or model, a generic one, is that departure: report one required finding per thing, naming every such part. A part that is simplified, or left out by a style the request names (a minimalist logo, an icon, a silhouette), stays finish while the thing stays recognizable, and colours or a style the request names override the real thing's. Only what the request names counts: evaluative words (modern, clean, beautiful, polished) stay finish or advisory, an app's controls, forms and data tables fall under the criteria above, and polish beyond what the request names stays finish.`;
 
+/**
+ * Lean mode (`workflow.requestGaps: required`). On the October PS5 runs a Sonnet reviewer raised
+ * the missing-identity gap in 67 of 81 runs but marked it required in 12; a required finding got
+ * the two-tone shell fixed 12 of 12 times, advisory ones 0 of 30 after one review. The reviewer
+ * tags the gap; VISP, not the reviewer's hesitation, makes it required.
+ */
+export const REQUEST_GAP_INSTRUCTIONS = `Request gaps come first. List what the request names: each object, part, product or model, element, field, command, endpoint, output and stated rule. One that is missing, does not work, or reads as something different or generic (a named product or model needs its identifying parts and colouring) is a request gap: begin that finding's problem with "Request gap:", quote the request words, and mark it required. VISP treats every "Request gap:" finding as required. Everything else, including finish, polish, style and robustness the request does not state, is a note with required: false, and the implementer is told not to act on notes. Spend findings on request gaps before notes.`;
+
 export const UNDERSTANDING_CRITIC_INSTRUCTIONS = `${REVIEW_BASICS}
 Review the proposed approach and the actor's question. Identify misunderstandings, costly assumptions or missing user needs before implementation. Do not ask for screenshots of an unbuilt product, another design review or extra documents.
 ${REVIEW_RESPONSE}
@@ -47,12 +55,13 @@ export const OBSERVATION_REVIEW_INSTRUCTIONS =
   "Start with the original request and actual images, before reading test summaries. Describe visible states, object relationships and layout. Look for contradictions with the intended experience. Labels and an attractive theme are not proof of correct behavior. Name the image, region and next useful observation for a visible problem. Do not invent defects or infer missing states.";
 
 export function productReviewInstructions(
-  options: { visual?: boolean; observationFirst?: boolean } = {},
+  options: { visual?: boolean; observationFirst?: boolean; requestGaps?: boolean } = {},
 ): string {
   return [
     options.observationFirst && OBSERVATION_REVIEW_INSTRUCTIONS,
     CRITIC_INSTRUCTIONS,
     options.visual && VISUAL_REVIEW_INSTRUCTIONS,
+    options.requestGaps && REQUEST_GAP_INSTRUCTIONS,
   ]
     .filter(Boolean)
     .join("\n");

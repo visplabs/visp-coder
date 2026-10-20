@@ -24,6 +24,7 @@ import {
   type ProductSlice,
 } from "./model.js";
 import { currentProbeResponses, validateProbeResponses } from "./probe-feedback.js";
+import { deferredOutcomeReview } from "./review/review-cadence.js";
 import type { ProductRecord } from "./store.js";
 import { productContractDigest } from "./subject.js";
 
@@ -197,7 +198,14 @@ export async function productEvidenceGaps(
   if (record.brief.incomplete) gaps.push("The migrated brief is incomplete");
   const outcomes = outcomeStatuses(record, subject, slice);
   if (!outcomes.length) gaps.push("No observable outcomes are assigned");
-  gaps.push(...outcomes.flatMap((outcome) => outcomeGaps(record, slice, outcome)));
+  const deferred = deferredOutcomeReview(workspace, record, slice);
+  gaps.push(
+    ...outcomes
+      .filter(
+        (outcome) => !(deferred && outcome.behavior === "passed" && outcome.review !== "failed"),
+      )
+      .flatMap((outcome) => outcomeGaps(record, slice, outcome)),
+  );
   const current = currentCheckExecutions(record, subject, slice);
   for (const check of checksFor(record.brief, slice)) {
     const executions = current.get(check.id) ?? [];

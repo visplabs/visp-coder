@@ -24,6 +24,10 @@ workflow:
   validationCommands: []    # for example: - pnpm test
   acceptanceChecks: []
   flipCheck: auto           # off | auto | on; see workflow.flipCheck below
+  # Lean mode (experimental, not yet measured; see docs/workflow.md#lean-mode):
+  # draftFirst: off         # off | visual
+  # reviewCadence: slice    # slice | feature
+  # requestGaps: reviewer   # reviewer | required
 
 graph:
   languages: [typescript, javascript, python]
@@ -63,6 +67,9 @@ telemetry:
 | `workflow.validationCommands` | Commands run with every slice's checks as `CONFIG_1`, `CONFIG_2`, … One entry is one command, run without a shell; write `pnpm test` and `pnpm lint` as two entries, or give an argument list such as `["pnpm", "test", "--", "--reporter=dot"]`. |
 | `workflow.acceptanceChecks` | `{command, files}` checks pinned into each new feature and run at `visp accept`. |
 | `workflow.flipCheck` | `off`, `auto` (default) or `on`. For each passing declared check, VISP runs the check a second time on the old implementation, in a temporary relocated copy of the project (tests kept), to show whether it fails without the change. The result is display only and never gates acceptance. References to the project by its absolute path in copied, overlaid or scanned files are rewritten to the copy, or make the comparison unchecked when they sit in binary or UTF-16 bytes. Other spellings are not detected and can reach the project: a symbolic link to the project directory, escaped forms (JSON `\/` or `\u002F`, URL `%2F`, `\x2F` in source strings) and paths the check builds at run time (for example from `HOME`). The check's external side effects (databases, services, files outside the project) happen again. Set `workflow.flipCheck: off` for checks that must not run twice. `auto` compares changes to existing implementation; `on` also compares added files. A comparison is skipped and reported unchecked when the project has git-ignored state it cannot reproduce. |
+| `workflow.draftFirst` | Lean mode, experimental. `visual` lets a picture request (an SVG, pixel or voxel art, an image or illustration, not a game, app, API or engine) start with `visp work` and no check: the worker drafts the whole picture, then declares its check with `visp work --check`. Default `off`. See [lean mode](workflow.md#lean-mode). |
+| `workflow.reviewCadence` | Lean mode, experimental. `feature` reviews only the slice that completes the feature, and a review after the second runs only while a required finding is open. Default `slice`. |
+| `workflow.requestGaps` | Lean mode, experimental. `required` makes every reviewer finding that begins "Request gap:" required and shows the other findings as notes the worker is told not to act on. Default `reviewer`, which keeps the reviewer's own labels. |
 | `graph.languages`, `graph.exclude`, `graph.maxFileBytes` | What the repository index parses. |
 | `context.tokenBudget` | Approximate budget for the complete context `work` delivers. |
 | `context.maxSnippets` | Maximum source excerpts in delivered context. |

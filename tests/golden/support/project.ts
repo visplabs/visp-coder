@@ -138,6 +138,8 @@ export const DISPUTE = [
 export interface ProjectOptions {
   /** Merged into `critic` in visp.yml; omitted keeps the critic off. */
   readonly critic?: Record<string, unknown>;
+  /** Merged into `workflow` in visp.yml, for example lean mode's switches. */
+  readonly workflow?: Record<string, unknown>;
   /** The project's host, written to visp.yml before the foundation is installed. */
   readonly harness?: string;
   /** Extra files committed with the fixture. */
@@ -162,6 +164,7 @@ export class GoldenProject {
         const config = parse(await readFile(join(built.root, "visp.yml"), "utf8"));
         if (options.harness) config.harness = options.harness;
         if (options.critic) config.critic = { ...config.critic, ...options.critic };
+        if (options.workflow) config.workflow = { ...config.workflow, ...options.workflow };
         await built.write("visp.yml", stringify(config));
         if (options.install !== false) {
           await built.installFoundation();

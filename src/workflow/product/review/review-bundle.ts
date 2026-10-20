@@ -172,6 +172,7 @@ function reviewInstructions(
   return productReviewInstructions({
     visual: imageCount > 0 || needsBrowser(record.brief, slice),
     observationFirst: workspace.config.workflow.reviewMode === "observation-preview",
+    requestGaps: workspace.config.workflow.requestGaps === "required",
   });
 }
 

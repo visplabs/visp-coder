@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Lean mode, three experimental `workflow` switches that are off by default.** With a Haiku 5.5 worker, VISP added no measured quality in October and cost 4.6 to 15 times a bare run; on pictures its drafts were about half the size of bare drafts and bare work won the pairwise comparison 9 to 4. `draftFirst: visual` lets a picture request start with `visp work` and no check, so the whole picture is drafted before any test, brief or slice plan. `reviewCadence: feature` reviews only the slice that completes the feature, and after two reviews reviews again only while a required finding is open. `requestGaps: required` has the reviewer begin a finding about something the request names that is missing or unrecognizable with "Request gap:", makes such findings required, and shows the reviewer's other findings as notes the worker is told not to act on. None is measured yet; see [lean mode](docs/workflow.md#lean-mode).
+
 ## 0.5.0-beta.4 - 2026-10-15
 
 ### Security
