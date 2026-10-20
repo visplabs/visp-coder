@@ -1,0 +1,6 @@
+> .visp/hooks/codex-hooks.mjs {"session_id":"golden-session","cwd":"<PROJECT>","hook_event_name":"PreToolUse","tool_name":"apply_patch","tool_input":{"command":"*** Begin Patch\n*** Update File: src/value.mjs\n@@\n-export const value = 1;\n+export const value = 2;\n*** End Patch\n"}}
+--- stdout
+
+--- stderr
+
+--- exit 0

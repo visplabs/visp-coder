@@ -147,8 +147,17 @@ async function checkCodexTrust(state: WorkspaceState): Promise<Check> {
     };
   }
   const prefix = `${state.paths.root}/.codex/hooks.json:`;
-  const events = ["user_prompt_submit", "pre_tool_use", "stop"];
-  const missing = events.filter((event) => !config.includes(`${prefix}${event}:`));
+  // Codex keys trust by event and entry position; the edit hook came later than the others,
+  // so a project trusted before it has no entry for it and the hook does not run.
+  const entries = [
+    ["user_prompt_submit:0:", "the prompt hook"],
+    ["pre_tool_use:0:", "the shell hook"],
+    ["pre_tool_use:1:", "the edit hook"],
+    ["stop:0:", "the Stop hook"],
+  ];
+  const missing = entries
+    .filter(([entry]) => !config.includes(`${prefix}${entry}`))
+    .map(([, name]) => name);
   const projectSection = config
     .split(`[projects.${JSON.stringify(state.paths.root)}]`)[1]
     ?.split(/^\[/mu)[0];
@@ -158,13 +167,14 @@ async function checkCodexTrust(state: WorkspaceState): Promise<Check> {
     ? {
         name: "codex hooks trust",
         status: "ok",
-        detail: "Project trust and prompt, shell and Stop hook trust entries exist",
+        detail: "Project trust and prompt, shell, edit and Stop hook trust entries exist",
       }
     : {
         name: "codex hooks trust",
         status: "unknown",
         detail: `Codex hook trust is unverified for ${missing.join(", ")}`,
-        recovery: "Open Codex and run /hooks to trust .codex/hooks.json before headless runs",
+        recovery:
+          "Open Codex and run /hooks to trust .codex/hooks.json before headless runs, again after an upgrade adds a hook",
       };
 }
 

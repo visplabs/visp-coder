@@ -13,7 +13,7 @@ afterEach(async () => {
   project = undefined;
 });
 
-it("answers Codex's prompt, shell and stop hooks", async () => {
+it("answers Codex's prompt, shell, stop and apply_patch hooks", async () => {
   project = await GoldenProject.create({ harness: "codex" });
   const run = new Recorder(project, "hooks/codex");
   const script = ".visp/hooks/codex-hooks.mjs";
@@ -34,6 +34,32 @@ it("answers Codex's prompt, shell and stop hooks", async () => {
     tool_input: { command: "rm -rf acceptance" },
   });
   await codex("03-stop-work", { hook_event_name: "Stop" });
+  const patch = (...lines: string[]) => ({
+    hook_event_name: "PreToolUse",
+    tool_name: "apply_patch",
+    tool_input: { command: ["*** Begin Patch", ...lines, "*** End Patch", ""].join("\n") },
+  });
+  await codex(
+    "04-patch-in-scope",
+    patch(
+      "*** Update File: src/value.mjs",
+      "@@",
+      "-export const value = 1;",
+      "+export const value = 2;",
+    ),
+  );
+  await codex(
+    "05-patch-out-of-scope",
+    patch(
+      "*** Update File: src/value.mjs",
+      "@@",
+      "-export const value = 1;",
+      "+export const value = 2;",
+      "*** Add File: README.md",
+      "+# Value",
+    ),
+  );
+  await codex("06-patch-unreadable", patch("*** Rename File: README.md"));
 });
 
 it("refuses an out-of-scope commit in the Git hook", async () => {
