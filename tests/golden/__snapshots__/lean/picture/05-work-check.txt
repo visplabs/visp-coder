@@ -1,0 +1,11 @@
+$ visp work --check 'node checks/picture.check.mjs'
+--- stdout
+work: {"feature":"001-draw-a-ps5-controller","task":"T001","objective":"Deliver the original request: draft the whole picture first","mayEdit":true,"contextId":"<HEX-1>","scope":{"allowed":["**"],"expected":[],"forbidden":[]},"outcomes":{"entries":[{"id":"O001","kind":"functional","statement":"The original request is fulfilled: Draw a PS5 controller","priority":"must","provenance":"user-stated","reviewRequired":false,"expectations":[]}],"remaining":0},"graph":{"entries":[{"kind":"entity","key":"checks/value.check.mjs#variable:expected","path":"checks/value.check.mjs","name":"expected","detail":"variable","startLine":3,"endLine":3},{"kind":"entity","key":"checks/value.check.mjs#file","path":"checks/value.check.mjs","name":"value.check.mjs","detail":"file","startLine":1,"endLine":9,"distance":1},{"kind":"entity","key":"src/value.mjs#variable:value","path":"src/value.mjs","name":"value","detail":"variable","startLine":1,"endLine":1,"distance":1}],"remaining":0},"checks":{"entries":[{"id":"T001-C001","command":"node checks/picture.check.mjs","outcomes":["O001"],"files":[],"environment":"other"}],"remaining":0},"notes":{"entries":["Context is bounded; read additional relevant files when needed."],"remaining":0},"nextCheck":"Exercise the next complete behavior, then inspect whether the result fulfills the original request across relevant quality dimensions.","findings":[],"gaps":[],"journeyFeedback":{"runs":[],"omitted":0},"next":{"feature":"001-draw-a-ps5-controller","task":"T001","action":"implement","objective":"Deliver the original request: draft the whole picture first","command":"visp done --feature 001-draw-a-ps5-controller --task T001","evidence":["O001: behavior unassessed; review unassessed","T001-C001: not executed for current product"],"mayEdit":true}}
+Read-only details: visp work --inspect --feature 001-draw-a-ps5-controller --task T001
+Full result: add --json. Tool success does not imply product acceptance.
+
+Next: visp done --feature 001-draw-a-ps5-controller --task T001
+
+--- stderr
+
+--- exit 0

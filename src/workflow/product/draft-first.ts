@@ -45,7 +45,7 @@ export function draftSlice(
   );
 }
 
-export const DRAFT_SLICE_GOAL = "Draft the whole request, then declare its check";
+export const DRAFT_SLICE_GOAL = "Deliver the original request: draft the whole picture first";
 
 export function draftObjective(): string {
   return "Draft first: write the whole picture now, in one pass, with every part, object and look the request names, at full size and detail. No brief, slice plan or tests are needed before the draft. When it is complete and renders, declare the command that renders or checks it, then run visp done; VISP's review starts there";

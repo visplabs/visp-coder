@@ -65,7 +65,7 @@ it("authorizes a picture request as one slice before any check, then keeps the d
   const started = await pictureFeature("visual");
   const feature = started.brief.feature;
   expect(started).toMatchObject({
-    nextCommand: `visp work --feature ${feature}`,
+    draftCommand: `visp work --feature ${feature}`,
     draftNote: expect.stringContaining("Draft the whole picture"),
   });
   const before = await runProductNext(await state());
@@ -122,7 +122,7 @@ it.each([
 ])("keeps today's start $case", async ({ draftFirst, request }) => {
   const started = await pictureFeature(draftFirst, request);
   const feature = started.brief.feature;
-  expect(started.nextCommand).toBeUndefined();
+  expect(started.draftCommand).toBeUndefined();
   const next = await runProductNext(await state());
   expect(next.ok && next.value.command).toContain("--check");
   expect((await runProductWork(await state(), {})).ok).toBe(false);

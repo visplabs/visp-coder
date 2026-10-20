@@ -406,9 +406,11 @@ function compactBriefText(name: string, value: unknown, channel: ReplyChannel = 
   const next =
     typeof data.nextCommand === "string"
       ? data.nextCommand
-      : name.endsWith("feature")
-        ? wording.template(feature)
-        : wording.next(feature);
+      : typeof data.draftCommand === "string"
+        ? data.draftCommand
+        : name.endsWith("feature")
+          ? wording.template(feature)
+          : wording.next(feature);
   return `${name}: ${JSON.stringify(summary)}${warning}${notes}${rulesText(data.projectRules)}${memoryText(data.projectMemory, data.projectMemoryLaterChanges)}\nNext: ${next}\nRead the full brief with ${wording.readBrief(feature)}.`;
 }
 

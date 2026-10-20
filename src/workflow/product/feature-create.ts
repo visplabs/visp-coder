@@ -95,7 +95,7 @@ async function startProductFeature(
   const { feature } = created.value.brief;
   return ok({
     ...created.value,
-    nextCommand: draftStartCommand(feature),
+    draftCommand: draftStartCommand(feature),
     draftNote: draftStartNote(feature),
   });
 }

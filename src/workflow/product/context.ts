@@ -52,7 +52,10 @@ export async function buildProductContext(
     subject.value,
     slice,
     workspace.config.workflow.reviewMode,
-    { reviewer: await reviewerPointer(workspace, brief.feature, subject.value, slice.id) },
+    {
+      reviewer: await reviewerPointer(workspace, brief.feature, subject.value, slice.id),
+      requiredOnly: workspace.config.workflow.requestGaps === "required",
+    },
   );
   const question = [
     feedbackPlan.trace.question,

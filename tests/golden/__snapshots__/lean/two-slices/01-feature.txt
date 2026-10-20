@@ -1,0 +1,11 @@
+$ visp feature 'Return two from the public value module' --source-brief 'Make the public value module return two instead of one.'
+--- stdout
+feature: {"feature":"001-return-two-from-the-public","incomplete":false,"outcomes":[],"examples":[],"checks":[],"slices":[]}
+Note: Run visp work --feature 001-return-two-from-the-public now; this command keeps running only to write VISP's acceptance tests — leave it running and do not run visp feature again.
+Next: visp work --feature 001-return-two-from-the-public --check "<command that runs your tests>" works the whole request as one slice. Only for several independently usable parts, plan slices: visp brief --template --feature 001-return-two-from-the-public
+Read the full brief with visp brief --feature 001-return-two-from-the-public.
+
+--- stderr
+visp feature: recording the request takes up to 30 s (rule and memory checks). If your tool returns early, keep polling; never run visp feature twice.
+
+--- exit 0

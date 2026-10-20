@@ -1,0 +1,10 @@
+$ visp next
+--- stdout
+next: {"feature":"001-draw-a-ps5-controller","task":"T001","action":"implement","objective":"Draft first: write the whole picture now, in one pass, with every part, object and look the request names, at full size and detail. No brief, slice plan or tests are needed before the draft. When it is complete and renders, declare the command that renders or checks it, then run visp done; VISP's review starts there","command":"visp work --feature 001-draw-a-ps5-controller --check \"<command that renders or checks the picture>\"","mayEdit":true}
+Full result: add --json.
+
+Next: visp work --feature 001-draw-a-ps5-controller --check "<command that renders or checks the picture>"
+
+--- stderr
+
+--- exit 0

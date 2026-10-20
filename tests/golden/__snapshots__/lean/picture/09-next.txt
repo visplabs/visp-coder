@@ -1,0 +1,10 @@
+$ visp next
+--- stdout
+next: {"feature":"001-draw-a-ps5-controller","action":"accept","objective":"Run final checks against the assembled product and preserved expectations","command":"visp accept --feature 001-draw-a-ps5-controller","mayEdit":false}
+Full result: add --json.
+
+Next: visp accept --feature 001-draw-a-ps5-controller
+
+--- stderr
+
+--- exit 0
