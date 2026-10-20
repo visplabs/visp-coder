@@ -45,10 +45,13 @@ it("starts a later session's request from the accepted feature's uncommitted wor
 
   await hook("01-prompt", "session-1", prompt(REQUEST));
   await run.cli("02-feature", ["feature", GOAL, "--source-brief", REQUEST]);
+  // A Claude reviewer's model reads the rules and, from the second feature on, chooses notes.
+  await run.models("02-feature", models);
   await project.writeBrief(BRIEF);
   await run.cli("03-work", ["work"]);
   await project.setValue(2);
   await run.cli("04-done", ["done"]);
+  await run.models("04-done", models);
   await run.cli("05-accept", ["accept"]);
   await hook("06-notification", "session-1", prompt(NOTIFICATION));
   await run.cli("07-next-accepted", ["next"]);
@@ -70,5 +73,6 @@ it("starts a later session's request from the accepted feature's uncommitted wor
     "--source-brief",
     "Also export the value three.",
   ]);
+  await run.models("14-feature-from-accepted", models);
   await run.cli("15-next-new-feature", ["next"]);
 });
