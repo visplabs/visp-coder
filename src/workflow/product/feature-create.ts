@@ -14,6 +14,7 @@ import type { Intent } from "../artifacts/feature.js";
 import { captureAcceptanceBaseline } from "../evidence/acceptance.js";
 import { requireFeatureFoundation, requireImplementationFoundation } from "../gates/readiness.js";
 import type { WorkspaceState } from "../state.js";
+import { draftFirstApplies, draftStartCommand, draftStartNote } from "./draft-first.js";
 import { allocateFeatureId } from "./feature-id.js";
 import { memoryFileMutations } from "./feature-memory.js";
 import type { ProductFeatureOptions, ProductFeatureOutcome } from "./feature-model.js";
@@ -87,9 +88,16 @@ async function startProductFeature(
   if (!start.ok) return start;
   const request = await featureRequest(workspace, host.value, raw, text);
   if (!request.ok) return request;
-  return withProductMutation(workspace, () =>
+  const created = await withProductMutation(workspace, () =>
     createProductFeatureLocked(workspace, options, request.value, start.value),
   );
+  if (!created.ok || !draftFirstApplies(workspace, created.value.brief)) return created;
+  const { feature } = created.value.brief;
+  return ok({
+    ...created.value,
+    nextCommand: draftStartCommand(feature),
+    draftNote: draftStartNote(feature),
+  });
 }
 
 interface FeatureStart {

@@ -29,4 +29,7 @@ export interface ProductFeatureOutcome {
   readonly duplicateNote?: string;
   /** Set by `visp feature` when its tester is writing tests in the same process, or was refused. */
   readonly testsNote?: string;
+  /** Lean draft-first start: the command that authorizes the draft, and why. */
+  readonly nextCommand?: string;
+  readonly draftNote?: string;
 }

@@ -396,7 +396,7 @@ function compactBriefText(name: string, value: unknown, channel: ReplyChannel = 
     .filter((text): text is string => typeof text === "string")
     .map((text) => `\nWarning: ${text}`)
     .join("");
-  const notes = [data.duplicateNote, data.testsNote]
+  const notes = [data.duplicateNote, data.testsNote, data.draftNote]
     .filter((text): text is string => typeof text === "string")
     .map((text) => `\nNote: ${text}`)
     .join("");
