@@ -40,6 +40,7 @@ import {
   refreshDisputes,
   rulingCurrent,
 } from "../tester/pinned-disputes.js";
+import { featureReviewCadence, LEAN_MIDDLE_SLICE_REASON } from "./review-cadence.js";
 import { completesFeature } from "./review-selection.js";
 
 export interface DoneCriticSummary {
@@ -370,6 +371,8 @@ async function reviewNotNeeded(
       reason: "The independent review already ruled on this exact source",
     };
   if (!record || !task) return undefined;
+  if (featureReviewCadence(workspace) && !completesFeature(record, task))
+    return { reviewed: false, findings: [], reason: LEAN_MIDDLE_SLICE_REASON };
   const capacity = await reviewerCapacity(workspace, feature, subject, task);
   if (!skippableReview(record, task, subject, capacity.reserveCompletingReview)) return undefined;
   return {
