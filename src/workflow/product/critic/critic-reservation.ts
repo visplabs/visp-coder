@@ -11,6 +11,7 @@ import { productFailureSignature } from "../failures.js";
 import { openRequiredFindings } from "../findings.js";
 import { executionSchema, type ProductSlice, productStateSchema } from "../model.js";
 import { reproductionContextDigest } from "../reproduction-bindings.js";
+import { reviewRoundGap } from "../review/review-cadence.js";
 import { deliveredReviewEvidenceIds } from "../review/review-context.js";
 import { generatedSourceReferences } from "../review/review-delivery-validation.js";
 import { reviewerHandoffCandidates } from "../review/reviewer-handoff.js";
@@ -401,6 +402,11 @@ async function reservationCapacity(
   if (!budget.ok) return budget;
   const budgetGap = featureCriticBudgetGap(budget.value.budget, state.config.timeoutMs);
   if (budgetGap) return err(vispError("STAGE_BLOCKED", budgetGap));
+  const roundGap =
+    selected.phase === "product"
+      ? reviewRoundGap(workspace, selected.record, budget.value.budget)
+      : undefined;
+  if (roundGap) return err(vispError("STAGE_BLOCKED", roundGap));
   const authorizationGap = criticRecoveryAuthorizationGap(request);
   if (authorizationGap) return err(vispError("CONFIG_INVALID", authorizationGap));
   const phaseGap = phaseReviewGap(

@@ -40,7 +40,7 @@ import time
 
 from common import RUNS, stop_recorded
 from judge import CHECKLISTS, GAMES
-from presets import preset
+from presets import preset, visp_build
 from runfacts import invalid, invalidity, is_finished, mark_if_invalid
 
 BENCH = pathlib.Path(__file__).resolve().parent
@@ -68,7 +68,7 @@ def label(spec):
         name, arm = spec.split("=", 1)
         return name, arm
     if spec.startswith("visp:"):
-        return spec.split(":", 1)[1], spec
+        return spec.split(":", 1)[1].replace("+", "-"), spec
     if spec.startswith("visp-codex:"):
         return "codex-" + spec.split(":", 1)[1], spec
     return spec, spec
@@ -232,8 +232,8 @@ def main():
     previous = json.loads(manifest_path.read_text()) if manifest_path.exists() else None
     if previous and previous["preset"] != args.preset:
         raise SystemExit(f"batch {args.batch} was started with preset {previous['preset']}, not {args.preset}")
-    missing = sorted({arm.split(":", 1)[1] for _, arm in arms if arm.startswith(("visp:", "visp-codex:"))
-                      and not (RUNS / "shims" / arm.split(":", 1)[1]).is_dir()})
+    builds = {visp_build(arm)[0] for _, arm in arms if arm.startswith(("visp:", "visp-codex:"))}
+    missing = sorted(build for build in builds if not (RUNS / "shims" / build).is_dir())
     if missing:
         message = f"no VISP build for {', '.join(missing)} in {RUNS / 'shims'}; make it with build_visp.sh"
         if not args.dry_run:

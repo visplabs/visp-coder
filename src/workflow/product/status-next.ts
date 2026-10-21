@@ -3,6 +3,13 @@ import { cliCommand } from "../next-action.js";
 import type { WorkspaceState } from "../state.js";
 import { finalProductAssessmentGaps, productEvidenceGaps } from "./assessment.js";
 import { currentProductFailures } from "./corrections.js";
+import {
+  draftCheckCommand,
+  draftFirstApplies,
+  draftObjective,
+  draftSlice,
+  draftStartCommand,
+} from "./draft-first.js";
 import { environmentNext, needsBrowser } from "./environment.js";
 import { browserCapabilityApplies } from "./environment-model.js";
 import { closedSlice, type ProductSlice } from "./model.js";
@@ -43,6 +50,15 @@ export async function nextFromRecord(
       action: "understand",
       objective: "Complete the brief: declare outcomes and set incomplete:false before working",
       command: cliCommand("brief", { feature: record.brief.feature }),
+      evidence: record.brief.uncertainties,
+      mayEdit: false,
+    });
+  if (draftFirstApplies(workspace, record.brief))
+    return ok({
+      ...base,
+      action: "understand",
+      objective: `${draftObjective()}. Start with visp work: it authorizes the whole request as one slice`,
+      command: draftStartCommand(record.brief.feature),
       evidence: record.brief.uncertainties,
       mayEdit: false,
     });
@@ -97,6 +113,18 @@ export async function nextFromRecord(
       command: cliCommand("brief", { feature: record.brief.feature }),
       evidence: [],
       mayEdit: false,
+    });
+  if (
+    draftSlice(workspace, record.brief, slice) &&
+    record.state.slices[slice.id]?.status === "in-progress"
+  )
+    return ok({
+      ...base,
+      action: "implement",
+      objective: draftObjective(),
+      command: draftCheckCommand(record.brief.feature),
+      evidence: [],
+      mayEdit: true,
     });
   const next = await nextOpenSlice(workspace, record, slice, subject.value);
   return next.ok && next.value.action === "implement"
