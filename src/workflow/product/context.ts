@@ -1,18 +1,12 @@
 import { matchesAny } from "../../core/patterns.js";
 import { ok, type Result } from "../../core/result.js";
-import {
-  isIndexableProjectPath,
-  openProjectStore,
-  type QueryRow,
-  refreshRepository,
-} from "../../graph/index.js";
+import { isIndexableProjectPath, refreshRepository } from "../../graph/index.js";
 import { featureMemories } from "../../memory/project-memory.js";
 import { recordActivity } from "../../orchestrate/session.js";
 import { checkOutputNotes } from "../product-output-guidance.js";
 import type { WorkspaceState } from "../state.js";
 import { productBehaviorProbes } from "./behavior-probes.js";
 import { fitProductContext } from "./context-budget.js";
-import { queryCurrentProductPaths } from "./context-graph.js";
 import type { ProductWorkContext } from "./context-types.js";
 import { correctionChecks, failedCheckOwners } from "./corrections.js";
 import { reviewerPointer } from "./critic/critic-capacity.js";
@@ -78,25 +72,12 @@ export async function buildProductContext(
       matchesAny(path, [...slice.scope.allowed, ...checks.flatMap((check) => check.files)]),
     )
     .sort((a, b) => Number(question.includes(b)) - Number(question.includes(a)));
-  const neighborhood = await productNeighborhood(workspace, paths, refresh, question);
-  if (!neighborhood.ok) return neighborhood;
-  const { graph, notes } = neighborhood.value;
-  const excerptPaths = paths.filter(usefulExcerptPath).sort(
-    (a, b) =>
-      excerptScore(
-        b,
-        question,
-        graph,
-        checks.flatMap((check) => check.files),
-      ) -
-      excerptScore(
-        a,
-        question,
-        graph,
-        checks.flatMap((check) => check.files),
-      ),
-  );
-  notes.unshift(...(await productInputWarnings(workspace, brief)));
+  if (refresh) await refreshProductIndex(workspace, paths);
+  const checkFiles = checks.flatMap((check) => check.files);
+  const excerptPaths = paths
+    .filter(usefulExcerptPath)
+    .sort((a, b) => excerptScore(b, question, checkFiles) - excerptScore(a, question, checkFiles));
+  const notes = await productInputWarnings(workspace, brief);
   notes.push(...checkOutputNotes(checks));
   const { files, remaining } = await productExcerpts(workspace, excerptPaths, question);
   if (excerptPaths.length > files.length)
@@ -131,7 +112,6 @@ export async function buildProductContext(
         scope: slice.scope,
         checks,
         files,
-        graph,
         notes,
         mayEdit,
         subjectDigest: subject.value,
@@ -190,72 +170,30 @@ function usefulExcerptPath(path: string): boolean {
   );
 }
 
-function excerptScore(
-  path: string,
-  question: string,
-  graph: QueryRow[],
-  checkFiles: string[],
-): number {
-  return (
-    Number(question.includes(path)) * 5 +
-    Number(checkFiles.includes(path)) * 4 +
-    graph.reduce(
-      (score, row) => score + (row.path === path ? (row.kind === "entrypoint" ? 3 : 1) : 0),
-      0,
-    )
-  );
+function excerptScore(path: string, question: string, checkFiles: string[]): number {
+  return Number(question.includes(path)) * 5 + Number(checkFiles.includes(path)) * 4;
 }
 
-export async function productNeighborhood(
+/**
+ * Keeps the repository index current for the regression advice and `visp query`; `work` and
+ * `done` no longer deliver graph rows, so a failed refresh is not the worker's concern.
+ */
+export async function refreshProductIndex(
   workspace: WorkspaceState,
-  paths: string[],
-  refresh: boolean,
-  question?: string,
-): Promise<Result<{ graph: QueryRow[]; notes: string[] }>> {
-  const graph: QueryRow[] = [];
-  const notes: string[] = [];
-  if (refresh && paths.some(isIndexableProjectPath)) {
-    const indexed = await refreshRepository(
-      workspace.paths.root,
-      workspace.config.graph,
-      workspace.paths.graphStore,
-    );
-    if (!indexed.ok)
-      notes.push(
-        `Graph unavailable: ${indexed.error.message}. Inspect the relevant files directly.`,
-      );
-    else
-      await recordActivity(workspace, {
-        command: "index --refresh",
-        outcome: "ok",
-        detail: `Automatic product context refresh: ${indexed.value.counts.entities} entities, ${indexed.value.counts.relations} relations`,
-      });
-  }
-  const exists = await workspace.files.exists(workspace.paths.graphStore);
-  if (!exists.ok) {
-    notes.push(`Graph unavailable: ${exists.error.message}. Inspect the relevant files directly.`);
-    return ok({ graph, notes });
-  }
-  if (exists.value) {
-    const store = await openProjectStore(workspace.files, workspace.paths.graphStore, {
-      writable: false,
+  paths: readonly string[],
+): Promise<void> {
+  if (!paths.some(isIndexableProjectPath)) return;
+  const indexed = await refreshRepository(
+    workspace.paths.root,
+    workspace.config.graph,
+    workspace.paths.graphStore,
+  );
+  if (indexed.ok)
+    await recordActivity(workspace, {
+      command: "index --refresh",
+      outcome: "ok",
+      detail: `Automatic product context refresh: ${indexed.value.counts.entities} entities, ${indexed.value.counts.relations} relations`,
     });
-    if (store.ok) {
-      try {
-        const context = await queryCurrentProductPaths(workspace, store.value, paths, question);
-        graph.push(...context.graph);
-        notes.push(...context.notes);
-      } finally {
-        store.value.close();
-      }
-    } else
-      notes.push(`Graph unavailable: ${store.error.message}. Inspect the relevant files directly.`);
-  }
-  if (!graph.length)
-    notes.push(
-      "Graph has no relevant declarations or links. Inspect the delivered code directly; refresh through work after implementation exists.",
-    );
-  return ok({ graph, notes });
 }
 
 async function productExcerpts(workspace: WorkspaceState, paths: string[], question: string) {

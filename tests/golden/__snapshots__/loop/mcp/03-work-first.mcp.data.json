@@ -35,7 +35,7 @@
       "trace": {
         "question": "Which code owns Return the promised value, and which callers and tests will change?",
         "command": "visp work --feature 001-return-two-from-the-public --task T001",
-        "guidance": "work refreshes the graph and supplies code. Follow the relevant entry point/callers; an empty or partial graph requires direct code inspection, not invented dependencies."
+        "guidance": "work supplies code excerpts. Follow the relevant entry point and callers in the code itself, not invented dependencies."
       },
       "findings": [],
       "findingsRemaining": 0,
@@ -100,26 +100,6 @@
         "truncated": false
       }
     ],
-    "graph": [
-      {
-        "kind": "entity",
-        "key": "checks/value.check.mjs#variable:expected",
-        "path": "checks/value.check.mjs",
-        "name": "expected",
-        "detail": "variable",
-        "startLine": 3,
-        "endLine": 3
-      },
-      {
-        "kind": "entity",
-        "key": "src/value.mjs#variable:value",
-        "path": "src/value.mjs",
-        "name": "value",
-        "detail": "variable",
-        "startLine": 1,
-        "endLine": 1
-      }
-    ],
     "notes": [],
     "mayEdit": true,
     "subjectDigest": "<SHA256-1>",
@@ -133,11 +113,10 @@
     "feedback": [],
     "budget": {
       "tokenBudget": 12000,
-      "estimatedTokens": 1448,
+      "estimatedTokens": 1256,
       "status": "within-budget",
       "omitted": {
         "files": 0,
-        "graphRows": 0,
         "skills": 0,
         "feedbackCharacters": 0
       },

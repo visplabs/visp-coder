@@ -34,7 +34,7 @@ export function fitProductContext(
       tokenBudget,
       estimatedTokens: 0,
       status: "within-budget",
-      omitted: { files: 0, graphRows: 0, skills: 0, feedbackCharacters: 0 },
+      omitted: { files: 0, skills: 0, feedbackCharacters: 0 },
       sources,
     },
   };
@@ -46,25 +46,11 @@ export function fitProductContext(
   // Admitted skills are small and are the only place a procedure reaches the worker;
   // source excerpts go first because the worker can read those files itself.
   for (const [key, counter] of [
-    ["graph", "graphRows"],
     ["files", "files"],
     ["skills", "skills"],
   ] as const) {
     if (fitted.budget.estimatedTokens <= tokenBudget) break;
     fitted = fitPrefix(fitted, key, counter);
-  }
-  // Removing an oversized source excerpt can free room for the graph dropped earlier.
-  // Reuse that space instead of returning an empty neighborhood that actually fits.
-  if (fitted.graph.length < input.graph.length && fitted.budget.estimatedTokens < tokenBudget) {
-    const restored = price({
-      ...fitted,
-      graph: input.graph,
-      budget: { ...fitted.budget, omitted: { ...fitted.budget.omitted, graphRows: 0 } },
-    });
-    fitted =
-      restored.budget.estimatedTokens <= tokenBudget
-        ? restored
-        : fitPrefix(restored, "graph", "graphRows");
   }
   return fitted.budget.estimatedTokens <= tokenBudget
     ? fitted
@@ -104,8 +90,8 @@ function fitAdvisoryContext(context: ProductWorkContext): ProductWorkContext {
 /** Bounded prefix search avoids repeatedly copying a growing omission ledger. */
 function fitPrefix(
   context: ProductWorkContext,
-  key: "skills" | "graph" | "files",
-  counter: "skills" | "graphRows" | "files",
+  key: "skills" | "files",
+  counter: "skills" | "files",
 ): ProductWorkContext {
   const entries = context[key];
   const candidate = (count: number) =>

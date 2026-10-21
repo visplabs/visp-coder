@@ -1,5 +1,4 @@
 import { afterEach, expect, it } from "vitest";
-import { productNeighborhood } from "../../../../src/workflow/product/context.js";
 import { productFeedbackPlan } from "../../../../src/workflow/product/feedback.js";
 import {
   runProductVerify,
@@ -8,40 +7,11 @@ import {
 } from "../../../../src/workflow/product/index.js";
 import { readProductRecord } from "../../../../src/workflow/product/store.js";
 import { productWorkspace } from "../../support/product-workspace.js";
-import { TestWorkspace } from "../../support/workspace.js";
+import type { TestWorkspace } from "../../support/workspace.js";
 
 const workspaces: TestWorkspace[] = [];
 afterEach(async () => {
   await Promise.all(workspaces.splice(0).map((workspace) => workspace.destroy()));
-});
-
-it("a named failure delivers its actual caller, callee and importing test without duplicate graph rows", async () => {
-  const workspace = await TestWorkspace.create({
-    "src/physics.mjs":
-      "export function magnitude(x) { return Math.abs(x); }\nexport function launchVelocity(pull) { return magnitude(pull); }\nexport function makeShot(pull) { return launchVelocity(pull); }\n",
-    "test/physics.test.mjs":
-      "import {launchVelocity} from '../src/physics.mjs';\nexport const observed = launchVelocity(-2);\n",
-  });
-  workspaces.push(workspace);
-  const paths = ["src/physics.mjs", "test/physics.test.mjs"];
-  const result = await productNeighborhood(
-    await workspace.state(),
-    paths,
-    true,
-    "Which callers and tests explain the incorrect launchVelocity result?",
-  );
-  if (!result.ok) throw new Error(result.error.message);
-  expect(result.value.graph.map((row) => row.name)).toEqual(
-    expect.arrayContaining(["launchVelocity", "makeShot", "magnitude", "physics.test.mjs"]),
-  );
-  expect(new Set(result.value.graph.map((row) => `${row.kind}:${row.key}`)).size).toBe(
-    result.value.graph.length,
-  );
-  const ordinary = await productNeighborhood(await workspace.state(), paths, false);
-  if (!ordinary.ok) throw new Error(ordinary.error.message);
-  expect(new Set(ordinary.value.graph.map((row) => `${row.kind}:${row.key}`)).size).toBe(
-    ordinary.value.graph.length,
-  );
 });
 
 it("repeated execution failures take priority over an unrelated research uncertainty", async () => {

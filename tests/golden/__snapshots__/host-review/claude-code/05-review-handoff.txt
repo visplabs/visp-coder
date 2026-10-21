@@ -44,7 +44,7 @@ $ visp review --handoff
     "trace": {
       "question": "Which code owns Return two from the public value module, and which callers and tests will change?",
       "command": "visp work --feature 001-return-two-from-the-public",
-      "guidance": "work refreshes the graph and supplies code. Follow the relevant entry point/callers; an empty or partial graph requires direct code inspection, not invented dependencies."
+      "guidance": "work supplies code excerpts. Follow the relevant entry point and callers in the code itself, not invented dependencies."
     },
     "findings": [],
     "findingsRemaining": 0,

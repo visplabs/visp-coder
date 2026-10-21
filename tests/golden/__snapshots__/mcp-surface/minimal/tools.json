@@ -159,7 +159,7 @@
         },
         "known": {
           "type": "string",
-          "description": "contextId of an earlier work reply still in view; its unchanged source excerpts and related files are not repeated"
+          "description": "contextId of an earlier work reply still in view; its unchanged source excerpts are not repeated"
         }
       },
       "additionalProperties": false,

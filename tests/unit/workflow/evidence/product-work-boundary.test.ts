@@ -368,34 +368,16 @@ describe("product work authorization boundaries", () => {
 });
 
 describe("bounded and optional product context", () => {
-  it.each(["metadata", "open"])(
-    "authorizes bounded work despite graph %s failure and reports the gap",
-    async (failure) => {
-      const state = await workspace.state();
-      vi.spyOn(graph, "refreshRepository").mockResolvedValue(
-        err(vispError("IO_ERROR", "index unavailable")),
-      );
-      const original = state.files.exists.bind(state.files);
-      vi.spyOn(state.files, "exists").mockImplementation(async (path) =>
-        path === state.paths.graphStore && failure === "metadata"
-          ? err(vispError("IO_ERROR", "graph metadata unavailable"))
-          : path === state.paths.graphStore
-            ? { ok: true, value: true }
-            : original(path),
-      );
-      vi.spyOn(graph, "openProjectStore").mockResolvedValue(
-        err(vispError("IO_ERROR", "graph store unavailable")),
-      );
-      const context = value(await runProductWork(state));
-      expect(context.mayEdit).toBe(true);
-      expect(context.graph).toEqual([]);
-      expect(context.notes.join()).toMatch(/Graph unavailable.*index unavailable/);
-      expect(context.notes.join()).toContain(
-        failure === "metadata" ? "graph metadata unavailable" : "graph store unavailable",
-      );
-      expect((await bytes()).auth).toBeDefined();
-    },
-  );
+  it("authorizes bounded work when the index refresh fails", async () => {
+    const state = await workspace.state();
+    vi.spyOn(graph, "refreshRepository").mockResolvedValue(
+      err(vispError("IO_ERROR", "index unavailable")),
+    );
+    const context = value(await runProductWork(state));
+    expect(context.mayEdit).toBe(true);
+    expect(context.notes.join()).not.toContain("index unavailable");
+    expect((await bytes()).auth).toBeDefined();
+  });
 
   it("bounds excerpts without injecting binary or empty files into the agent context", async () => {
     await workspace.write("src/value.mjs", `//${"x".repeat(7000)}\nexport const value = 1;\n`);

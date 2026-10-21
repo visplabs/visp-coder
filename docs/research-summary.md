@@ -264,7 +264,7 @@ Every inventory run carried three notes and every spreadsheet run that started a
 
 **A later session's request now gets its own feature.** Both spreadsheet misses of `visp feature` had one cause: refused an edit under the first session's lapsed authorization, the worker asked `visp next`, which named the old open task, and built the new request inside it. `visp next`, and the Stop hook that asks it, now point to `visp feature` when the open task's authorization is from an earlier session and the host recorded a prompt no feature has taken; continuing is offered only if the user asked for it. Rerun (five runs, same first sessions): every second session started its own feature (before: 8 of 10), two of them after the new reply; memory checks 40 of 40.
 
-**No demonstrated benefit yet** from the repository graph or `visp learn` notes in any run. `visp learn` notes have since been removed.
+**No demonstrated benefit yet** from the repository graph or `visp learn` notes in any run. `visp learn` notes and graph neighbors in `work` and `done` replies have since been removed; the index remains for `visp query` and the regression checks.
 
 ## Design consequences
 
