@@ -103,6 +103,28 @@ describe("generated hooks", () => {
     await rm(join(project.root, ".visp/session/user-prompts.jsonl"));
   });
 
+  // Claude Code delivers a background command's completion as a prompt; VISP took one as the
+  // user's request (bench run co1-conventions-carryover-prose-visp-dev-1).
+  it("does not record a host task notification as a user prompt", async () => {
+    const { readFile } = await import("node:fs/promises");
+    const notification =
+      '<task-notification>\n<task-id>bwvi3ofw5</task-id>\n<status>completed</status>\n<summary>Background command "Create VISP feature" completed (exit code 0)</summary>\n</task-notification>';
+    for (const prompt of ["first request", notification])
+      execFileSync(process.execPath, [join(project.root, ".visp/hooks/claude-pretooluse.mjs")], {
+        cwd: project.root,
+        input: JSON.stringify({ hook_event_name: "UserPromptSubmit", session_id: "s", prompt }),
+        env: { ...project.env(), CLAUDE_PROJECT_DIR: project.root },
+      });
+    const recorded = (
+      await readFile(join(project.root, ".visp/session/user-prompts.jsonl"), "utf8")
+    )
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line).prompt);
+    expect(recorded).toEqual(["first request"]);
+    await rm(join(project.root, ".visp/session/user-prompts.jsonl"));
+  });
+
   it("records a session started in a subdirectory at the initialized root", async () => {
     const { readFile } = await import("node:fs/promises");
     const nested = join(project.root, "src/auth");
@@ -851,6 +873,16 @@ describe("edit authorization across host sessions", () => {
     const baseline = JSON.parse(await readFile(authorization, "utf8")).baseline;
 
     prompt("session-2", "Add prices to items");
+    const stop = () =>
+      execFileSync(process.execPath, [hook()], {
+        cwd: project.root,
+        input: JSON.stringify({ hook_event_name: "Stop", session_id: "session-2" }),
+        encoding: "utf8",
+        env: env(),
+      });
+    // A session that has not tried to change anything since its prompt, such as one that
+    // answered a question, is left alone.
+    expect(stop()).toBe("");
     const refused = write("src/auth/login.ts", "session-2");
     expect(refused.decision).toBe("deny");
     expect(refused.reason).toContain("earlier session");
@@ -861,13 +893,11 @@ describe("edit authorization across host sessions", () => {
     const next = project.run("next", "--json");
     expect(next.stdout).toContain('visp feature \\"<the user\'s request>\\"');
     expect(next.stdout).not.toMatch(/"task":\s*"T001"/);
-    const stopped = execFileSync(process.execPath, [hook()], {
-      cwd: project.root,
-      input: JSON.stringify({ hook_event_name: "Stop", session_id: "session-2" }),
-      encoding: "utf8",
-      env: env(),
-    });
-    expect(stopped).toBe("");
+    // Its edits were refused, so it is working on the request: the Stop hook sends it on.
+    const stopped = JSON.parse(stop());
+    expect(stopped).toMatchObject({ decision: "block" });
+    expect(stopped.reason).toContain('Run: visp feature "<the user\'s request>"');
+    expect(stopped.reason).not.toContain("--task T001.");
 
     // A follow-up in the same session keeps the authorization it re-confirms.
     const worked = project.run("work", "--task", "T001");

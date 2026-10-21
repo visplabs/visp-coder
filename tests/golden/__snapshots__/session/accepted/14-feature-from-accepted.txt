@@ -1,0 +1,12 @@
+$ visp feature 'Export three' --source-brief 'Also export the value three.'
+--- stdout
+feature: {"feature":"002-export-three","incomplete":false,"outcomes":[],"examples":[],"checks":[],"slices":[]}
+Warning: 2 uncommitted change(s) are the accepted work of 001-return-two-from-the-public, so they stay uncommitted until the user commits them: acceptance/001-return-two-from-the-public/value.acceptance.mjs, src/value.mjs. Keep them: they are recorded as this feature's starting point and are not attributed to it unless you change those files further. Never discard them with git checkout, restore, reset or rm. Continue with visp work.
+Note: Run visp work --feature 002-export-three now; this command keeps running only to write VISP's acceptance tests — leave it running and do not run visp feature again.
+Next: visp work --feature 002-export-three --check "<command that runs your tests>" works the whole request as one slice. Only for several independently usable parts, plan slices: visp brief --template --feature 002-export-three
+Read the full brief with visp brief --feature 002-export-three.
+
+--- stderr
+visp feature: recording the request takes up to 30 s (rule and memory checks). If your tool returns early, keep polling; never run visp feature twice.
+
+--- exit 0

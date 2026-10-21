@@ -8,7 +8,7 @@ import {
 } from "../../memory/memory-service.js";
 import type { Intent } from "../artifacts/feature.js";
 import type { WorkspaceState } from "../state.js";
-import { type FeatureMemory, featureMemory, reviewerModel } from "./feature-memory.js";
+import { type FeatureMemory, featureMemory } from "./feature-memory.js";
 import type { ProductFeatureOptions, ProductFeatureOutcome } from "./feature-model.js";
 import type { HostRequest } from "./host-prompts.js";
 import type { ProductState } from "./model.js";
@@ -18,13 +18,14 @@ import {
   readProjectRules,
   statedRules,
 } from "./project-rules.js";
-import { codexRuleExtractor } from "./rule-extraction.js";
+import { reviewerModel } from "./reviewer-model.js";
+import { reviewerRuleExtractor } from "./rule-extraction.js";
 import { readProductRecord } from "./store.js";
 
-/** With a VISP-launched Codex reviewer, its model reads the rules; otherwise phrase matching does. */
+/** With a reviewer VISP launches, its model reads the rules; otherwise phrase matching does. */
 async function ruleReader(workspace: WorkspaceState): Promise<RuleExtractor | undefined> {
-  const model = await reviewerModel(workspace);
-  return model ? codexRuleExtractor({ model }) : undefined;
+  const reviewer = await reviewerModel(workspace);
+  return reviewer ? reviewerRuleExtractor(reviewer) : undefined;
 }
 
 export interface FeatureRequest {

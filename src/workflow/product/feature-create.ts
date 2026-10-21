@@ -14,6 +14,7 @@ import type { Intent } from "../artifacts/feature.js";
 import { captureAcceptanceBaseline } from "../evidence/acceptance.js";
 import { requireFeatureFoundation, requireImplementationFoundation } from "../gates/readiness.js";
 import type { WorkspaceState } from "../state.js";
+import { acceptedWorkOwner } from "./accepted-work.js";
 import { draftFirstApplies, draftStartCommand, draftStartNote } from "./draft-first.js";
 import { allocateFeatureId } from "./feature-id.js";
 import { memoryFileMutations } from "./feature-memory.js";
@@ -78,12 +79,20 @@ async function startProductFeature(
   if (!earlier.ok) return earlier;
   if (earlier.value) return ok(earlier.value);
   const start = await withProductMutation(workspace, async () => {
-    const foundation = await requireFeatureFoundation(workspace, "visp feature <goal>");
+    const foundation = await requireFeatureFoundation(workspace, "visp feature <goal>", (changed) =>
+      acceptedWorkOwner(workspace, changed),
+    );
     if (!foundation.ok) return foundation;
     const baseline = await captureAcceptanceBaseline(workspace);
     if (!baseline.ok) return baseline;
     const inherited = await captureInheritedChanges(workspace, foundation.value.inherited);
-    return inherited.ok ? ok({ baseline: baseline.value, inherited: inherited.value }) : inherited;
+    if (!inherited.ok) return inherited;
+    const { acceptedFeature } = foundation.value;
+    return ok({
+      baseline: baseline.value,
+      inherited: inherited.value,
+      ...(acceptedFeature ? { acceptedFeature } : {}),
+    });
   });
   if (!start.ok) return start;
   const request = await featureRequest(workspace, host.value, raw, text);
@@ -103,6 +112,8 @@ async function startProductFeature(
 interface FeatureStart {
   readonly baseline: AcceptanceBaseline;
   readonly inherited: Record<string, string>;
+  /** The accepted feature the inherited changes are the uncommitted work of. */
+  readonly acceptedFeature?: string;
 }
 
 /** The active-feature status, and the inherited record, which is written with the feature or not at all. */
@@ -128,17 +139,20 @@ async function localStateMutations(
   ]);
 }
 
-function inheritedOutcome(inherited: Record<string, string>) {
+function inheritedOutcome(inherited: Record<string, string>, acceptedFeature?: string) {
   const paths = Object.keys(inherited);
   return paths.length
-    ? { inheritedChanges: paths, inheritedChangesNote: inheritedNote(paths) }
+    ? { inheritedChanges: paths, inheritedChangesNote: inheritedNote(paths, acceptedFeature) }
     : {};
 }
 
-function inheritedNote(paths: readonly string[]): string {
+function inheritedNote(paths: readonly string[], acceptedFeature?: string): string {
   const shown = paths.slice(0, 20).join(", ");
   const more = paths.length > 20 ? ` and ${paths.length - 20} more` : "";
-  return `Git cannot be written here, so ${paths.length} uncommitted change(s) from earlier work stay uncommitted: ${shown}${more}. Keep them: they are recorded as this feature's starting point and are not attributed to it unless you change those files further. Never discard them with git checkout, restore, reset or rm. Continue with visp work.`;
+  const cause = acceptedFeature
+    ? `${paths.length} uncommitted change(s) are the accepted work of ${acceptedFeature}, so they stay uncommitted until the user commits them`
+    : `Git cannot be written here, so ${paths.length} uncommitted change(s) from earlier work stay uncommitted`;
+  return `${cause}: ${shown}${more}. Keep them: they are recorded as this feature's starting point and are not attributed to it unless you change those files further. Never discard them with git checkout, restore, reset or rm. Continue with visp work.`;
 }
 
 async function createProductFeatureLocked(
@@ -147,7 +161,7 @@ async function createProductFeatureLocked(
   request: FeatureRequest,
   start: FeatureStart,
 ): Promise<Result<ProductFeatureOutcome>> {
-  const { baseline, inherited } = start;
+  const { baseline, inherited, acceptedFeature } = start;
   if (!options.goal.trim())
     return err(vispError("ARTIFACT_INVALID", "Feature goal cannot be empty"));
   // Cleanliness was checked before model/service calls, which may write their own logs.
@@ -208,7 +222,7 @@ async function createProductFeatureLocked(
         redactionNotice: featureRedactionNotice(request.redacted, goal, options.goal),
         ...(branchCreated ? { branchCreated } : {}),
         ...(branchWarning ? { branchWarning } : {}),
-        ...inheritedOutcome(inherited),
+        ...inheritedOutcome(inherited, acceptedFeature),
         ...hooksWarning(workspace, host),
       })
     : saved;

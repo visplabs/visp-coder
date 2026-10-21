@@ -1,0 +1,6 @@
+> .visp/hooks/claude-pretooluse.mjs {"session_id":"session-1","hook_event_name":"UserPromptSubmit","prompt":"Make the public value module return two instead of one."}
+--- stdout
+
+--- stderr
+
+--- exit 0
