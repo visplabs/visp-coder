@@ -322,7 +322,6 @@ const trustBoundarySources = [
   "src/workflow/product/work.ts",
   "src/workflow/product/context-delivery.ts",
   "src/workflow/product/context.ts",
-  "src/workflow/product/context-graph.ts",
   "src/workflow/product/context-budget.ts",
   "src/workflow/product/status.ts",
   "src/workflow/product/status-next.ts",
