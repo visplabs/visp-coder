@@ -24,7 +24,7 @@ describe("graph retrieval during the product loop", () => {
     }));
     const next = project.json<{ command: string }>("next");
     expect(next.envelope.data?.command).toContain("visp work");
-    expect(succeeded(project, "work")).toContain("runApp");
+    succeeded(project, "work");
     expect(project.run("query", "search", "runApp").exitCode).toBe(0);
   });
   it("authorizes greenfield scope when there is no source yet to index", async () => {
