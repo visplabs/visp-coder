@@ -59,6 +59,29 @@ it("drafts a picture first, then reviews it with request gaps required", async (
   await run.cli("09-next", ["next"]);
 });
 
+// A render that fails sent the reviewer `images: []` and no word of the picture; with no
+// browser here every render fails, so the packet must name the picture it cannot show.
+it("names a drafted picture VISP could not render, rather than sending no image", async () => {
+  vi.stubEnv("CHROME_BIN", "/missing/chrome");
+  try {
+    project = await GoldenProject.create({ ...CLAUDE, workflow: LEAN, files: PICTURE_CHECK });
+    await models.plan({ tester: DECLINED_TESTER, reviews: ["satisfied"] });
+    const run = new Recorder(project, "lean/picture-unrendered");
+    await run.cli("01-feature", ["feature", "Draw a PS5 controller", "--source-brief", PICTURE]);
+    await run.models("01-feature", models);
+    await run.cli("02-work-draft", ["work"]);
+    await project.workspace.write(
+      "controller.svg",
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 40"><rect width="80" height="40" fill="#222"/></svg>\n',
+    );
+    await run.cli("03-work-check", ["work", "--check", "node checks/picture.check.mjs"]);
+    await run.cli("04-done", ["done"]);
+    await run.models("04-done", models);
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});
+
 it("reviews only the slice that completes the feature", async () => {
   const [check] = BRIEF.checks;
   const [slice] = BRIEF.slices;

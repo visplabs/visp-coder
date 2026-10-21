@@ -1,0 +1,19 @@
+{
+  "exitCode": 0,
+  "next": {
+    "action": "understand",
+    "command": "visp work --feature 001-draw-a-ps5-controller",
+    "mayEdit": false,
+    "evidence": 0
+  },
+  "product": {
+    "status": "active",
+    "slices": {},
+    "executions": [],
+    "reviews": 0,
+    "openFindings": {
+      "required": 0,
+      "advisory": 0
+    }
+  }
+}
