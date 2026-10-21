@@ -146,6 +146,36 @@ Every VISP difference from bare Haiku is within noise: twice the standard error 
 
 So VISP shows no measured quality gain for Claude Haiku 5.5, at high or low effort, on any current task, and costs 3–9× bare Haiku per run on these tasks. Run traces point to two costs on picture tasks. First drafts were smaller (pagoda generators averaged 243 lines under VISP against 582 bare). And after a review that left only optional findings, the edit hook refused the worker's own polishing ("No task is authorized to write lighthouse.py"). The plan and per-run detail are kept outside the repository with the other batch plans.
 
+## Fixes measured with Haiku 5.5 (October 21 2026)
+
+Run traces from the null batches above exposed VISP defects. Each fix was measured against the build before it, under preset `quality-2026-10`.
+
+**Cross-session carryover** (co1, then co2). Four two-session tasks, two runs per arm. Each arm ran its own first session, so pairs are not shared. Second-session hidden checks, summed:
+
+| Arm | Carried (memory) | New behaviour | Code-shown conventions | Session 2 mean | Cost per run |
+| --- | --- | --- | --- | --- | --- |
+| bare | 58/62 | 134/142 | 36/36 | 146 s | $0.06 |
+| VISP before the fixes | 50/62 | 122/142 | 27/36 | 344 s | $0.71 |
+| VISP after the fixes (#59) | 62/62 | 140/142 | 36/36 | 348 s | $0.69 |
+
+Bare Haiku 5.5 carried most knowledge itself. It wrote stated conventions into `CLAUDE.md` and the README, and read earlier decisions from the code; Haiku 4.5 did neither. Before the fixes, VISP had three defects:
+- Request-history recall and model rule reading ran only with a Codex reviewer, so they were off under `claude-exec` and the default Claude Code critic.
+- A second session could not start its feature when the first had not committed. One worker stalled at 22 of 57 checks.
+- Host notifications were recorded as user prompts.
+
+After the fixes, every run recorded its request history, and the restock cap that both earlier arms lost in one run was carried.
+
+**Tester browser kit and dispute limit** (kd1, then #57; lighthouse-pixel and slingshot-game, five runs per arm). The kit's `evaluate` did not call a function given as a string, and `waitFor` passed no arguments. Pinned suites with many failing tests could leave a feature unreviewed. With both fixed, lighthouse scored judge 7.4 → 7.8 and checklist 10 → 10.2, and median wall fell 438 → 362 s. The pairwise judge preferred the fixed build 4 to 0, with 1 tie. The same batch also made an unobserved stated goal blocking, and two of five slingshot runs then hit the 60-minute cap. That change was split out.
+
+**Bounded NOT OBSERVED rule, rejected** (no1, #62; slingshot-game, five runs per arm). The rule gave an unobserved stated goal one required repair round, then reported it unverified. Results:
+- No run timed out.
+- Hidden checks were 100% in both arms.
+- Judge fell 8.2 → 8.0 and code 8.0 → 7.8.
+- Median wall rose 1053 → 1860 s.
+The failure the rule targeted (one October run that shipped with a level unobserved) did not occur on develop, so there was no gain to pay for the time. Not merged.
+
+**SVG rendering for the reviewer** (#61). Headless Chrome started with the GPU on and fell back to slow software rendering on hosts without one, so renders timed out. Failures in a 15-run golden loop went from 10 to 0, and production renders from 25 of 32 failing to 0. On the bench machine, which has a GPU, 0 of 499 picture packets had lost their image. The fix matters on CI, VMs and containers.
+
 ## What made the difference
 
 **The harness must launch the critic itself.** In the first weak-agent pilot (Luna at low effort, a sentiment API with 36 hidden tests), bare coding scored 36 and both VISP arms 34: workers never ran a check that covered errors and never delegated review. A critic launched by VISP (`codex exec`, read-only) on the same code reported the two missing 405 responses, acceptance of `NaN` and a request that can hang without `Content-Length`, each with a next check. VISP now launches the reviewer after checks pass (`critic.launch: codex-exec`).
@@ -255,7 +285,7 @@ Independent studies point the same way: execution feedback against fixed tests i
 
 - Three runs per arm on four tasks the authors wrote; differences of one or two checks are within run-to-run noise.
 - The reviewer is a stronger model than the weak worker. Part of VISP's September gain may come from that model rather than the loop. The October same-model ablation could not separate them, because VISP showed no gain for Haiku 5.5 to split; only Haiku 4.5 still leaves headroom on these tasks.
-- No current task separates VISP from bare Haiku 5.5. Gains measured with Haiku 4.5, including the multi-session carryover results, have not been repeated with Haiku 5.5 or against bare Claude Code.
+- No new-project task separates VISP from bare Haiku 5.5 on hidden checks. Carryover was repeated with Haiku 5.5 against bare Claude Code: with the October 21 fixes VISP carried 62 of 62 decisions to bare's 58, on two runs per task, at about eleven times the cost.
 - The opt-in tester for existing codebases needs more trials, including with its newest rule that tests of existing behavior must use every assertion helper the new tests use.
 - Stronger workers gain little on these tasks. On SWE-bench Verified Mini and the catapult game VISP leads by amounts within noise; more runs, a weaker worker on the current build, and blind code review scored separately are still to come.
 - The catapult game's hidden checks are not yet in `bench/`, so its scores cannot be reproduced from this repository.
