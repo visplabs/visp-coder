@@ -22,12 +22,14 @@ export interface JsonResult<T> extends CliResult {
 }
 
 export async function runCli(root: string, ...args: string[]): Promise<CliResult> {
+  const workerAge = workerUptime.call(process);
   const program = (await buildProgram())();
   refuseToExitTheTestRun(program);
 
   const stdout: string[] = [];
   const stderr: string[] = [];
   const restoreStreams = captureStreams(stdout, stderr);
+  const restoreUptime = startUptime(workerAge);
 
   // Commands signal failure by setting `process.exitCode` rather than throwing,
   // so the value has to be read and put back here. Left in place it would both
@@ -48,6 +50,7 @@ export async function runCli(root: string, ...args: string[]): Promise<CliResult
     }
   } finally {
     restoreStreams();
+    restoreUptime();
     process.exitCode = outerExitCode;
   }
 
@@ -118,6 +121,22 @@ function commanderExitCode(cause: unknown): number | undefined {
     return undefined;
   }
   return typeof candidate.exitCode === "number" ? candidate.exitCode : 1;
+}
+
+const workerUptime = process.uptime;
+
+/**
+ * A real `visp` command is a fresh process, and the CLI's deadline counts from process start
+ * (`process.uptime()`). Here the clock starts with the command instead of with this test
+ * worker: a worker up for more than 23 s left `done` no time for its pinned acceptance tests.
+ * A test's own uptime mock still applies, less the worker's real age, so it ages the command.
+ */
+function startUptime(workerAge: number): () => void {
+  const outer = process.uptime;
+  process.uptime = () => outer.call(process) - workerAge;
+  return () => {
+    process.uptime = outer;
+  };
 }
 
 function captureStreams(stdout: string[], stderr: string[]): () => void {
