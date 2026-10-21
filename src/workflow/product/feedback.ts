@@ -176,7 +176,7 @@ export function productFeedbackPlan(
           `Which code owns ${slice?.goal ?? record.brief.goal}, and which callers and tests will change?`),
       command: `visp work --feature ${record.brief.feature}${slice ? ` --task ${slice.id}` : ""}`,
       guidance:
-        "work refreshes the graph and supplies code. Follow the relevant entry point/callers; an empty or partial graph requires direct code inspection, not invented dependencies.",
+        "work supplies code excerpts. Follow the relevant entry point and callers in the code itself, not invented dependencies.",
     },
     findings: findings.slice(0, 3).map((entry) => ({
       ...entry,

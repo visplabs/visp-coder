@@ -76,7 +76,6 @@ const LIST_FIELDS = [
   "outcomes",
   "examples",
   "decisions",
-  "graph",
   "unresolved",
   "findings",
   "evidenceGaps",
@@ -220,7 +219,6 @@ function addObservationSummary(data: Record<string, unknown>, summary: Record<st
 /** How a reply names a reference section it left out. */
 const SECTION_NAMES: Readonly<Record<string, string>> = {
   files: "source excerpts",
-  graph: "related files",
   skills: "skills",
   examples: "examples",
   decisions: "decisions",
@@ -279,7 +277,7 @@ function bounded(value: unknown): unknown {
 
 /**
  * Slice checks and closure. A text-only model needs the verdict, each failing check's
- * output tail, what blocks closure and the next step; graph trace, digests and repeated
+ * output tail, what blocks closure and the next step; digests and repeated
  * outcome statements stay in structured data.
  */
 function compactVerificationText(

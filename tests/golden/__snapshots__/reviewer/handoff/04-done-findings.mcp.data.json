@@ -51,7 +51,7 @@
       "trace": {
         "question": "Which handler or state transition causes The module has no default export\nConsequence: Callers that import the module's default value receive undefined, not two?",
         "command": "visp work --feature 001-return-two-from-the-public --task T001",
-        "guidance": "work refreshes the graph and supplies code. Follow the relevant entry point/callers; an empty or partial graph requires direct code inspection, not invented dependencies."
+        "guidance": "work supplies code excerpts. Follow the relevant entry point and callers in the code itself, not invented dependencies."
       },
       "findings": [
         {
@@ -126,61 +126,6 @@
         "limitations": [],
         "comparisons": []
       }
-    },
-    "trace": {
-      "graph": [
-        {
-          "kind": "entity",
-          "key": "checks/value.check.mjs#variable:expected",
-          "path": "checks/value.check.mjs",
-          "name": "expected",
-          "detail": "variable",
-          "startLine": 3,
-          "endLine": 3,
-          "distance": 1
-        },
-        {
-          "kind": "entity",
-          "key": "checks/value.check.mjs#variable:name",
-          "path": "checks/value.check.mjs",
-          "name": "name",
-          "detail": "variable",
-          "startLine": 2,
-          "endLine": 2,
-          "distance": 1
-        },
-        {
-          "kind": "entity",
-          "key": "src/value.mjs#file",
-          "path": "src/value.mjs",
-          "name": "value.mjs",
-          "detail": "file",
-          "startLine": 1,
-          "endLine": 2,
-          "distance": 1
-        },
-        {
-          "kind": "entity",
-          "key": "checks/value.check.mjs#file",
-          "path": "checks/value.check.mjs",
-          "name": "value.check.mjs",
-          "detail": "file",
-          "startLine": 1,
-          "endLine": 9,
-          "distance": 1
-        },
-        {
-          "kind": "entity",
-          "key": "src/value.mjs#variable:value",
-          "path": "src/value.mjs",
-          "name": "value",
-          "detail": "variable",
-          "startLine": 1,
-          "endLine": 1,
-          "distance": 1
-        }
-      ],
-      "notes": []
     },
     "feature": "001-return-two-from-the-public",
     "task": "T001",

@@ -19,7 +19,7 @@ import {
   requireExecutionContract,
 } from "./check/check-lifecycle.js";
 import { ensureProductCheckpoint } from "./checkpoint.js";
-import { productNeighborhood } from "./context.js";
+import { refreshProductIndex } from "./context.js";
 import { correctionChecks } from "./corrections.js";
 import { reviewerPointer } from "./critic/critic-capacity.js";
 import { requireNoPendingCriticReview } from "./critic/critic-policy.js";
@@ -92,7 +92,6 @@ export interface ProductVerification {
   readonly journeyFeedback?: ReturnType<typeof currentJourneyFeedback>;
   readonly recommendation?: string;
   readonly feedbackPlan?: ReturnType<typeof productFeedbackPlan>;
-  readonly trace?: { graph: import("../../graph/index.js").QueryRow[]; notes: string[] };
 }
 
 export const runProductVerify = (
@@ -257,9 +256,7 @@ async function finishExecution(
     feature: record.brief.feature,
     task: slice?.id,
   });
-  const trace = close
-    ? await productNeighborhood(workspace, Object.keys(afterSnapshot.value), true)
-    : undefined;
+  if (close) await refreshProductIndex(workspace, Object.keys(afterSnapshot.value));
   const failed = executions.filter((execution) => execution.status === "failed");
   const repeated = failed.some((execution) =>
     record.state.executions.some(
@@ -286,7 +283,6 @@ async function finishExecution(
     warnings: await productInputWarnings(workspace, record.brief),
     committedChanges,
     ...progress,
-    ...(trace?.ok ? { trace: trace.value } : {}),
     feature: record.brief.feature,
     ...(slice ? { task: slice.id } : {}),
     subjectDigest: after.value,

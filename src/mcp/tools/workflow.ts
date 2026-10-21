@@ -245,7 +245,7 @@ export function registerWorkflowTools(server: McpServer, root: string): void {
             .string()
             .optional()
             .describe(
-              "contextId of an earlier work reply still in view; its unchanged source excerpts and related files are not repeated",
+              "contextId of an earlier work reply still in view; its unchanged source excerpts are not repeated",
             ),
         })
         .strict(),

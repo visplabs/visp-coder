@@ -237,7 +237,6 @@ it("shows compact skills as plain text while preserving complete structured capa
       truncated: false,
       advisory: true,
     })),
-    graph: [{ path: "game.mjs", name: "launch", kind: "function" }],
   };
   const response = productReply("visp_work", ok(data));
   const text = response.content
@@ -252,7 +251,6 @@ it("shows compact skills as plain text while preserving complete structured capa
   expect(text).not.toContain("name: skill-0");
   expect(text).not.toContain("Skill skill-3");
   expect(text).toContain("1 more skill(s) in the full result.");
-  expect(summary.graph.entries).toEqual(data.graph);
   expect(summary.taskClass).toBe("bugfix");
   expect(response.structuredContent).toMatchObject({ data });
   expect(data.skills.every((entry) => !entry.truncated)).toBe(true);

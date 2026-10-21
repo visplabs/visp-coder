@@ -40,16 +40,12 @@ const work = async (known?: string) =>
     }),
   );
 
-const pack = (context: ProductWorkContext) => ({
-  files: context.files.length,
-  graph: context.graph.length,
-});
+const pack = (context: ProductWorkContext) => ({ files: context.files.length });
 
 it("sends the full pack on every repeat unless the worker names an earlier reply", async () => {
   const first = await work();
   expect(first.contextId).toMatch(/^[a-f0-9]{12}$/);
   expect(first.files.length).toBeGreaterThan(0);
-  expect(first.graph.length).toBeGreaterThan(0);
   const again = await work();
   expect(pack(again)).toEqual(pack(first));
   expect(again.delivery).toBeUndefined();
@@ -60,8 +56,8 @@ it("sends the full pack on every repeat unless the worker names an earlier reply
 it("leaves out what is unchanged since the reply the worker names", async () => {
   const first = await work();
   const known = await work(first.contextId);
-  expect(pack(known)).toEqual({ files: 0, graph: 0 });
-  expect(known.delivery).toEqual({ known: first.contextId, unchanged: ["files", "graph"] });
+  expect(pack(known)).toEqual({ files: 0 });
+  expect(known.delivery).toEqual({ known: first.contextId, unchanged: ["files"] });
   // Never left out: the request, outcomes, scope, checks and findings.
   expect(known.originalRequest).toBe(first.originalRequest);
   expect(known.outcomes).toEqual(first.outcomes);
@@ -70,18 +66,17 @@ it("leaves out what is unchanged since the reply the worker names", async () => 
   expect(known.feedbackPlan).toEqual(first.feedbackPlan);
   expect(known.budget.estimatedTokens).toBeLessThan(first.budget.estimatedTokens);
   expect(compactProductReply("work", known, "cli")).toContain(
-    `Source excerpts and related files from your earlier visp work reply (context ${first.contextId}) are not repeated. If you don't have them in view, call visp work again without --known.`,
+    `Source excerpts from your earlier visp work reply (context ${first.contextId}) are not repeated. If you don't have them in view, call visp work again without --known.`,
   );
   expect(compactProductReply("visp_work", known, "mcp")).toContain(
     `from your earlier visp_work reply (context ${first.contextId}) are not repeated. If you don't have them in view, call visp_work again without known.`,
   );
 
-  // A changed excerpt is sent again; the unchanged related files are not.
+  // A changed excerpt is sent again.
   await setup.workspace.write("src/value.mjs", "export const value = 2;\n");
   const changed = await work(first.contextId);
   expect(changed.files.length).toBeGreaterThan(0);
-  expect(changed.delivery?.unchanged).toEqual(["graph"]);
-  expect(compactProductReply("work", changed, "cli")).toContain("Related files from your earlier");
+  expect(changed.delivery).toBeUndefined();
 
   // Reading the context never leaves anything out.
   const inspected = value(await runProductContext(await setup.workspace.state(), { task: "T001" }));
@@ -110,7 +105,6 @@ it("sends everything when the named reply is unknown or the brief changed since"
   );
   const revised = await work(first.contextId);
   expect(revised.files.length).toBeGreaterThan(0);
-  expect(revised.graph.length).toBeGreaterThan(0);
   expect(revised.delivery).toBeUndefined();
   expect(revised.contextId).not.toBe(first.contextId);
 });

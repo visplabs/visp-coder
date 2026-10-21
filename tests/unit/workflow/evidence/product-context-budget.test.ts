@@ -48,7 +48,6 @@ const context: ProductContextContent = {
   ],
   files: [],
   skills: [],
-  graph: [],
   notes: [],
   mayEdit: true,
   subjectDigest: "a".repeat(64),
@@ -74,15 +73,6 @@ describe("complete product context budgeting", () => {
           advisory: true as const,
         },
       ],
-      graph: [
-        {
-          path: "src/value.ts",
-          kind: "file",
-          key: "src/value.ts",
-          name: "value",
-          detail: "x".repeat(4000),
-        },
-      ],
     };
     const fitted = fitProductContext(full, 2500, ["brief.yaml", "product-state.json"]);
     expect(fitted.budget.status).toBe("within-budget");
@@ -91,7 +81,6 @@ describe("complete product context budgeting", () => {
     // An admitted skill outranks source excerpts the worker can read itself.
     expect(fitted.budget.omitted.skills).toBe(0);
     expect(fitted.skills).toHaveLength(1);
-    expect(fitted.budget.omitted.graphRows).toBe(1);
     const cli = `${JSON.stringify({ command: "work", ok: true, data: fitted }, null, 2)}\n`;
     const mcp = JSON.stringify(productReply("visp_work", ok(fitted)));
     expect(Math.ceil(Math.max(cli.length, mcp.length) / 4)).toBeLessThanOrEqual(
@@ -223,29 +212,4 @@ describe("complete product context budgeting", () => {
     expect(bounded.files).toEqual(input.files);
     expect(bounded.budget.status).toBe("within-budget");
   });
-});
-
-it("restores a relevant graph when dropping a large source excerpt frees budget", () => {
-  const graph = [
-    {
-      path: "src/value.ts",
-      kind: "entity" as const,
-      key: "src/value.ts#value",
-      name: "value",
-      detail: "Public value owner",
-    },
-  ];
-  const fitted = fitProductContext(
-    {
-      ...context,
-      files: [{ path: "src/value.ts", content: "large source".repeat(6000), truncated: false }],
-      graph,
-    },
-    2000,
-    ["brief.yaml"],
-  );
-  expect(fitted.files).toEqual([]);
-  expect(fitted.graph).toEqual(graph);
-  expect(fitted.budget.omitted).toMatchObject({ files: 1, graphRows: 0 });
-  expect(fitted.budget.estimatedTokens).toBeLessThanOrEqual(2000);
 });

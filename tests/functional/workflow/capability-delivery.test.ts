@@ -11,7 +11,7 @@ import type { TestProject } from "../support/project.js";
 let project: TestProject | undefined;
 afterEach(async () => project?.destroy());
 
-it("delivers retained knowledge in a fresh work session and isolates graph and skill ablations", async () => {
+it("delivers retained knowledge in a fresh work session and isolates the skill ablation", async () => {
   ({ project } = await productProject());
   await project.write(
     "numeric-value.md",
@@ -100,7 +100,6 @@ it("delivers retained knowledge in a fresh work session and isolates graph and s
   const full = context();
   expect(full.taskClass).toBe("bugfix");
   expect(full.skills.some((entry) => entry.path.includes("repair-review"))).toBe(true);
-  expect(full.graph.length).toBeGreaterThan(0);
   expect(full.notes.join("\n")).toContain("typed-review: trigger did not match");
   expect(full.notes.join("\n")).not.toContain("language facts are unavailable");
   expect(full.notes.join("\n")).toContain("Skill graph facts observed from snapshot");
@@ -133,7 +132,6 @@ it("delivers retained knowledge in a fresh work session and isolates graph and s
           taskClass: "bugfix",
           scope: full.scope,
           skills: full.skills,
-          graph: full.graph,
         },
       });
       const text = (response.content as { type: string; text?: string }[])
@@ -141,26 +139,19 @@ it("delivers retained knowledge in a fresh work session and isolates graph and s
         .map((entry) => entry.text ?? "")
         .join("\n");
       expect(text).toContain("Check numeric consumers when changing the public value.");
-      expect(text).toContain('"graph"');
-      expect(text).toContain(full.graph[0]?.name);
       expect(text).toContain("bugfix");
     }
   } finally {
     await client.close();
   }
 
-  for (const disabled of ["graph", "skills"] as const) {
-    const changed = structuredClone(settings);
-    if (disabled === "graph") changed.graph = { ...changed.graph, exclude: ["**"] };
-    else changed[disabled] = { ...changed[disabled], enabled: false };
-    await project.write("visp.yml", stringify(changed));
-    const delivered = context();
-    expect(delivered[disabled]?.length, `${disabled} treatment must actually be absent`).toBe(0);
-    for (const retained of ["graph", "skills"] as const)
-      if (retained !== disabled) expect(delivered[retained]?.length).toBeGreaterThan(0);
-    expect(delivered.scope).toEqual(full.scope);
-    expect(delivered.outcomes).toEqual(full.outcomes);
-  }
+  const changed = structuredClone(settings);
+  changed.skills = { ...changed.skills, enabled: false };
+  await project.write("visp.yml", stringify(changed));
+  const delivered = context();
+  expect(delivered.skills.length, "skills treatment must actually be absent").toBe(0);
+  expect(delivered.scope).toEqual(full.scope);
+  expect(delivered.outcomes).toEqual(full.outcomes);
 
   await project.write("visp.yml", stringify(settings));
   await assertSkillBodyIntegrity(project, full, context);

@@ -163,14 +163,11 @@ describe("integrated quality feedback", () => {
         ?.feedback?.dimensions.every((entry) => entry.status === "unavailable"),
     ).toBe(true);
   });
-  it("starts implementation without a mandatory understanding review and refreshes code after done", async () => {
+  it("starts implementation without a mandatory understanding review", async () => {
     const { workspace } = await fixture();
     expect(value(await runProductNext(await workspace.state())).action).toBe("implement");
     const work = value(await runProductWork(await workspace.state()));
     expect(work.originalRequest).toBe("Return two from the public module");
-    await workspace.write("src/value.mjs", "export const value = 2;\n");
-    const done = value(await runProductDone(await workspace.state()));
-    expect(done.trace?.graph.some((entry) => entry.path === "src/value.mjs")).toBe(true);
   });
 
   it("accepts evidenced mandatory outcomes without a separate five-category form", async () => {

@@ -19,7 +19,6 @@ import type { ProductWorkContext } from "./context-types.js";
 /** Reference sections a worker may already hold from an earlier reply. */
 const REPEATABLE = [
   "files",
-  "graph",
   "skills",
   "examples",
   "decisions",
