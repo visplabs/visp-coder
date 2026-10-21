@@ -126,6 +126,7 @@ it("masks credentials in the request before saving or publishing and tells the c
     expect(text).not.toContain(secret);
     expect(text).toContain("[REDACTED]");
   }
-  const report = await runProductReport(await project.state());
+  // The record and the full handoff document both carry the request.
+  const report = await runProductReport(await project.state(), { full: true });
   expect(report.ok && report.value.markdown).not.toContain(secret);
 });

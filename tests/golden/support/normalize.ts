@@ -32,7 +32,14 @@ export function normalize(text: string, context: NormalizeContext = {}): string 
     )
     // Check run times: an execution's and its flip check's (structured content and --json),
     // and the flip check's extra time as a field and in the reviewer's evidence excerpt.
-    .replace(/("(?:durationMs|flipDurationMs|flipExtraMs)"\s*:\s*)\d+/g, "$1<N>")
+    .replace(
+      /("(?:durationMs|flipDurationMs|flipExtraMs|elapsedMs|checkTimeMs|regressionGateMs)"\s*:\s*)\d+/g,
+      "$1<N>",
+    )
+    // The evidence record's time line in visp pr, as text and inside the --json markdown.
+    .replace(/- Time: (?:(?!\\n)[^\n])*/g, (line) =>
+      line.replace(/\d+(?:\.\d+)? (?:ms|s|min|h)(?: \d+ (?:s|min))?/g, "<DURATION>"),
+    )
     .replace(/(Flip check extra time: )\d+( ms)/g, "$1<N>$2")
     // A prepared critic attempt's deadline, and the size of a packet that embeds clock values.
     .replace(/("expiresAt"\s*:\s*)\d{12,}/g, "$1<EPOCH-MS>")

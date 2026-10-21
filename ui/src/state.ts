@@ -2,6 +2,7 @@ import type {
   RequestKind,
   UiChangeMap,
   UiError,
+  UiEvidence,
   UiExecution,
   UiFeature,
   UiHealth,
@@ -21,9 +22,17 @@ export interface Resource<T> {
 
 export const idle = <T>(): Resource<T> => ({ loading: false });
 
-export type Tab = "now" | "review" | "runs" | "activity" | "handoff" | "map";
-/** Map is last so the shortcuts 1–5 keep the meaning they had before it. */
-export const TABS: readonly Tab[] = ["now", "review", "runs", "activity", "handoff", "map"];
+export type Tab = "now" | "review" | "runs" | "activity" | "handoff" | "map" | "evidence";
+/** New tabs go last so the shortcuts of the earlier ones keep their meaning. */
+export const TABS: readonly Tab[] = [
+  "now",
+  "review",
+  "runs",
+  "activity",
+  "handoff",
+  "map",
+  "evidence",
+];
 
 /** Which requests the Needs you page lists. */
 export type NeedsFilter = "all" | RequestKind;
@@ -44,6 +53,7 @@ export interface AppState {
   features: Record<string, Resource<UiFeature>>;
   executions: Record<string, Resource<UiExecution>>;
   maps: Record<string, Resource<UiChangeMap>>;
+  evidence: Record<string, Resource<UiEvidence>>;
   route: Route;
   live: LiveState;
   signedOut: boolean;
@@ -82,6 +92,7 @@ export function initialState(): AppState {
     features: {},
     executions: {},
     maps: {},
+    evidence: {},
     route: { view: "home" },
     live: "connecting",
     signedOut: false,

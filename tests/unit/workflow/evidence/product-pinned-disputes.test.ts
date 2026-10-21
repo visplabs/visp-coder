@@ -262,7 +262,8 @@ it("launches the reviewer when the only failure is a disputed pinned test", asyn
   ]);
   expect(compactProductReply("done", done.value, "cli")).toContain("pinnedTests");
   // The human reviewer sees the waiver with both sides' reasoning.
-  const report = await runProductReport(await state(), {});
+  const report = await runProductReport(await state(), { full: true });
+  expect(report.ok && report.value.markdown).toContain(`Test "${ODD}" is waived`);
   expect(report.ok && report.value.markdown).toContain(`${ODD}: upheld, waived. Reason:`);
 });
 
@@ -806,7 +807,8 @@ it("allows one more review of a dispute the reviewer left unruled, then hands it
     command: expect.stringContaining("visp pr"),
     objective: expect.stringContaining(ODD),
   });
-  const report = await runProductReport(await state(), { feature });
+  const report = await runProductReport(await state(), { feature, full: true });
+  expect(report.ok && report.value.markdown).toContain("awaits a ruling from a human reviewer");
   expect(report.ok && report.value.markdown).toContain("needs the human reviewer");
 });
 

@@ -5,11 +5,14 @@ import type { WorkspaceState } from "../state.js";
 import { outcomeStatuses, type ProductOutcomeStatus } from "./assessment.js";
 import { criticNext } from "./critic/critic-guidance.js";
 import { isStopHookObserver } from "./environment-model.js";
+import { renderEvidenceRecord } from "./evidence-record/record-markdown.js";
+import { productEvidenceRecord } from "./evidence-record/record-read.js";
+import type { EvidenceRecord } from "./evidence-record/record-types.js";
 import { withFlipAdvice } from "./flip/flip-advice.js";
 import { featureStartingAge, hasUntakenPrompts } from "./host-prompts.js";
 import { productInputWarnings } from "./input-warnings.js";
 import type { ProductBrief, ProductState } from "./model.js";
-import { productReviewDocument } from "./review/review-document.js";
+import { productReviewDocument, reviewTitle } from "./review/review-document.js";
 import { earlierSessionGrant, staleTaskNote } from "./scopes.js";
 import type { ProductIdentity } from "./status-history.js";
 import { nextFromRecord } from "./status-next.js";
@@ -145,20 +148,25 @@ async function currentProductIdentity(
     : subject;
 }
 
-export async function runProductStatus(
+/** The selected feature's record, the version it is checked against, its outcomes and next step. */
+type StatusRead =
+  | { readonly kind: "unavailable"; readonly next: ProductNext }
+  | {
+      readonly kind: "feature";
+      readonly record: ProductRecord;
+      readonly subject: string;
+      readonly outcomes: ProductOutcomeStatus[];
+      readonly next: ProductNext;
+    };
+
+async function readStatus(
   workspace: WorkspaceState,
-  options: ProductSelection = {},
-): Promise<Result<ProductStatus>> {
+  options: ProductSelection,
+): Promise<Result<StatusRead>> {
   const record = await readProductRecord(workspace, options);
   if (!record.ok) {
     const next = unavailableNext(record.error, workspace, options);
-    if (!next.ok) return next;
-    return ok({
-      feature: next.value.feature,
-      outcomes: [],
-      next: next.value,
-      report: `${next.value.objective}\n\n${next.value.command}\n`,
-    });
+    return next.ok ? ok({ kind: "unavailable", next: next.value }) : next;
   }
   // One operation-local snapshot. Subsequent calls still refresh from disk.
   let snapshot: Promise<Result<ProductIdentity>> | undefined;
@@ -172,28 +180,67 @@ export async function runProductStatus(
   if (!next.ok) return next;
   const identity = await getIdentity();
   if (!identity.ok) return identity;
-  const subject = ok(identity.value.subject);
-  const outcomes = outcomeStatuses(record.value, subject.value);
-  const report = await productReviewDocument(workspace, record.value, outcomes, next.value);
+  const subject = identity.value.subject;
   return ok({
-    feature: record.value.brief.feature,
-    brief: record.value.brief,
-    state: record.value.state,
-    subjectDigest: subject.value,
-    outcomes,
+    kind: "feature",
+    record: record.value,
+    subject,
+    outcomes: outcomeStatuses(record.value, subject),
     next: next.value,
+  });
+}
+
+const unavailableReport = (next: ProductNext) => `${next.objective}\n\n${next.command}\n`;
+
+export async function runProductStatus(
+  workspace: WorkspaceState,
+  options: ProductSelection = {},
+): Promise<Result<ProductStatus>> {
+  const status = await readStatus(workspace, options);
+  if (!status.ok) return status;
+  if (status.value.kind === "unavailable") {
+    const { next } = status.value;
+    return ok({ feature: next.feature, outcomes: [], next, report: unavailableReport(next) });
+  }
+  const { record, subject, outcomes, next } = status.value;
+  const report = await productReviewDocument(workspace, record, outcomes, next);
+  return ok({
+    feature: record.brief.feature,
+    brief: record.brief,
+    state: record.state,
+    subjectDigest: subject,
+    outcomes,
+    next,
     report,
   });
 }
 
+export interface ProductReport {
+  readonly feature?: string;
+  readonly markdown: string;
+  /** Absent only when no feature can be read; `markdown` then says what to do. */
+  readonly record?: EvidenceRecord;
+  readonly next: ProductNext;
+}
+
+/** `visp pr`: the evidence record, and with `full` the whole handoff document after it. */
 export async function runProductReport(
   workspace: WorkspaceState,
-  options: ProductSelection = {},
-): Promise<Result<{ feature?: string; markdown: string; next: ProductNext }>> {
-  const status = await runProductStatus(workspace, options);
-  return status.ok
-    ? ok({ feature: status.value.feature, markdown: status.value.report, next: status.value.next })
-    : status;
+  options: ProductSelection & { readonly full?: boolean } = {},
+): Promise<Result<ProductReport>> {
+  const status = await readStatus(workspace, options);
+  if (!status.ok) return status;
+  if (status.value.kind === "unavailable") {
+    const { next } = status.value;
+    return ok({ feature: next.feature, markdown: unavailableReport(next), next });
+  }
+  const { record, subject, outcomes, next } = status.value;
+  const evidence = await productEvidenceRecord(workspace, record, outcomes, subject, next);
+  const page = renderEvidenceRecord(evidence, reviewTitle(record.brief.goal));
+  const markdown = options.full
+    ? `${page}\n---\n\n${await productReviewDocument(workspace, record, outcomes, next)}`
+    : page;
+  return ok({ feature: record.brief.feature, markdown, record: evidence, next });
 }
 
 /**

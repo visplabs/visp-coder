@@ -22,7 +22,9 @@ it("gives a human reviewer the request, outcomes, changes, checks, review status
   value(await runProductWork(await workspace.state(), { task: "T001" }));
   await workspace.write("src/value.mjs", "export const value = 2;\n");
   value(await runProductDone(await workspace.state(), { task: "T001" }));
-  const { markdown } = value(await runProductReport(await workspace.state()));
+  // The evidence record leads; the full handoff document follows it with --full.
+  const { markdown } = value(await runProductReport(await workspace.state(), { full: true }));
+  expect(markdown.indexOf("# Evidence record")).toBe(0);
 
   expect(markdown).toContain(`# ${fixture.brief.goal}`);
   expect(markdown).toContain("## Request");

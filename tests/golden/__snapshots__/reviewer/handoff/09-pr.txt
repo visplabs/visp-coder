@@ -1,46 +1,44 @@
 $ visp pr
 --- stdout
-# Return two from the public value module
+# Evidence record: Return two from the public value module
 
-Status: active. Every required outcome is satisfied.
+`001-return-two-from-the-public` (active) · 1 of 1 requirement shown by checks VISP ran on this version · 2 items not verified.
 
-## Request
+## Not verified (2)
+
+- **Blocking:** Required reviewer finding (functional): The module has no default export Consequence: Callers that import the module's default value receive undefined, not two (`FB-<HEX-1>`)
+- The independent tester's tests were not pinned (declined): The tester wrote no file: The request states one value; the worker's own check covers it.
+
+## Asked
 
 > Make the public value module return two instead of one.
 
-## Outcomes
+- **O001** (must) The public value is two
 
-| Outcome | Priority | Statement | Checks | Behavior | Review |
-| --- | --- | --- | --- | --- | --- |
-| O001 | must | The public value is two | C001 | passed | unassessed |
+## Done
 
-## Changes
+| Requirement | Evidence | Result | Rerun |
+| --- | --- | --- | --- |
+| O001 | C001 (worker's check) | passed (exit 0, <TIME>) | `node checks/value.check.mjs` |
 
-- **T001** Return the promised value (in-progress; may edit src/value.mjs, checks/value.check.mjs)
+Results are commands VISP ran. `stale` runs were on an earlier version and show nothing about this one. Reviewer verdicts are a model's judgment, not a run.
 
-Uncommitted changes:
+## Changed
 
-- modified: src/value.mjs
+1 file, +2 −1, from `HEAD` (the current commit) to the working tree.
 
-## Checks
+- modified `src/value.mjs` +2 −1 (T001)
 
-| Check | Command | Latest result |
-| --- | --- | --- |
-| C001 | `node checks/value.check.mjs` | passed (exit 0, <TIME>) |
+Scope declared: T001 may edit `src/value.mjs`, `checks/value.check.mjs`. Touched outside it: nothing. Edits the hooks refused are not recorded.
 
-## Acceptance tests
+## Regressions
 
-The independent tester's tests were not pinned (declined): The tester wrote no file: The request states one value; the worker's own check covers it..
+Not run: `workflow.regressionGate` is off.
 
-Tester notes: The request states one value; the worker's own check covers it.
+## Cost
 
-## Independent review
-
-- <TIME>: gpt-5.6-sol (fresh context), 0/1 outcomes satisfied
-
-Open findings:
-
-- **required** functional: The module has no default export Consequence: Callers that import the module's default value receive undefined, not two Next check: Import the default export of src/value.mjs and compare it with two
+- Time: <DURATION> from `visp feature` to the last record; checks ran <DURATION> over 2 runs.
+- Model calls: 1 independent review recorded, 1 reviewer call launched by VISP, 1 tester session; worker calls not measured. Models: gpt-5.6-sol.
 
 ## Next
 
@@ -48,7 +46,7 @@ The independent review budget is spent. Run visp pr; the remaining findings go t
 
 `visp pr --feature 001-return-two-from-the-public`
 
-Check results come from commands VISP executed. Review judgments are attributed to their reviewer; the actor's own claims are not evidence.
+Detail: `visp pr --full --feature 001-return-two-from-the-public` adds the full handoff document; `--json` gives this record as data; `visp ui` shows it under Evidence; raw records are in `.visp/features/001-return-two-from-the-public/`.
 
 
 Next: visp pr --feature 001-return-two-from-the-public

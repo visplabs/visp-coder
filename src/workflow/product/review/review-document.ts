@@ -28,7 +28,7 @@ export async function productReviewDocument(
   const activity = await reviewerActivity(workspace, brief.feature);
   const testerCommands = await testerNetworkCommands(workspace, brief.feature);
   return [
-    `# ${title(brief.goal)}`,
+    `# ${reviewTitle(brief.goal)}`,
     "",
     `Status: ${state.status}. ${verdict(outcomes)}`,
     "",
@@ -56,7 +56,7 @@ export async function productReviewDocument(
 }
 
 /** A goal copied from a long request would otherwise become a multi-paragraph heading. */
-function title(goal: string): string {
+export function reviewTitle(goal: string): string {
   const first = goal.split("\n").find((line) => line.trim()) ?? goal;
   return first.length > 100 ? `${first.slice(0, 99).trimEnd()}…` : first.trim();
 }

@@ -201,15 +201,19 @@ Three experimental `workflow` switches, off by default, aim to cut ceremony wher
 
 ## `visp pr`
 
-`visp pr` prints a Markdown document built from recorded state:
+`visp pr` prints the feature's evidence record: one page of Markdown, built from recorded state, that you can paste into a pull request description. In order:
 
-- the preserved request, with recognized credentials and local paths masked;
-- an outcomes table with checks and statuses;
-- decisions, slice scope and uncommitted changes;
-- each check's command and latest executed result, including pinned acceptance checks;
-- the independent tests with the request text each relies on, and every intent change;
-- independent review attribution, with open findings and their next checks;
-- the reviewer's web searches and the tester's commands with network access, when there are any;
-- the next step.
+1. **Not verified.** Everything a reviewer must not assume is proven, blocking items first: requirements without current executed evidence, failing, stale or unrun checks, regressions and unchecked (flaky) failures, open reviewer findings, open and upheld test disputes, tests the independent tester never observed (`NOT OBSERVED`), an unpinned independent suite, requirements that rest on a reviewer's judgment alone, checks that also pass with the change reverted, and files changed outside every slice's scope.
+2. **Asked.** The verbatim request (recognized credentials and local paths masked), the requirements (the brief's outcomes) and any later change to the protected intent.
+3. **Done.** Per requirement, each check with who wrote it (the worker or VISP's independent tester), its latest result and the command to rerun it. The independent tests cover the whole request and get a row of their own.
+4. **Changed.** The feature's diff, the same one the dashboard's Map tab draws: files with added and removed lines, the scope each slice declared and the files touched outside it. Edits the hooks refused are not recorded yet.
+5. **Regressions.** The regression gate's result on this version, when it ran.
+6. **Cost.** Time from `visp feature` to the last record, time spent running checks, and model calls VISP recorded: independent reviews, reviewer calls it launched, tester sessions. The worker's own calls are not measured.
+7. **Outside access**, when there was any: every reviewer web search, and how many commands the tester ran with network access.
+8. **Next.** The next step.
+
+The record is honest by construction. A result reads `passed` only for a run VISP executed on the current version of the product; a run on an earlier version reads `stale`, and a check with no run reads `not run`. A reviewer's verdict is always shown as a model's judgment, never as a result.
+
+`visp pr --full` adds the full handoff document after the record: decisions, every check's command, the independent tests with the request text each relies on, review attribution, and the tester's networked commands. `visp pr --json` returns the record as data in `data.record` (version 1), next to the Markdown in `data.markdown`.
 
 `visp handoff` shows the current status in the same form as `status`. Neither command publishes anything.

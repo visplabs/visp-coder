@@ -554,6 +554,21 @@ svg.icon { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-w
 .markdown th, .markdown td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
 .markdown th { color: var(--muted); font-weight: 500; font-size: 13px; }
 
+/* ———— Evidence ———— */
+.evidence { display: grid; gap: 24px; }
+.evidence-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; }
+.evidence-summary .command { flex: 1 1 100%; }
+.gap-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.gap { display: flex; align-items: baseline; gap: 10px; overflow-wrap: anywhere; }
+.gap .pill { flex: none; }
+.evidence-asked { display: grid; gap: 14px; }
+.evidence-table tbody th { width: auto; white-space: nowrap; }
+.evidence-table .command { min-width: 240px; }
+.evidence-note { margin-top: 4px; font-size: 12.5px; }
+.evidence-changed { display: grid; gap: 16px; }
+.file-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.file-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-width: 0; overflow-wrap: anywhere; }
+
 /* ———— Other pages ———— */
 .page-header { display: grid; gap: 10px; margin-bottom: 24px; justify-items: start; }
 .page-header h1, .welcome h1 { font: 700 clamp(34px, 4vw, 48px)/1 var(--font-display); }

@@ -1,5 +1,6 @@
 import type {
   UiChangeMap,
+  UiEvidence,
   UiExecution,
   UiFeature,
   UiHealth,
@@ -9,7 +10,7 @@ import type {
 } from "../../src/ui/contract.js";
 import { type Loaded, load, SignedOutError } from "./api.js";
 import { announceHeadline, noticeNewRequests } from "./notify.js";
-import { executionKey, type Resource, type Route } from "./state.js";
+import { executionKey, type Resource, type Route, type Tab } from "./state.js";
 import { schedule, state } from "./store.js";
 
 async function fetchInto<T>(
@@ -111,18 +112,33 @@ export async function loadMap(id: string): Promise<void> {
   );
 }
 
-/** A feature, and its map when the Map tab shows it. */
+/** The evidence record reads git like the map, so it too loads only while its tab is open. */
+async function loadEvidence(id: string): Promise<void> {
+  await fetchInto<UiEvidence>(
+    `/api/v1/features/${encodeURIComponent(id)}/evidence`,
+    state.evidence[id],
+    (value) => {
+      state.evidence[id] = value;
+    },
+  );
+}
+
+/** A feature, and its map or evidence record when that tab shows it. */
 export function loadFeatureAndMap(id: string): void {
   void loadFeature(id);
-  if (state.route.view === "feature" && state.route.feature === id && state.route.tab === "map")
-    void loadMap(id);
+  if (state.route.view === "feature" && state.route.feature === id) loadTab(id, state.route.tab);
+}
+
+function loadTab(id: string, tab: Tab): void {
+  if (tab === "map") void loadMap(id);
+  if (tab === "evidence") void loadEvidence(id);
 }
 
 export function loadForRoute(route: Route): void {
   if (route.view === "feature") {
     void loadFeature(route.feature);
     if (route.run) loadExecution(route.feature, route.run);
-    if (route.tab === "map") void loadMap(route.feature);
+    loadTab(route.feature, route.tab);
   }
   if (route.view === "health") void loadHealth();
   if (route.view === "needs") void loadRequests();

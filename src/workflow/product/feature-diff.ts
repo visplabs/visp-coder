@@ -5,7 +5,8 @@ import { ProjectFileSystem } from "../../core/fs.js";
 import { sha256 } from "../../core/hash.js";
 import { privatePath } from "../../core/redaction.js";
 import { err, ok, type Result } from "../../core/result.js";
-import type { UiChangeMap, UiMapFile, UiMapHunk } from "../contract.js";
+import type { UiChangeMap, UiMapFile, UiMapHunk } from "../../ui/contract.js";
+import type { WorkspaceState } from "../state.js";
 
 /** Read-only git: no pager, optional locks, hooks or fsmonitor, as the other git reads do. */
 const GIT_ENV = { GIT_OPTIONAL_LOCKS: "0", GIT_PAGER: "cat", GIT_TERMINAL_PROMPT: "0" };
@@ -40,6 +41,36 @@ export interface FeatureDiff {
   /** Changed files left out as secrets, blocked paths or instruction files; `.visp/` is never counted. */
   readonly hiddenFiles: number;
   readonly notes: string[];
+}
+
+export interface FeatureDiffRead {
+  readonly base: MapBase;
+  readonly end: MapEnd;
+  readonly diff: FeatureDiff;
+}
+
+/** The feature's diff: from before its brief was first committed to its end. */
+export async function readFeatureDiff(
+  workspace: WorkspaceState,
+  feature: string,
+  explicitBase?: string,
+): Promise<Result<FeatureDiffRead>> {
+  const root = workspace.paths.root;
+  const featureDir =
+    workspace.paths.relative(workspace.paths.featureDir(feature)) ?? `.visp/features/${feature}`;
+  const base = await resolveBase(root, `${featureDir}/brief.yaml`, explicitBase);
+  if (!base.ok) return base;
+  const end = await resolveEnd(root, featureDir, workspace.status?.activeFeature === feature);
+  if (!end.ok) return end;
+  const diff = await featureDiff(
+    root,
+    base.value,
+    end.value,
+    workspace.config.workflow.blockedPaths,
+  );
+  return diff.ok
+    ? { ok: true, value: { base: base.value, end: end.value, diff: diff.value } }
+    : diff;
 }
 
 async function git(root: string, args: readonly string[]): Promise<Result<string>> {

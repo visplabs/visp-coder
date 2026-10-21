@@ -1,12 +1,12 @@
 import { ok, type Result } from "../../core/result.js";
 import { checkCurrency, openProjectStore } from "../../graph/index.js";
 import { getQueryIndex, type SnapshotIndex } from "../../graph/query/index.js";
+import { readFeatureDiff, uiFile } from "../../workflow/product/feature-diff.js";
 import { readProductRecord } from "../../workflow/product/store.js";
 import type { WorkspaceState } from "../../workflow/state.js";
 import type { UiChangeMap, UiFeature, UiMapNode } from "../contract.js";
 import { featureView } from "../views.js";
 import { checkpointHistory } from "./checkpoints.js";
-import { featureDiff, resolveBase, resolveEnd, uiFile } from "./diff.js";
 import { egoGraph, NODE_CAP } from "./graph.js";
 import { annotate, readingOrder } from "./records.js";
 
@@ -23,27 +23,20 @@ export async function changeMapView(
   if (!record.ok) return record;
   const view = await featureView(state, feature);
   if (!view.ok) return view;
+  const read = await readFeatureDiff(state, feature, explicitBase);
+  if (!read.ok) return read;
+  const { base, end, diff } = read.value;
   const root = state.paths.root;
-  const featureDir =
-    state.paths.relative(state.paths.featureDir(feature)) ?? `.visp/features/${feature}`;
-  const base = await resolveBase(root, `${featureDir}/brief.yaml`, explicitBase);
-  if (!base.ok) return base;
-  const active = state.status?.activeFeature === feature;
-  const end = await resolveEnd(root, featureDir, active);
-  if (!end.ok) return end;
-  const diff = await featureDiff(root, base.value, end.value, state.config.workflow.blockedPaths);
-  if (!diff.ok) return diff;
-
-  const notes = [...diff.value.notes];
+  const notes = [...diff.notes];
   const graph = await readIndex(state);
   if (graph.note) notes.push(graph.note);
-  const ego = egoGraph(graph.index, diff.value.files);
+  const ego = egoGraph(graph.index, diff.files);
   const history = await checkpointHistory(
     state,
     record.value,
-    diff.value.files.map((file) => file.path),
-    base.value,
-    end.value,
+    diff.files.map((file) => file.path),
+    base,
+    end,
   );
   notes.push(...history.notes);
   const nodes: UiMapNode[] = ego.nodes.map((node) =>
@@ -62,10 +55,10 @@ export async function changeMapView(
     );
   return ok({
     feature,
-    base: base.value,
-    end: end.value,
+    base: base,
+    end: end,
     graph: { state: graph.state, ...(graph.note ? { note: graph.note } : {}) },
-    files: diff.value.files.map(uiFile),
+    files: diff.files.map(uiFile),
     nodes,
     edges: ego.edges,
     readingOrder: readingOrder(
@@ -77,8 +70,8 @@ export async function changeMapView(
     omitted: {
       changedNodes: ego.omittedChanged,
       neighbours: ego.omittedNeighbours,
-      files: diff.value.omittedFiles,
-      hiddenFiles: diff.value.hiddenFiles,
+      files: diff.omittedFiles,
+      hiddenFiles: diff.hiddenFiles,
     },
     notes,
     readAt: new Date().toISOString(),

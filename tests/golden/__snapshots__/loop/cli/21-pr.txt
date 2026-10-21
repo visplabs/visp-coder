@@ -1,40 +1,46 @@
 $ visp pr
 --- stdout
-# Return two from the public value module
+# Evidence record: Return two from the public value module
 
-Status: active. Every required outcome is satisfied.
+`001-return-two-from-the-public` (active) · 1 of 1 requirement shown by checks VISP ran on this version · 1 item not verified.
 
-## Request
+## Not verified (1)
+
+- No independent review is recorded
+
+## Asked
 
 > Make the public value module return two instead of one.
 
-## Outcomes
+- **O001** (must) The public value is two
 
-| Outcome | Priority | Statement | Checks | Behavior | Review |
-| --- | --- | --- | --- | --- | --- |
-| O001 | must | The public value is two | C001 | passed | unassessed |
+Intent changed after the request 1 time:
+- <TIME> (agent-proposed): Define the first usable behavior
 
-## Changes
+## Done
 
-- **T001** Return the promised value (closed; may edit src/value.mjs, checks/value.check.mjs)
+| Requirement | Evidence | Result | Rerun |
+| --- | --- | --- | --- |
+| O001 | C001 (worker's check) | passed (exit 0, <TIME>) | `node checks/value.check.mjs` |
 
-Uncommitted changes:
+Results are commands VISP ran. `stale` runs were on an earlier version and show nothing about this one. Reviewer verdicts are a model's judgment, not a run.
 
-- modified: src/value.mjs
+## Changed
 
-## Checks
+1 file, +1 −1, from `HEAD` (the current commit) to the working tree.
 
-| Check | Command | Latest result |
-| --- | --- | --- |
-| C001 | `node checks/value.check.mjs` | passed (exit 0, <TIME>) |
+- modified `src/value.mjs` +1 −1 (T001)
 
-## Intent changes
+Scope declared: T001 may edit `src/value.mjs`, `checks/value.check.mjs`. Touched outside it: nothing. Edits the hooks refused are not recorded.
 
-- <TIME> (agent-proposed, intent): Define the first usable behavior
+## Regressions
 
-## Independent review
+Not run: `workflow.regressionGate` is off.
 
-No independent review is recorded. Treat outcomes without executed checks as unverified.
+## Cost
+
+- Time: <DURATION> from `visp feature` to the last record; checks ran <DURATION> over 3 runs.
+- Model calls: 0 independent reviews recorded, 0 reviewer calls launched by VISP, 0 tester sessions; worker calls not measured.
 
 ## Next
 
@@ -42,7 +48,7 @@ Review the assembled product against every mandatory outcome and retained expect
 
 `visp review --handoff --feature 001-return-two-from-the-public`
 
-Check results come from commands VISP executed. Review judgments are attributed to their reviewer; the actor's own claims are not evidence.
+Detail: `visp pr --full --feature 001-return-two-from-the-public` adds the full handoff document; `--json` gives this record as data; `visp ui` shows it under Evidence; raw records are in `.visp/features/001-return-two-from-the-public/`.
 
 
 Next: visp review --handoff --feature 001-return-two-from-the-public

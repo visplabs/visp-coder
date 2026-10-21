@@ -6,6 +6,10 @@
  * formats; it never decides whether something passed.
  */
 
+import type { EvidenceRecord } from "../workflow/product/evidence-record/record-types.js";
+
+export type { EvidenceRecord } from "../workflow/product/evidence-record/record-types.js";
+
 export const UI_CONTRACT_VERSION = 1;
 
 export interface UiMeta {
@@ -451,4 +455,10 @@ export interface UiEnvelope<T> {
   readonly ok: boolean;
   readonly data?: T;
   readonly error?: UiError;
+}
+
+/** The Evidence tab: the record `visp pr` prints, as data and as the Markdown it prints. */
+export interface UiEvidence {
+  readonly record: EvidenceRecord;
+  readonly markdown: string;
 }
