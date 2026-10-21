@@ -71,6 +71,8 @@ function removedSettingMessage(section: string, key: string, critic: boolean): s
     return "Remove this setting: graph queries use request --depth and --results (MCP depth/results), or built-in defaults";
   if (section === "workflow" && ["maxSourceFileLines", "maxSourceLineChars"].includes(key))
     return "Remove this setting: current product review does not enforce source-size heuristics; maxChangedFiles remains supported";
+  if (section === "memory" && key === "service")
+    return "Remove this setting: the Visp Memory service was removed; memory.recall selects earlier decisions with the reviewer's model";
   if (section === "workflow" && key === "requireTests")
     return "Remove this setting: the legacy gate is retired; declared product checks and outcome evidence govern current closure and acceptance";
   return "Unknown setting";

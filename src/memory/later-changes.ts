@@ -1,7 +1,7 @@
 import { recentCommits } from "../core/git.js";
 import { redactRequest } from "../core/redaction.js";
 import type { WorkspaceState } from "../workflow/state.js";
-import type { EarlierFeature } from "./memory-service.js";
+import type { EarlierFeature } from "./project-memory.js";
 
 /**
  * Recorded decisions describe what the user asked for in an earlier session; the code can

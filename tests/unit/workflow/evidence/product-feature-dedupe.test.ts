@@ -2,7 +2,7 @@ import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { parse, stringify } from "yaml";
-import { MEMORY_HEADING } from "../../../../src/memory/memory-service.js";
+import { MEMORY_HEADING } from "../../../../src/memory/project-memory.js";
 import { productStatePath, readProductRecord } from "../../../../src/workflow/product/store.js";
 import { createProductFeatureWithTests } from "../../../../src/workflow/product/tester/independent-tests.js";
 import type { IndependentTester } from "../../../../src/workflow/product/tester/independent-tests-model.js";

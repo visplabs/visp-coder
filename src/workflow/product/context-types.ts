@@ -23,7 +23,7 @@ export interface ProductContextContent {
   readonly originalRequest: string;
   /** Rules the user stated for all later work; never trimmed by the context budget. */
   readonly projectRules?: readonly import("./project-rules.js").ProjectRule[];
-  /** Recorded decisions from earlier features that Visp Memory selected for this request. */
+  /** Recorded decisions from earlier features that the reviewer's model selected for this request. */
   readonly projectMemory?: readonly string[];
   /** Commits made after those decisions were recorded; the code wins where they differ. */
   readonly projectMemoryLaterChanges?: readonly string[];

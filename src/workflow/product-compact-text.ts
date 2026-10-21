@@ -1,4 +1,4 @@
-import { projectMemoryText } from "../memory/memory-service.js";
+import { projectMemoryText } from "../memory/project-memory.js";
 import { projectRulesText } from "./product/project-rules.js";
 
 /** Where the reader runs: MCP tool text, or CLI text output read by a model through a shell. */

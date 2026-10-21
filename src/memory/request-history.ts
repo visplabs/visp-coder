@@ -2,7 +2,7 @@ import { z } from "zod";
 import { type FileMutation, filePrecondition } from "../core/file-transaction.js";
 import { ok, type Result } from "../core/result.js";
 import type { WorkspaceState } from "../workflow/state.js";
-import { type EarlierFeature, requestChunks } from "./memory-service.js";
+import { type EarlierFeature, requestChunks } from "./project-memory.js";
 
 /**
  * VISP's own long-term store: what users asked for in earlier features, split as Visp Memory
@@ -12,7 +12,7 @@ import { type EarlierFeature, requestChunks } from "./memory-service.js";
  * sizes every note fits in one call, so VISP keeps the notes itself and needs no service.
  */
 const REQUEST_HISTORY_STATE = "state/request-history.json";
-/** The newest notes the gate reads; beyond this a project wants Visp Memory's search first. */
+/** The newest notes the gate reads; older ones are left out. */
 const MAX_CANDIDATE_CHARS = 40_000;
 
 const historySchema = z.object({

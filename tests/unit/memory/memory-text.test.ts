@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { projectMemoryText, requestChunks } from "../../../src/memory/memory-service.js";
+import { projectMemoryText, requestChunks } from "../../../src/memory/project-memory.js";
 import { memoryGatePrompt } from "../../../src/workflow/product/memory-gate.js";
 import {
   CRITIC_INSTRUCTIONS,
@@ -67,6 +67,29 @@ describe("projectMemoryText", () => {
     expect(
       requestChunks(`Add restocking, with a clear message per refused restock.\n\n${legacy}`),
     ).toEqual(["Add restocking, with a clear message per refused restock."]);
+  });
+});
+
+describe("requestChunks", () => {
+  // Review: prose before a list and wrapped item lines were dropped, and never recorded.
+  it("keeps prose before a list and each item's wrapped lines", () => {
+    expect(
+      requestChunks(
+        "Errors follow one contract for every endpoint:\n- A missing item is 404 not_found,\n  with a message naming the SKU.\n- A bad body is 422 invalid_request.",
+      ),
+    ).toEqual([
+      "Errors follow one contract for every endpoint:",
+      "- A missing item is 404 not_found, with a message naming the SKU.",
+      "- A bad body is 422 invalid_request.",
+    ]);
+  });
+
+  it("does not record the blocks VISP appended to a request", () => {
+    expect(
+      requestChunks(
+        "Add prices to items, stored in integer cents.\n\nProject rules the user stated for all later work on this project (they apply here too; only where a specific statement in the current request conflicts with a project rule for the same case does that statement take precedence, and only for the conflicting requirement; all compatible rules and rules about cases the request does not address still apply):\nR001 Money is integer cents.",
+      ),
+    ).toEqual(["Add prices to items, stored in integer cents."]);
   });
 });
 
