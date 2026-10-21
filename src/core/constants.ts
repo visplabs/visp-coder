@@ -34,7 +34,6 @@ export const FILE = {
   policy: "policy.json",
   assetManifest: "asset-manifest.json",
   installState: "install.json",
-  skills: "skills.json",
   overrides: "overrides.json",
   telemetry: "telemetry.json",
   session: "session.json",

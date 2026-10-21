@@ -37,13 +37,6 @@ export interface ProductContextContent {
   readonly notes: readonly string[];
   readonly mayEdit: boolean;
   readonly subjectDigest: string;
-  readonly skills: readonly {
-    path: string;
-    content: string;
-    truncated: boolean;
-    reason: "skill";
-    advisory: true;
-  }[];
   readonly reviewFeedback: readonly {
     subjectDigest: string;
     current: boolean;
@@ -74,7 +67,6 @@ export interface ProductWorkContext extends ProductContextContent {
     readonly status: "within-budget" | "essential-overflow";
     readonly omitted: {
       readonly files: number;
-      readonly skills: number;
       readonly feedbackCharacters: number;
       readonly probes?: number;
       readonly observationGuidance?: boolean;

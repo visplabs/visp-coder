@@ -4,7 +4,7 @@ import type { CriticAdapter } from "../../workflow/product/critic/critic.js";
 import { MINIMAL_TOOLS } from "../constants.js";
 import { registerCaptureTools } from "./capture.js";
 import { registerCriticTool } from "./critic.js";
-import { registerDiagnoseTools, registerSkillTools } from "./diagnose.js";
+import { registerDiagnoseTools } from "./diagnose.js";
 import { registerEvidenceTools } from "./evidence.js";
 import { registerGraphTools } from "./graph.js";
 import { registerObservationTools } from "./observations.js";
@@ -33,7 +33,6 @@ export function registerTools(
   registerUserFeedbackTool(host, root, server, userFeedbackHost);
   registerGraphTools(host, root);
   registerDiagnoseTools(host, root);
-  registerSkillTools(host, root);
 }
 
 /**

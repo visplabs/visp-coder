@@ -77,32 +77,6 @@ const contextSchema = z
   .strict()
   .default({});
 
-/**
- * A person admits every skill. Automatic activation is unsupported until its
- * evaluation and authority boundaries have been demonstrated.
- *
- * `maxPerPack` is a safety property rather than a budget knob. More skills is
- * not monotonically better — an uncurated library measurably degrades a strong
- * model — so a small cap, paired with an exact trigger, is what keeps a growing
- * library from quietly becoming the thing that makes the agent worse. Zero
- * selects none, which is a narrower switch than turning skills off entirely.
- */
-const skillsSchema = z
-  .object({
-    enabled: z.boolean().default(true),
-    mode: z
-      .enum(["review", "auto"])
-      .default("review")
-      .refine(
-        (mode) => mode === "review",
-        "Automatic skill admission is unsupported; set skills.mode to review",
-      ),
-    minSupport: z.number().int().positive().default(3),
-    maxPerPack: z.number().int().nonnegative().default(3),
-  })
-  .strict()
-  .default({});
-
 const memorySchema = z
   .object({
     enabled: z.boolean().default(true),
@@ -128,7 +102,6 @@ export const configSchema = z
     workflow: workflowSchema,
     graph: graphSchema,
     context: contextSchema,
-    skills: skillsSchema,
     memory: memorySchema,
     telemetry: telemetrySchema,
     critic: criticDefaultsSchema.optional(),

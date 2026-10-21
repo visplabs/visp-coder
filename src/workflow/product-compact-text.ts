@@ -112,7 +112,7 @@ export function compactProductText(
   addPlanSummary(data, summary);
   for (const key of FEEDBACK_FIELDS) if (data[key] !== undefined) summary[key] = bounded(data[key]);
   addObservationSummary(data, summary);
-  return `${name}: ${JSON.stringify(summary)}${ambiguityText(data.independentTests)}${rulesText(data.projectRules)}${memoryText(data.projectMemory, data.projectMemoryLaterChanges)}${skillText(data.skills)}${deliveryText(data.delivery, channel)}${detailCommand(name, data, channel)}\n${WORDING[channel].full} Tool success does not imply product acceptance.`;
+  return `${name}: ${JSON.stringify(summary)}${ambiguityText(data.independentTests)}${rulesText(data.projectRules)}${memoryText(data.projectMemory, data.projectMemoryLaterChanges)}${deliveryText(data.delivery, channel)}${detailCommand(name, data, channel)}\n${WORDING[channel].full} Tool success does not imply product acceptance.`;
 }
 
 function ambiguityText(tests: unknown): string {
@@ -147,25 +147,6 @@ function rulesText(rules: unknown): string {
     rules.map(object).map((rule) => ({ id: String(rule.id), text: String(rule.text) })),
   );
   return text ? `\n${text}` : "";
-}
-
-/** A skill is a procedure: plain numbered lines are followed where an escaped JSON string is skimmed. */
-function skillText(skills: unknown): string {
-  if (!Array.isArray(skills)) return "";
-  const shown = skills.slice(0, 3).map((entry) => {
-    const { path, content, truncated } = object(entry);
-    const body = String(content ?? "")
-      .replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, "")
-      .trim();
-    const name =
-      String(path ?? "skill")
-        .split("/")
-        .at(-2) ?? String(path);
-    const cut = body.length > 800 || truncated === true;
-    return `\nSkill ${name} (advisory, ${String(path)}):\n${body.slice(0, 800)}${cut ? "… Read the file for the rest." : ""}`;
-  });
-  const more = skills.length - shown.length;
-  return `${shown.join("")}${more > 0 ? `\n${more} more skill(s) in the full result.` : ""}`;
 }
 
 /** Graph extraction uncertainty is diagnostic detail, not guidance for the worker. */
@@ -219,7 +200,6 @@ function addObservationSummary(data: Record<string, unknown>, summary: Record<st
 /** How a reply names a reference section it left out. */
 const SECTION_NAMES: Readonly<Record<string, string>> = {
   files: "source excerpts",
-  skills: "skills",
   examples: "examples",
   decisions: "decisions",
   acceptanceBaseline: "the acceptance baseline",

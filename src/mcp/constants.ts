@@ -30,8 +30,6 @@ export const TOOL = {
   query: "visp_query",
   index: "visp_index",
   doctor: "visp_doctor",
-  skillList: "visp_skill_list",
-  skillShow: "visp_skill_show",
 } as const;
 
 export type ToolName = (typeof TOOL)[keyof typeof TOOL];

@@ -16,7 +16,6 @@ import { productInputWarnings } from "./input-warnings.js";
 import { checksFor, type ProductSlice } from "./model.js";
 import { type ProjectRule, readProjectRules } from "./project-rules.js";
 import { reviewExcerpt } from "./review/review-excerpts.js";
-import { productSkills } from "./skills.js";
 import { briefPath, type ProductRecord, productStatePath } from "./store.js";
 import { productContractDigest, productSourceDigest } from "./subject.js";
 import { reviewerRules } from "./tester/pinned-dispute-model.js";
@@ -79,18 +78,14 @@ export async function buildProductContext(
     .sort((a, b) => excerptScore(b, question, checkFiles) - excerptScore(a, question, checkFiles));
   const notes = await productInputWarnings(workspace, brief);
   notes.push(...checkOutputNotes(checks));
-  const { files, remaining } = await productExcerpts(workspace, excerptPaths, question);
+  const files = await productExcerpts(workspace, excerptPaths, question);
   if (excerptPaths.length > files.length)
     notes.push("Context is bounded; read additional relevant files when needed.");
-  const skills = await productSkills(workspace, slice, remaining, excerptPaths);
-  if (!skills.ok) return skills;
   const rules = await readProjectRules(workspace);
   const recalled = await featureMemories(workspace, brief.feature);
-  notes.push(...skills.value.notes);
   return ok(
     fitProductContext(
       {
-        skills: skills.value.skills,
         feedbackPlan,
         userFeedback: userFeedbackPlan(workspace, record, slice, subject.value),
         feature: brief.feature,
@@ -210,7 +205,7 @@ async function productExcerpts(workspace: WorkspaceState, paths: string[], quest
     files.push({ path, content: excerpt, truncated: excerpt.length < content.value.length });
     remaining -= excerpt.length;
   }
-  return { files, remaining };
+  return files;
 }
 
 function priorReviewFeedback(

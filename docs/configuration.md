@@ -39,12 +39,6 @@ context:
   tokenBudget: 12000
   maxSnippets: 4
 
-skills:
-  enabled: true
-  mode: review              # review is the only supported mode
-  minSupport: 3
-  maxPerPack: 3
-
 memory:
   enabled: true
   recall: true
@@ -75,7 +69,6 @@ telemetry:
 | `graph.languages`, `graph.exclude`, `graph.maxFileBytes` | What the repository index parses. |
 | `context.tokenBudget` | Approximate budget for the complete context `work` delivers. |
 | `context.maxSnippets` | Maximum source excerpts in delivered context. |
-| `skills.*` | Skill selection: `minSupport` closed slices a derived proposal must cite; `maxPerPack` admitted skills per context (0 selects none). |
 | `memory.enabled` | Enable earlier-request recall; `false` turns every memory path off. |
 | `memory.recall` | With a reviewer VISP launches (`critic.launch: codex-exec` or `claude-exec`), use its model to select decisions from earlier requests and append them to a new feature's original request and `work` replies. Defaults to `true`; set `false` to skip this recall. A reviewer the host runs (no `critic.launch`, as `visp init` sets up for Claude Code) gives VISP no model to call, so nothing is recalled. |
 | `telemetry.enabled` | Local usage import; activity recording is independent. Records stay on the machine. |
@@ -113,24 +106,11 @@ visp query unknowns                    # what the index could not resolve
 
 Other operations are `entity`, `neighbors` and `callees`. `tracePath` takes a source and destination; MCP passes the destination as `to`. `--depth`, `--results`, `--nodes` and `--edges` bound a query (defaults 3, 50, 2,000 and 8,000; maxima 8, 200, 20,000 and 80,000). A truncated answer keeps its unknowns, so a partial result never looks complete. Query receipts include the snapshot ID and creation time, and replies flag source changes newer than that snapshot. MCP exposes `visp_index` and `visp_query`.
 
-## Memory and skills
+## Memory and project rules
 
 With the default `memory.recall: true` and a reviewer VISP launches (`critic.launch: codex-exec` or `claude-exec`), each new feature can receive relevant decisions from earlier feature requests: VISP records earlier requests in `.visp/state/request-history.json`, and the reviewer's model, at low effort and seeing only the notes, chooses the ones that constrain the new request. The selected decisions are appended to the feature's original request, so the tester and reviewer see them as part of that request. Set `memory.recall: false` to disable this step. VISP calls a model only where the project lets it launch the reviewer, so with a reviewer the host runs (no `critic.launch`, the Claude Code default from `visp init`) nothing is recalled and rules are found by phrase matching; set `critic.launch: claude-exec` to turn both on.
 
 Project rules are different: they are requirements the user stated for all later work, such as "these conventions apply to this change and all later work" followed by a list, or "from now on, never log request bodies". `visp feature` finds them in the user's recorded prompts (never in a worker's text; with `critic.launch: codex-exec` or `claude-exec` the reviewer's model reads them and each must quote the prompt, otherwise phrase matching does), records them in `.visp/rules.json`, and the tester, the reviewer and every `work` reply read the current rules (a later message that replaces or withdraws a rule wins; a removed rule stops applying at once). `visp rules` lists them and `visp rules remove <id>` removes one that was not meant.
-
-Skills are procedures a person admits into the project. They are advice selected by a trigger; they cannot widen scope, change policy or satisfy a check.
-
-```sh
-visp skill catalog                     # bundled skills
-visp skill seed <id>                   # copy one in as an inert proposal
-visp skill propose --id <id> --file SKILL.md --feature <feature> --from-task T001 T002 T003
-visp skill admit <id> --by <reviewer>
-visp skill list
-visp skill retire <id> --reason "<why>"
-```
-
-See [internals](internals.md#skills) for revision, evaluation and rollback records.
 
 ## The `.visp/` directory
 
@@ -148,7 +128,6 @@ See [internals](internals.md#skills) for revision, evaluation and rollback recor
 | `features/<id>/reviewer-activity.jsonl`, `tester-activity.jsonl` | yes | Web searches and commands of VISP-launched reviewer and tester sessions |
 | `policy.json`, `overrides.json` | yes | Recorded rules and exceptions |
 | `project.json` | yes | Preset and project identity |
-| `skills/` | yes | Skill documents, revisions and lifecycle history |
 | `exports/`, `migrations/backups/` | yes | History exports and upgrade backups from `visp-migrate` |
 | `hooks/` | no | Generated, build-specific hook scripts; reinstall locally after cloning |
 | `state/` | no | Local slice authorizations (`state/product-authorizations/`), install records, transaction journals and the writer lock |

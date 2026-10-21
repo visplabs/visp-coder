@@ -84,10 +84,6 @@ function capabilityLines(value: CapabilityUtilization): string[] {
         ]
       : []),
     `  Graph actions:   ${value.graph.indexBuilds} builds, ${value.graph.indexRefreshes} refreshes, ${value.graph.queries} queries`,
-    `  Skill catalog:   ${names(value.skills.catalogAvailable)}`,
-    `  Available unused: ${names(value.skills.availableButUnseeded)}`,
-    `  Skills admitted: ${names(value.skills.admitted)}`,
-    `  Skills inactive: ${names(value.skills.intentionallyInactive)}`,
   ];
 }
 
@@ -104,10 +100,6 @@ function productLines(value: CapabilityUtilization["product"]): string[] {
     `  Recorded runs:   ${value.captureRuns} capture journeys, ${value.controlRuns} controls; records alone do not establish intact images or product quality`,
     "  Acceptance and slice counts are recorded workflow state, not fresh verification. Review judgments remain agent-reported; passing execution does not establish goal fidelity.",
   ];
-}
-
-function names(values: readonly string[]): string {
-  return values.length > 0 ? values.join(", ") : "none";
 }
 
 /**

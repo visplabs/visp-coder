@@ -61,12 +61,13 @@ try {
   await writeFile(join(project, "consumer.mts"), `
 import {
   taskRefSchema, taskRefKey, type TaskRef, loadWorkspace, runProductWork, runProductMigrate, productBriefSchema, productBriefInputSchema, assessmentSchema, productInputTemplate, productCheckSchema, coverageAssessmentSchema, runProductReviewerHandoff, productFeedbackSchema, runProductHostFeedback, runProductCritic, criticConfigSchema, type ProductCriticHost,
-  skillSelectionSnapshot, skillPreregistrationSchema, type SkillPreregistration,
 } from "@visporg/visp-coder";
 import { GraphStore, queryGraph } from "@visporg/visp-coder/graph";
 import * as publicApi from "@visporg/visp-coder";
 // @ts-expect-error Fixed legacy templates were removed in the breaking 0.5 API.
 void publicApi.proposeFailureSkills;
+// @ts-expect-error Project skills were removed.
+void publicApi.skillSelectionSnapshot;
 // @ts-expect-error Legacy stage gates are removed from the breaking 0.5 API.
 void publicApi.evaluateGate;
 // @ts-expect-error Use current product reporting.
@@ -79,6 +80,7 @@ void publicApi.archiveEvidenceQuarantine;
 void publicApi.recordAttempt;
 void publicApi.runProductNext; void publicApi.runProductStatus;
 void publicApi.runProductReport; void publicApi.runProductContext;
+// @ts-expect-error Project skills were removed.
 void publicApi.createProposalFromContent;
 import { runnerSpecSchema, adapterFor, type RunnerSpec, type NormalizedUsage, prepareCriticComparison } from "@visporg/visp-coder/runner";
 import { activateControl, assertRecovery, assertUiState, assertTransitions, assertBehaviorSensitive, assertCheckpoint, measureCanvasRegion, type UiStateContract, type InteractionPage, type EvidenceReference, openBrowserSession, runSupervisedControl } from "@visporg/visp-coder/testing";
@@ -110,8 +112,6 @@ const graph = GraphStore.open(":memory:");
 if (graph.ok) { queryGraph(graph.value, "describe"); graph.value.close(); }
 const spec: RunnerSpec = runnerSpecSchema.parse({});
 void spec; void key; void adapterFor; const usage: NormalizedUsage | undefined = undefined; void usage;
-void skillSelectionSnapshot; void skillPreregistrationSchema;
-const preregistration: SkillPreregistration | undefined = undefined; void preregistration;
 `);
   // Resolve the packed public declarations as an actual downstream consumer.
   run(process.execPath, [

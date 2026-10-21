@@ -30,8 +30,6 @@ slices:
 
 Use one slice unless the request has parts a user could use independently; each extra slice
 adds a check-and-review cycle. Close each slice with visp done before starting the next.
-A slice may declare taskClass: feature, bugfix, refactor, test, docs, chore or config.
-It selects relevant admitted skills; omit it when unknown. It does not change scope or acceptance requirements.
 Scope entries are repository-relative file paths/globs, not descriptions of behavior.
 Prefer patch for changes: arrays merge entries by id, omitted entries are preserved, and new entries may omit id.
 Do not include version, feature, originalRequest or acceptanceBaseline in a patch.

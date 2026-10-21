@@ -62,7 +62,7 @@ Browser tests need an installed Chrome or Chromium; VISP never downloads one.
 | `src/config/` | `visp.yml` schema, starter template and critic defaults |
 | `src/harness/` | Host installation: instructions, hooks, MCP registration, critic agents |
 | `src/graph/` | Tree-sitter repository index and queries (`@visporg/visp-coder/graph`) |
-| `src/memory/`, `src/skills/` | Earlier-request recall and the skill lifecycle |
+| `src/memory/` | Earlier-request recall |
 | `src/runner/` | `visp-runner` (`@visporg/visp-coder/runner`) |
 | `src/migration/` | `visp-migrate` |
 | `src/core/` | Shared primitives: file transactions, state lock, exec, paths, errors |

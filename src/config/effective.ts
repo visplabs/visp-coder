@@ -91,8 +91,7 @@ const operationNotes: Readonly<Record<string, string>> = {
   "graph.maxFileBytes": "Bounds source files read by graph indexing.",
   "context.tokenBudget":
     "Bounds delivered product context approximately; essential intent may overflow with an explicit diagnostic.",
-  "context.maxSnippets":
-    "Limits source excerpts in product context; does not limit all evidence or skill entries.",
+  "context.maxSnippets": "Limits source excerpts in product context; does not limit all evidence.",
   "memory.enabled": "Enables earlier-request recall; false turns every memory path off.",
   "memory.recall":
     "With a reviewer VISP launches (codex-exec or claude-exec), its model selects relevant earlier requests for each new feature; a reviewer the host runs recalls nothing.",
@@ -125,11 +124,6 @@ function effect(path: string) {
     return {
       effect: "conditional",
       note: "Pinned when a feature is created; editing this value does not rewrite existing feature checks.",
-    };
-  if (path.startsWith("skills."))
-    return {
-      effect: "conditional",
-      note: "Controls explicit admission/support or bounded selection; delivery requires enabled skills and matching facts.",
     };
   const note = operationNotes[path];
   return note

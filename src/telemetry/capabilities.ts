@@ -1,7 +1,5 @@
 import { ok, type Result } from "../core/result.js";
 import { type Activity, readSession } from "../orchestrate/session.js";
-import { skillCatalog } from "../skills/catalog.js";
-import { readIndex } from "../skills/store.js";
 import { briefPath, productStatePath, readProductRecord } from "../workflow/product/store.js";
 import { productSourceDigest } from "../workflow/product/subject.js";
 import type { WorkspaceState } from "../workflow/state.js";
@@ -21,12 +19,6 @@ export interface CapabilityUtilization {
     readonly indexRefreshes: number;
     readonly queries: number;
   };
-  readonly skills: {
-    readonly catalogAvailable: readonly string[];
-    readonly availableButUnseeded: readonly string[];
-    readonly admitted: readonly string[];
-    readonly intentionallyInactive: readonly string[];
-  };
 }
 
 export async function capabilityUtilization(
@@ -34,8 +26,6 @@ export async function capabilityUtilization(
 ): Promise<Result<CapabilityUtilization>> {
   const session = await readSession(state);
   if (!session.ok) return session;
-  const skills = await readIndex(state);
-  if (!skills.ok) return skills;
   const features = await state.store.listFeatures();
   if (!features.ok) return features;
 
@@ -52,7 +42,6 @@ export async function capabilityUtilization(
     product: summarizeProduct(products),
     unmigratedFeatures,
     graph: summarizeGraph(session.value.activity),
-    skills: summarizeSkills(skills.value.skills),
   });
 }
 
@@ -83,23 +72,5 @@ function summarizeGraph(activities: readonly Activity[]): CapabilityUtilization[
     indexBuilds: count("index"),
     indexRefreshes: count("index --refresh"),
     queries: count("query"),
-  };
-}
-
-function summarizeSkills(
-  records: readonly { readonly id: string; readonly state: string }[],
-): CapabilityUtilization["skills"] {
-  const catalogAvailable = skillCatalog().map((skill) => skill.id);
-  const local = new Set(records.map((skill) => skill.id));
-  const ids = (admitted: boolean) =>
-    records
-      .filter((skill) => (skill.state === "admitted") === admitted)
-      .map((skill) => skill.id)
-      .sort();
-  return {
-    catalogAvailable,
-    availableButUnseeded: catalogAvailable.filter((id) => !local.has(id)),
-    admitted: ids(true),
-    intentionallyInactive: ids(false),
   };
 }

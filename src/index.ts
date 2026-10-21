@@ -53,26 +53,6 @@ export { ProjectPaths } from "./core/paths.js";
 export { err, ok, type Result } from "./core/result.js";
 export { inspectStateLock, withStateLock } from "./core/state-lock.js";
 export { checkPaths, decideScope, missingExpectedFiles } from "./orchestrate/guard.js";
-export {
-  checkSkillEvaluation,
-  promoteSkill,
-  readSkillEvaluation,
-  recordSkillEvaluation,
-  type SkillEvaluation,
-  type SkillEvaluationInput,
-  type SkillPreregistration,
-  skillPreregistrationSchema,
-} from "./skills/evaluation.js";
-export {
-  type SkillTransitionInput,
-  skillSelectionSnapshot,
-  transitionSkill,
-} from "./skills/lifecycle.js";
-export { createProposalFromContent, type ProposalInput } from "./skills/proposal.js";
-export { rollbackSkill } from "./skills/rollback.js";
-export type { SkillEvidence, SkillRecord, SkillSupport } from "./skills/schema.js";
-export { readSkillHistory } from "./skills/store.js";
-export { readSkillRevision } from "./skills/versions.js";
 export { rebuildTelemetryProjection } from "./telemetry/journal.js";
 export type { UsageReceipt, UsageSegment } from "./telemetry/schema.js";
 export { readTelemetry } from "./telemetry/store.js";

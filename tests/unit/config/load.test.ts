@@ -3,12 +3,12 @@ import { parseConfig } from "../../../src/config/load.js";
 import { defaultConfig } from "../../../src/config/schema.js";
 
 describe("parseConfig", () => {
-  it("rejects unsupported automatic skill admission with an actionable setting", () => {
-    const result = parseConfig("skills:\n  mode: auto\n", "visp.yml");
+  it("rejects the removed skills section with removal guidance", () => {
+    const result = parseConfig("skills:\n  enabled: true\n", "visp.yml");
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.error.message).toContain("skills.mode");
-    expect(result.error.message).toContain("review");
+    expect(result.error.message).toContain("skills");
+    expect(result.error.message).toContain("Remove this setting");
   });
   it("applies defaults for an empty file", () => {
     const result = parseConfig("", "visp.yml");

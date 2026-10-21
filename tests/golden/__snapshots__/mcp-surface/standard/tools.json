@@ -1414,46 +1414,5 @@
     "execution": {
       "taskSupport": "forbidden"
     }
-  },
-  {
-    "name": "visp_skill_list",
-    "title": "List this project's skills",
-    "description": "Skills the project has learned, and where each one stands.",
-    "inputSchema": {
-      "type": "object",
-      "properties": {},
-      "$schema": "http://json-schema.org/draft-07/schema#"
-    },
-    "annotations": {
-      "readOnlyHint": true
-    },
-    "execution": {
-      "taskSupport": "forbidden"
-    }
-  },
-  {
-    "name": "visp_skill_show",
-    "title": "Read one skill",
-    "description": "The body of a skill, with what it was drawn from and who admitted it.",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Skill id, from visp_skill_list"
-        }
-      },
-      "required": [
-        "id"
-      ],
-      "additionalProperties": false,
-      "$schema": "http://json-schema.org/draft-07/schema#"
-    },
-    "annotations": {
-      "readOnlyHint": true
-    },
-    "execution": {
-      "taskSupport": "forbidden"
-    }
   }
 ]
