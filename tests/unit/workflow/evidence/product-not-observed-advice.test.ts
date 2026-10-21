@@ -26,7 +26,7 @@ const PREFIX = "VISP's tester never observed: ";
 const GOAL = "Observed wins expose the correct next-screen control";
 const SHOWN = `${GOAL}: 5000 attempts`;
 const advice = (names = GOAL) =>
-  `${PREFIX}${names}. If one is a goal the request defines (such as winning a level), it is unmet even when one precise input sequence reaches it: change the product so that a coarse search over the request's stated inputs reaches it.`;
+  `${PREFIX}${names}. If one is a goal the request defines (such as winning a level), make sure it can be reached through the request's interfaces; if it cannot, change the product.`;
 let workspace: TestWorkspace;
 let feature: string;
 let handlers: Map<string, Handler>;

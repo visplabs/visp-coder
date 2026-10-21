@@ -238,15 +238,7 @@ it.each([0, 2000])(
       )?.excerpt;
       expect(result).toContain("NOT OBSERVED: retry after error: 0 qualifying events");
       expect(result).toMatch(/coverage gap/i);
-      // pm1b-slingshot-game-visp-b4-1: the reviewer rated a flow satisfied although winning level 1
-      // was NOT OBSERVED, trusting the worker's own one-degree-precise winning shots; the
-      // hidden check's coarse search found no win.
-      expect(result).toContain(
-        "is unmet: do not rate its outcome satisfied; report a required finding naming it, even when the implementer's own tests or one precise input sequence reach it",
-      );
-      expect(result).toContain(
-        "Only when the test source shows its search cannot work (inputs outside the stated range, a wrong hook, a helper error), say so in limitations instead",
-      );
+      expect(result).toContain("check from source and evidence whether a player can reach it");
       expect(result).toContain("passed; exit 0");
       expect(
         packet.evidence
