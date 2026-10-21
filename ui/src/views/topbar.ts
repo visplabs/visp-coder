@@ -10,6 +10,7 @@ export const TAB_NAMES: Record<Tab, string> = {
   runs: "Runs",
   activity: "Activity",
   handoff: "Handoff",
+  map: "Map",
 };
 
 export function topbar(state: AppState, actions: Actions): HTMLElement {
@@ -96,7 +97,7 @@ function tabs(
         activity: newActivityCount(feature, state.seenBefore[feature.id]),
       }
     : {};
-  const order: Tab[] = ["now", "review", "runs", "activity", "handoff"];
+  const order: Tab[] = ["now", "review", "runs", "activity", "handoff", "map"];
   return h(
     "nav",
     { class: "tabs", "aria-label": "Feature sections" },

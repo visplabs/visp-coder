@@ -4,6 +4,7 @@ import { currentStage, describeNext, relativeTime, STAGES } from "../format.js";
 import { renderMarkdown } from "../markdown.js";
 import type { Actions, AppState, Tab } from "../state.js";
 import { activityPanel } from "./activity.js";
+import { mapPanel } from "./map.js";
 import { nowPanel } from "./now.js";
 import { command, disclosure, resource } from "./parts.js";
 import { reviewPanel } from "./review.js";
@@ -161,6 +162,7 @@ function panel(
   if (tab === "runs") return runsPanel(feature, state, actions, run);
   if (tab === "activity") return activityPanel(feature, state, actions);
   if (tab === "handoff") return handoffPanel(feature, actions);
+  if (tab === "map") return mapPanel(feature, state, actions);
   return nowPanel(feature, state, actions);
 }
 
