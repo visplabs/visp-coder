@@ -161,6 +161,10 @@ it("reports Codex hook trust as unknown until the project and hooks are trusted"
 // The Codex edit hook lets an apply_patch call through when it cannot find the patch, so
 // doctor says that scope was checked only at commit and by \`visp done\`.
 it("warns when the Codex edit hook could not find a patch in an apply_patch call", async () => {
+  expect(await check("codex edit hook")).toMatchObject({
+    status: "ok",
+    detail: "Codex is not the selected coding host",
+  });
   await setConfigScalar((await workspace.state()).paths, "harness", "codex");
   expect(await check("codex edit hook")).toMatchObject({ status: "ok" });
   const session = join(workspace.root, ".visp", "session");
@@ -172,6 +176,11 @@ it("warns when the Codex edit hook could not find a patch in an apply_patch call
   expect(await check("codex edit hook")).toMatchObject({
     status: "warn",
     detail: expect.stringContaining("apply_patch payload shape not recognized"),
+  });
+  await writeFile(join(session, "apply-patch-unrecognized.json"), "{}");
+  expect(await check("codex edit hook")).toMatchObject({
+    status: "warn",
+    detail: expect.stringContaining("tool_input fields: none"),
   });
 });
 
