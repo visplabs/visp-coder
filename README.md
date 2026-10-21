@@ -54,7 +54,7 @@ When supplying the original request explicitly, use `--source-brief -` with a qu
 5. **`visp done`** runs the slice's checks (plus any `workflow.validationCommands`, and the pinned tests on the last slice). If every check passes and `codex-exec` or `claude-exec` is configured, VISP runs the independent reviewer and returns its findings as the next repair step.
 6. **`visp next`** reports the next action; fix the findings and run `visp done` again. Required findings reopen the slice.
 7. **`visp accept`** reruns the checks against the assembled product and requires a current assessment of every mandatory outcome. Once the review budget (three reviews by default) is spent with findings open, `visp next` hands off to `visp pr` instead, so the loop always ends.
-8. **`visp pr`** prints the reviewer document: the request, outcomes, checks and their executed results, the independent tests, review findings, intent changes and the next step.
+8. **`visp pr`** prints the evidence record for the reviewer: what is not verified first, then the request, the check behind each requirement with its latest executed result, the change against its declared scope, regressions and cost.
 
 A check blocked by the host sandbox (for example, network sockets denied to a test server) is recorded as an environment failure, not a product failure. Rerun the same command with the host's sandbox escalation; do not change the product to work around it.
 
@@ -123,7 +123,7 @@ The request and redacted check output are saved in the committed feature trail; 
 | `visp reproduce` | Link a failed execution to an open finding before repair |
 | `visp observations` | List an outcome's captured output and image paths |
 | `visp accept` | Check the assembled product against its mandatory outcomes |
-| `visp pr` | Print the reviewer document |
+| `visp pr` | Print the feature's evidence record (`--json` for tools, `--full` for the whole handoff) |
 | `visp ui` | Open a live, read-only dashboard of the work in your browser |
 | `visp index` / `visp query` | Build and query the repository graph |
 | `visp rules` / `visp rules remove <id>` | List or remove the rules the user stated for all later work |

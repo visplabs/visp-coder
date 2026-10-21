@@ -17,16 +17,7 @@ export function withNotObservedAdvice(
   const execution = record.state.executions.findLast(
     (entry) => entry.check.startsWith("PINNED_") && entry.subjectDigest === subject,
   );
-  const names = [
-    ...new Set(
-      (execution?.output ?? "").split(/\r?\n/).flatMap((line) => {
-        // Names may contain colons, so the whole payload (name and any detail) is shown.
-        const match = /^\s*NOT OBSERVED:\s*(.*)$/i.exec(line);
-        const payload = match?.[1]?.trim().slice(0, 120);
-        return payload ? [payload] : [];
-      }),
-    ),
-  ];
+  const names = notObservedNames(execution?.output ?? "");
   if (!names.length) return next;
   const listed = names.slice(0, 4);
   if (names.length > 4) listed.push(`and ${names.length - 4} more`);
@@ -36,4 +27,18 @@ export function withNotObservedAdvice(
     ...next,
     evidence: [...next.evidence.slice(0, firstDone), advice, ...next.evidence.slice(firstDone)],
   };
+}
+
+/** The tester's `NOT OBSERVED:` lines in a run's output, each once. */
+export function notObservedNames(output: string): string[] {
+  return [
+    ...new Set(
+      output.split(/\r?\n/).flatMap((line) => {
+        // Names may contain colons, so the whole payload (name and any detail) is shown.
+        const match = /^\s*NOT OBSERVED:\s*(.*)$/i.exec(line);
+        const payload = match?.[1]?.trim().slice(0, 120);
+        return payload ? [payload] : [];
+      }),
+    ),
+  ];
 }

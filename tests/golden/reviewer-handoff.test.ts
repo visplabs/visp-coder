@@ -44,6 +44,8 @@ it("hands open findings to visp pr once the review budget is spent", async () =>
   await run.cli("07-next-handoff", ["next"]);
   await run.cli("08-accept-handoff", ["accept"]);
   await run.cli("09-pr", ["pr"]);
+  // The record as data: the fields tools such as the reviewer study read.
+  await run.cli("09b-pr-json", ["pr", "--json"]);
   await run.save(
     "10-stop-hook.txt",
     runHook(project.root, ".visp/hooks/codex-hooks.mjs", {

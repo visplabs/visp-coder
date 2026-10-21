@@ -436,7 +436,12 @@ export const acceptCommand = () =>
     ),
   );
 export const prCommand = () =>
-  command("pr", "Generate the reviewer handoff from current evidence", false, runProductReport);
+  command(
+    "pr",
+    "Print the feature's evidence record for a reviewer (--json: as data)",
+    false,
+    runProductReport,
+  ).option("--full", "Add the full handoff document after the record");
 export const handoffCommand = () =>
   command("handoff", "Alias for the current product status", false, runProductStatus).option(
     "--full",

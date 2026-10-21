@@ -1,61 +1,55 @@
 $ visp pr
 --- stdout
-# Return two from the public value module
+# Evidence record: Return two from the public value module
 
-Status: accepted. Every required outcome is satisfied.
+`001-return-two-from-the-public` (accepted) · 1 of 1 requirement shown by checks VISP ran on this version · 1 item not verified.
 
-## Request
+## Not verified (1)
+
+- Test "value is odd" is waived: the worker disputed it and the reviewer upheld the dispute
+
+## Asked
 
 > Make the public value module return two instead of one.
 
-## Outcomes
+- **O001** (must) The public value is two
 
-| Outcome | Priority | Statement | Checks | Behavior | Review |
-| --- | --- | --- | --- | --- | --- |
-| O001 | must | The public value is two | C001 | passed | satisfied |
+Intent changed after the request 1 time:
+- <TIME> (visp-tester): Pin acceptance tests an independent tester wrote from the original request
 
-## Changes
+## Done
 
-- **T001** Return the promised value (closed; may edit src/value.mjs, checks/value.check.mjs)
+| Requirement | Evidence | Result | Rerun |
+| --- | --- | --- | --- |
+| O001 | C001 (worker's check) | passed (exit 0, <TIME>) | `node checks/value.check.mjs` |
+| O001 | review | judged satisfied by gpt-5.6-sol (model) | — |
+| whole request | PINNED_1 (independent tests) | passed (exit 0, <TIME>) | `node acceptance/001-return-two-from-the-public/value.acceptance.mjs` |
 
-Uncommitted changes:
+Results are commands VISP ran. `stale` runs were on an earlier version and show nothing about this one. Reviewer verdicts are a model's judgment, not a run.
 
-- untracked: acceptance/001-return-two-from-the-public/value.acceptance.mjs
-- modified: src/value.mjs
+## Changed
 
-## Checks
+2 files, +13 −1, from `HEAD` (the current commit) to the working tree.
 
-| Check | Command | Latest result |
-| --- | --- | --- |
-| C001 | `node checks/value.check.mjs` | passed (exit 0, <TIME>) |
-| PINNED_1 | `node acceptance/001-return-two-from-the-public/value.acceptance.mjs` | passed (exit 0, <TIME>) |
+- added `acceptance/001-return-two-from-the-public/value.acceptance.mjs` +12 −0 — VISP's independent tests
+- modified `src/value.mjs` +1 −1 (T001)
 
-## Acceptance tests
+Scope declared: T001 may edit `src/value.mjs`, `checks/value.check.mjs`. Touched outside it: nothing. Edits the hooks refused are not recorded.
 
-Written from the request by gpt-5.6-sol, failed before implementation (exit 1), and pinned as `acceptance/001-return-two-from-the-public/value.acceptance.mjs`.
+## Regressions
 
-| Test | Request text it relies on |
-| --- | --- |
-| value is two | return two |
-| value is odd | return two |
+Not run: `workflow.regressionGate` is off.
 
-Disputed tests (the implementer's reason, then the independent reviewer's ruling):
+## Cost
 
-- value is odd: upheld, waived. Reason: The request says return two; two is even Ruling (gpt-5.6-sol): The request says "return two"; two is even, so a test that wants an odd value contradicts it.
-
-## Intent changes
-
-- <TIME> (visp-tester, method): Pin acceptance tests an independent tester wrote from the original request
-
-## Independent review
-
-- <TIME>: gpt-5.6-sol (fresh context), 1/1 outcomes satisfied
+- Time: <DURATION> from `visp feature` to the last record; checks ran <DURATION> over 6 runs.
+- Model calls: 1 independent review recorded, 1 reviewer call launched by VISP, 1 tester session; worker calls not measured. Models: gpt-5.6-sol.
 
 ## Next
 
 Required product outcomes have current acceptance evidence
 
-Check results come from commands VISP executed. Review judgments are attributed to their reviewer; the actor's own claims are not evidence.
+Detail: `visp pr --full --feature 001-return-two-from-the-public` adds the full handoff document; `--json` gives this record as data; `visp ui` shows it under Evidence; raw records are in `.visp/features/001-return-two-from-the-public/`.
 
 
 --- stderr
