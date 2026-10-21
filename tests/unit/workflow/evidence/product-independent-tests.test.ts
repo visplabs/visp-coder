@@ -759,8 +759,11 @@ it("runs the pinned tests when the last open slice is done", async () => {
   expect(pinned?.status).toBe("failed");
   expect(done.value.closed).toBe(false);
   // The human reviewer sees what the tester relied on and who changed protected intent.
-  const report = await runProductReport(await fixture.workspace.state());
+  const report = await runProductReport(await fixture.workspace.state(), { full: true });
   if (!report.ok) throw new Error(report.error.message);
+  expect(report.value.record?.suites).toContainEqual(
+    expect.objectContaining({ check: "PINNED_1", author: "independent-tester", result: "failed" }),
+  );
   expect(report.value.markdown).toMatch(/## Checks[\s\S]*PINNED_1[\s\S]*failed/);
   expect(report.value.markdown).toMatch(/## Acceptance tests[\s\S]*\| value \| Return two \|/);
   expect(report.value.markdown).toMatch(/## Intent changes[\s\S]*visp-tester/);
@@ -1613,8 +1616,9 @@ writeFileSync(args[args.indexOf("--output-last-message") + 1], JSON.stringify({
   expect(seen.files).not.toContain("config/server.pem");
   expect(seen.files).not.toContain("private/notes.txt");
   expect(seen.env).toBe(true);
-  const report = await runProductReport(await fixture.workspace.state());
+  const report = await runProductReport(await fixture.workspace.state(), { full: true });
   if (!report.ok) throw new Error(report.error.message);
+  expect(report.value.record?.outsideAccess.testerNetworkCommands).toBeGreaterThan(0);
   expect(report.value.markdown).toMatch(
     /## Tester commands with network access[\s\S]*curl -s http:\/\/localhost:8080\/items/,
   );
