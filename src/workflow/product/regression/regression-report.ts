@@ -1,7 +1,38 @@
 import { z } from "zod";
 import type { FileMutation } from "../../../core/file-transaction.js";
 import type { WorkspaceState } from "../../state.js";
-import type { RegressionStatus } from "./regression-failures.js";
+import type { RegressionStatus, RegressionTestVerdict } from "./regression-failures.js";
+
+export interface RegressionGateResult {
+  readonly label: string;
+  readonly command: string;
+  readonly status: RegressionStatus;
+  readonly tests: readonly RegressionTestVerdict[];
+  readonly reason?: string;
+}
+
+/** What the gate ran on the new and the old code, and what it concluded. */
+export interface RegressionGateReport {
+  readonly version: 1;
+  readonly feature: string;
+  readonly subjectDigest: string;
+  readonly key: string;
+  readonly status: "clear" | "regression" | "unchecked";
+  readonly results: readonly RegressionGateResult[];
+  readonly leftOut: readonly string[];
+  readonly durationMs: number;
+}
+
+/** The gate in a `done` or `accept` reply. */
+export interface RegressionGateSummary {
+  readonly mode: "off" | "advise" | "gate";
+  readonly status: RegressionGateReport["status"];
+  readonly ran: readonly string[];
+  readonly regressions?: readonly string[];
+  readonly preExisting?: readonly string[];
+  readonly unchecked?: readonly string[];
+  readonly leftOut?: readonly string[];
+}
 
 const verdictSchema = z
   .object({
@@ -35,10 +66,6 @@ const reportSchema = z
     durationMs: z.number().nonnegative(),
   })
   .strict();
-
-/** What the gate ran on the new and the old code, and what it concluded. */
-export type RegressionGateReport = z.infer<typeof reportSchema>;
-export type RegressionGateResult = RegressionGateReport["results"][number];
 
 const reportPath = (workspace: WorkspaceState, feature: string) =>
   workspace.paths.stateFile(`state/regression-gates/${feature}.json`);
@@ -112,10 +139,11 @@ function linesWith(report: RegressionGateReport, status: RegressionStatus) {
 const bounded = (lines: readonly string[], shown = SHOWN) =>
   lines.length > shown ? [...lines.slice(0, shown), `+${lines.length - shown} more`] : [...lines];
 
-export type RegressionGateSummary = ReturnType<typeof regressionGateSummary>;
-
-/** The gate in a `done` or `accept` reply: what ran and what it found, bounded. */
-function regressionGateSummary(workspace: WorkspaceState, report: RegressionGateReport) {
+/** What ran and what it found, bounded. */
+function regressionGateSummary(
+  workspace: WorkspaceState,
+  report: RegressionGateReport,
+): RegressionGateSummary {
   const regressions = linesWith(report, "regression");
   const preExisting = linesWith(report, "pre-existing");
   const unchecked = linesWith(report, "unchecked");
