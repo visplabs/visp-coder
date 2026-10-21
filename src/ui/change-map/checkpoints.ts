@@ -1,8 +1,8 @@
 import { candidatePath } from "../../workflow/product/candidate.js";
+import type { MapBase, MapEnd } from "../../workflow/product/feature-diff.js";
 import { baselineObjects } from "../../workflow/product/review/review-diff.js";
 import type { ProductRecord } from "../../workflow/product/store.js";
 import type { WorkspaceState } from "../../workflow/state.js";
-import type { MapBase, MapEnd } from "./diff.js";
 
 /** Per changed file: slices whose checkpoint saw it change, and whether it changed after them. */
 export interface FileHistory {

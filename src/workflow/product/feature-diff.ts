@@ -5,7 +5,7 @@ import { ProjectFileSystem } from "../../core/fs.js";
 import { sha256 } from "../../core/hash.js";
 import { privatePath } from "../../core/redaction.js";
 import { err, ok, type Result } from "../../core/result.js";
-import type { UiChangeMap, UiMapFile, UiMapHunk } from "../contract.js";
+import type { UiChangeMap, UiMapFile, UiMapHunk } from "../../ui/contract.js";
 
 /** Read-only git: no pager, optional locks, hooks or fsmonitor, as the other git reads do. */
 const GIT_ENV = { GIT_OPTIONAL_LOCKS: "0", GIT_PAGER: "cat", GIT_TERMINAL_PROMPT: "0" };

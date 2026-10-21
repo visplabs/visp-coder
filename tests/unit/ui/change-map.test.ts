@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { SnapshotIndex } from "../../../src/graph/query/index.js";
 import type { Entity, GraphSnapshot, Relation, UnknownRecord } from "../../../src/graph/types.js";
-import { MAX_HUNK_LINES, parseUnifiedDiff } from "../../../src/ui/change-map/diff.js";
 import { egoGraph } from "../../../src/ui/change-map/graph.js";
 import { readingOrder } from "../../../src/ui/change-map/records.js";
 import type { UiMapEdge, UiMapNode } from "../../../src/ui/contract.js";
+import { MAX_HUNK_LINES, parseUnifiedDiff } from "../../../src/workflow/product/feature-diff.js";
 
 describe("parseUnifiedDiff", () => {
   it("reads modified, added, deleted and binary files", () => {

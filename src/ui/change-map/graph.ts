@@ -5,8 +5,8 @@ import { fileEntityId } from "../../graph/ids.js";
 import { isTestPath } from "../../graph/paths.js";
 import type { SnapshotIndex } from "../../graph/query/index.js";
 import type { Entity, Relation } from "../../graph/types.js";
+import type { ParsedFile } from "../../workflow/product/feature-diff.js";
 import type { UiMapEdge, UiMapRole } from "../contract.js";
-import type { ParsedFile } from "./diff.js";
 
 export const NODE_CAP = 40;
 

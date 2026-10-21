@@ -1,12 +1,17 @@
 import { ok, type Result } from "../../core/result.js";
 import { checkCurrency, openProjectStore } from "../../graph/index.js";
 import { getQueryIndex, type SnapshotIndex } from "../../graph/query/index.js";
+import {
+  featureDiff,
+  resolveBase,
+  resolveEnd,
+  uiFile,
+} from "../../workflow/product/feature-diff.js";
 import { readProductRecord } from "../../workflow/product/store.js";
 import type { WorkspaceState } from "../../workflow/state.js";
 import type { UiChangeMap, UiFeature, UiMapNode } from "../contract.js";
 import { featureView } from "../views.js";
 import { checkpointHistory } from "./checkpoints.js";
-import { featureDiff, resolveBase, resolveEnd, uiFile } from "./diff.js";
 import { egoGraph, NODE_CAP } from "./graph.js";
 import { annotate, readingOrder } from "./records.js";
 
