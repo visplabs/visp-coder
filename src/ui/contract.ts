@@ -297,6 +297,142 @@ export interface UiHealth {
   readonly checks: readonly UiHealthCheck[];
 }
 
+/** One hunk of the feature's diff, with its lines as `git diff` prints them (` `, `+`, `-`). */
+export interface UiMapHunk {
+  readonly oldStart: number;
+  readonly oldLines: number;
+  readonly newStart: number;
+  readonly newLines: number;
+  readonly header: string;
+  readonly lines: readonly string[];
+  /** Lines left out of `lines` at the shown-lines limit. */
+  readonly omittedLines: number;
+}
+
+export interface UiMapFile {
+  readonly path: string;
+  readonly status: "added" | "modified" | "deleted";
+  readonly added: number;
+  readonly removed: number;
+  readonly binary: boolean;
+  readonly hunks: readonly UiMapHunk[];
+}
+
+/** Why a slice is linked to a change: its scope names the file, or its checkpoint saw it change. */
+export interface UiMapSliceLink {
+  readonly id: string;
+  readonly via: "scope" | "checkpoint";
+}
+
+export interface UiMapCheckLink {
+  readonly id: string;
+  /** `declared`: the check's files name the path; `test-command`: it runs a test the graph links. */
+  readonly via: "declared" | "test-command";
+  readonly status: ExecutionStatus | "not-run";
+  /** False when the latest run is out of date; it then never counts as a pass. */
+  readonly current: boolean;
+  readonly execution?: string;
+}
+
+export interface UiMapFindingLink {
+  readonly id: string;
+  readonly required: boolean;
+  readonly problem: string;
+  /**
+   * The finding's text names this file, a line inside this node, or this declaration as a call
+   * (`name(`). A text match, not a record.
+   */
+  readonly via: "names-file" | "names-line" | "names-symbol";
+}
+
+export type UiMapRole = "changed" | "caller" | "callee" | "test";
+
+export interface UiMapNode {
+  /** The graph entity id; a file is `<path>#file`, as in the index, even when the index lacks it. */
+  readonly id: string;
+  readonly path: string;
+  readonly name: string;
+  readonly kind: string;
+  readonly role: UiMapRole;
+  /** Hops from the nearest changed node; 0 for changed nodes. */
+  readonly distance: number;
+  readonly startLine?: number;
+  readonly endLine?: number;
+  /** The directory the page groups the node under. */
+  readonly module: string;
+  /** For changed nodes: which hunks of the file fall inside, and the lines they add and remove. */
+  readonly change?: {
+    readonly hunks: readonly number[];
+    readonly added: number;
+    readonly removed: number;
+    /** Digest of those hunks, so a reviewed tick can tell when the code changed after it. */
+    readonly digest: string;
+  };
+  readonly slices: readonly UiMapSliceLink[];
+  readonly outcomes: readonly string[];
+  readonly checks: readonly UiMapCheckLink[];
+  readonly findings: readonly UiMapFindingLink[];
+  /** Changed, with no test in the graph and no check covering it. */
+  readonly untested: boolean;
+  /** Unresolved calls elsewhere whose text ends with this name, as `path: call text`. */
+  readonly unseenCallers: readonly string[];
+  readonly dynamicImports: number;
+  /** The file changed after the index was built, so the line range may be off. */
+  readonly indexBehind: boolean;
+  /** Changed after the last slice checkpoint recorded it. */
+  readonly afterCheckpoints: boolean;
+  /** False for changed nodes past the node cap: listed in the reading order, not drawn. */
+  readonly drawn: boolean;
+}
+
+export interface UiMapEdge {
+  readonly source: string;
+  readonly target: string;
+  readonly kind: "calls" | "tested_by" | "possible-call";
+  /** True only for relations the index resolved. Everything else is drawn dashed. */
+  readonly resolved: boolean;
+  /** Where the relation is written, as `path:line`, when known. */
+  readonly at?: string;
+}
+
+export interface UiMapSlice {
+  readonly id: string;
+  readonly goal: string;
+  readonly status: UiSlice["status"];
+  readonly outcomes: readonly string[];
+  readonly checkpoint: boolean;
+}
+
+export interface UiChangeMap {
+  readonly feature: string;
+  readonly base: {
+    readonly ref: string;
+    readonly commit?: string;
+    readonly how: "explicit" | "feature-start" | "head" | "empty-tree";
+  };
+  readonly end: { readonly how: "working-tree" | "feature-end"; readonly commit?: string };
+  readonly graph: {
+    readonly state: "current" | "divergent" | "unverified" | "missing";
+    readonly note?: string;
+  };
+  readonly files: readonly UiMapFile[];
+  readonly nodes: readonly UiMapNode[];
+  readonly edges: readonly UiMapEdge[];
+  /** Changed node ids in the suggested reading order, including ones not drawn. */
+  readonly readingOrder: readonly string[];
+  readonly slices: readonly UiMapSlice[];
+  readonly omitted: {
+    /** Changed nodes not drawn at the node cap; they stay in the reading order. */
+    readonly changedNodes: number;
+    readonly neighbours: number;
+    readonly files: number;
+    /** Changed files left out as VISP state, secrets or blocked paths. */
+    readonly hiddenFiles: number;
+  };
+  readonly notes: readonly string[];
+  readonly readAt: string;
+}
+
 /** The server's live-update message. The page re-fetches what it names. */
 export interface UiChange {
   readonly revision: number;
