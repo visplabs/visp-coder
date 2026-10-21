@@ -121,7 +121,7 @@ Authorizations record the Git commit at `work`. Incoming committed changes whose
 
 **`visp work [--task <id>]`** selects the next ready slice (or the named one), checks that it has an outcome, a bounded scope and runnable checks, and authorizes edits in its scope. It returns the objective, scope, relevant outcomes and findings, and source excerpts, trimmed to `context.tokenBudget`. `--inspect` reads the same context without authorizing, probing the environment or refreshing the graph. For slices with browser checks, `work` first confirms an isolated browser can start and capture; `--retry-environment` retries after the host environment is fixed.
 
-**Independent acceptance tests.** With `critic.launch: codex-exec` and `critic.harness: codex` (or `claude-exec` and `claude-code`), `visp feature` starts an independent tester on a new project that writes tests from the original request. VISP keeps them only if they fail against a private launch-time source copy and pins them whenever the tester finishes, even if the worker has since edited the product; `work` does not wait and reports them as `independentTests`. Ambiguous request rules are recorded separately from tests and arrive as default advice with the conventional reading: use it unless the request, a pinned test or an explicit user decision says otherwise, report such a conflict instead of overriding it, and record the choice in the implementation, tests or documentation. Reviewers receive the same readings as advice. See [the critic guide](critic.md#independent-acceptance-tests).
+**Independent acceptance tests.** With `critic.launch: codex-exec` and `critic.harness: codex` (or `claude-exec` and `claude-code`), `visp feature` of a feature with the [full profile](#profiles) starts an independent tester on a new project that writes tests from the original request. VISP keeps them only if they fail against a private launch-time source copy and pins them whenever the tester finishes, even if the worker has since edited the product; `work` does not wait and reports them as `independentTests`. Ambiguous request rules are recorded separately from tests and arrive as default advice with the conventional reading: use it unless the request, a pinned test or an explicit user decision says otherwise, report such a conflict instead of overriding it, and record the choice in the implementation, tests or documentation. Reviewers receive the same readings as advice. See [the critic guide](critic.md#independent-acceptance-tests).
 
 **Light path.** `visp work --check "<test command>"` on a feature without slices creates one slice covering the whole request (scope `**`, the command as its check) and authorizes it; on a slice without checks it declares that check. Use a full brief only for several independently usable parts.
 
@@ -152,17 +152,58 @@ Environment failures (a missing browser, or denied process, filesystem or socket
 
 After a failure, `work` includes the failing output and says whether it describes the current version. Repeated identical failures ask for a different hypothesis.
 
-## Lean mode
+## Profiles
 
-Three experimental `workflow` switches, off by default, aim to cut ceremony where the worker is already strong. They are not yet measured against the default; `bench/` holds the comparison.
+`workflow.profile` chooses how much independent checking a feature gets. `lean` is the default; `full` is the independent loop VISP ran before, kept for weak workers and hard tasks. With a Claude Haiku 5.5 worker the full loop cost 9–12 times a bare run and raised no score: bare runs passed about 100% of the hidden checks, the reviewer was 60–90% of VISP's cost, VISP commands took 43% of worker turns, slice planning had no measured effect, and review rounds 3 and later almost never changed a score.
 
-- **`draftFirst: visual`.** For a picture request, `visp feature` names `visp work` as the next step, and bare `visp work` authorizes one slice covering the whole request (scope `**`) with no check. `next` tells the worker to draft the whole picture in one pass, then declare the command that renders or checks it with `visp work --check "<command>"` and run `visp done`, where review starts. The authorization keeps its pre-draft baseline, so the draft is the slice's own change. A request counts as a picture when it names an SVG, PNG, pixel or voxel art, an image, illustration, drawing, painting, poster, logo, icon, sprite, artwork, isometric view or scene, and names no game, app, website, server, API, endpoint, CLI, library, engine, repository, database, form, dashboard, plugin or extension.
-- **`reviewCadence: feature`.** Only the slice that completes the feature starts VISP's reviewer; earlier slices close on their checks, and their outcomes are assessed by that whole-feature review. A middle slice with an open required finding or a pending dispute is still reviewed. After two product reviews, another review runs only while a required finding is open; otherwise `visp next` hands off to `visp pr` as it does for a spent budget.
-- **`requestGaps: required`.** The reviewer is told to list what the request names and to begin a finding about a named thing that is missing, broken or unrecognizable with "Request gap:". VISP makes every such finding required, whatever the reviewer's flag. The `done` and `accept` replies list only required findings; the rest arrive under `critic.notes` with advice not to edit for them, and the feedback plan leaves them out.
+| | `lean` (default) | `full` |
+| --- | --- | --- |
+| Slices | One slice for the whole request (`visp work --check`), unless the user asks for parts | Any number, planned in the brief |
+| Picture requests | Drafted whole before any check (`draftFirst: visual`) | Check first |
+| Review | One review when the feature is done (`reviewCadence: feature`), by `critic.leanModel` | Each slice, by `critic.model` |
+| Review rounds | At most two; the second only while a required finding is open | Up to `critic.maxCalls` |
+| Reviewer findings | Gaps against the request are required; the rest are notes (`requestGaps: required`) | The reviewer's own labels |
+| Independent tester | None on a new project | On a new project |
+| Regression gate | `advise` | `advise` |
+
+Both profiles keep the verbatim request capture, project rules, earlier-request recall, declared scope with hook enforcement, and the requirement listing below. A switch set in `visp.yml` (`draftFirst`, `reviewCadence`, `requestGaps`) wins over the profile.
+
+**The lean reviewer.** Under `critic.harness: claude-code` a lean feature is reviewed by `claude-haiku-5-5` unless `critic.leanModel` names another; other hosts use `critic.model`. In the October critic ablation (picture tasks, five runs per arm) a Haiku 5.5 reviewer scored 7.53 against Sonnet's 7.60, within noise, at about a third of the cost per run ($0.13 against $0.37). The host's own review was not chosen: it spends the worker's tokens, VISP cannot bound or observe it, and in September weak workers skipped the handoff. The reviewer is pinned when the feature starts.
+
+**Escalation to `full`.** A feature runs the full profile when any of these holds; the reply says which:
+
+- `workflow.profile: full`;
+- `workflow.worker: weak`;
+- the request lists more than 20 requirements (the largest current benchmark request lists 16);
+- one check has failed on two different versions of the product (a rerun of the same version does not count);
+- `visp done` found the slice's change touching more than 15 files or more than 4 top-level directories (the repository root counts as one). This one is recorded in the feature's product state and stays.
+
+The first three are known at `visp feature`, so such a feature also gets the tester and `critic.model`. The last two arise mid-feature: from then on the feature is reviewed per slice, with the full budget and the reviewer's own labels, by the reviewer pinned at the start. A tester started after the work is written would keep no test that fails against it, so none is started then.
+
+**Scope.** The resident instructions declare the scope: change only what the request needs, inside the scope `visp work` authorized, and do not push, install packages, or delete or rewrite files the request does not need. The edit hooks enforce the authorized scope and `workflow.blockedPaths`. In OverEager-Bench, declaring scope took Claude Code's out-of-scope actions from 17.1% of runs to 0.0%.
+
+### Requirement listing
+
+The main failure left for strong workers is undershooting: of several parallel requirements, one ships and the rest are dropped (DeepSWE; ChainSWE workers resolved 66% of issues at their step). VISP lists the request's requirements at `visp feature`, without a model:
+
+- each item of a bulleted or numbered list, nested items too, with prose next to a list kept only when it instructs or states a constraint ("Use only the standard library", "without changing any existing behavior");
+- each sentence of a request with no list;
+- one requirement per parallel branch an item names: every HTTP endpoint (`GET /v1/items/<id>`), sync and async variants, and "both X and Y".
+
+When there are two or more, the `feature` reply lists them as `R001`, `R002`, and so on, and the slice that completes the feature closes only once each is accounted for. `visp done` (and `visp accept`) takes the accounts:
+
+```sh
+visp done --account "R001=C001 test_bundle_conflict" "R002=not done: the request's paging needs a schema change"
+```
+
+- `R001=<check id> [test name]`: done, shown by that check. The account holds only while the check's latest run passed.
+- `"R001=not done: <reason>"`: not done, and why.
+
+An unaccounted requirement, or one citing a check that has not passed, is an evidence gap that `done`, `next` and `accept` name. Accounts are kept in `.visp/features/<id>/requirements.json`; a later account of the same requirement replaces the earlier one. The `done` reply lists where each requirement stands. MCP `visp_done` and `visp_accept` take the same entries as `account`.
 
 ## Regression gate
 
-`workflow.regressionGate` (experimental, default `off`) runs earlier tests at `visp done` and `visp accept`, after the call's own checks pass.
+`workflow.regressionGate` (default `advise`) runs earlier tests at `visp done` and `visp accept`, after the call's own checks pass. Set `off` to run nothing.
 
 - **What runs.** In order, up to 12 commands:
   - existing tests linked to a changed file: by the repository index (the tests that import it first, then tests of its importers, up to three steps away; `from package import module` counts), or by convention (a test that names the module's import path or file name, as `call_command("createsuperuser")` does, is named after it, as `test_<module>.py`, or sits in its app's test directory, as `tests/auth_tests/test_management.py` for `django/contrib/auth/management/`);

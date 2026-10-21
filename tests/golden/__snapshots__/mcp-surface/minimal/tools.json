@@ -790,6 +790,13 @@
         "reason": {
           "type": "string",
           "description": "With dispute: quote the request sentence the test contradicts, and why"
+        },
+        "account": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Account for each requirement the request states: \"R001=<passing check id> [test name]\" or \"R001=not done: <reason>\""
         }
       },
       "additionalProperties": false,
@@ -830,6 +837,13 @@
         "reason": {
           "type": "string",
           "description": "With dispute: quote the request sentence the test contradicts, and why"
+        },
+        "account": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Account for each requirement the request states: \"R001=<passing check id> [test name]\" or \"R001=not done: <reason>\""
         }
       },
       "additionalProperties": false,

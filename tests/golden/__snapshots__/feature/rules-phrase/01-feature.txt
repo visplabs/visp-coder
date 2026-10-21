@@ -1,6 +1,10 @@
 $ visp feature 'Return two from the public value module'
 --- stdout
-feature: {"feature":"001-return-two-from-the-public","incomplete":false,"outcomes":[],"examples":[],"checks":[],"slices":[]}
+feature: {"feature":"001-return-two-from-the-public","incomplete":false,"outcomes":[],"examples":[],"checks":[],"slices":[],"profile":{"name":"lean"}}
+Note: The request states 2 requirements (R001–R002), parallel branches listed separately. Deliver every one. The visp done that completes the feature asks for an account of each: --account R001=<passing check id> [test name], or --account "R001=not done: <reason>".
+Requirements:
+- R001: From now on, never log request bodies.
+- R002: Make the public value module return two instead of one.
 Project rules the user stated for all later work on this project (they apply here too; only where a specific statement in the current request conflicts with a project rule for the same case does that statement take precedence, and only for the conflicting requirement; all compatible rules and rules about cases the request does not address still apply):
 R-<HEX-1> From now on, never log request bodies.
 Next: visp work --feature 001-return-two-from-the-public --check "<command that runs your tests>" works the whole request as one slice. Only for several independently usable parts, plan slices: visp brief --template --feature 001-return-two-from-the-public

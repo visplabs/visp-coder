@@ -227,11 +227,13 @@ First: `visp feature "<goal>" --source-brief - <<'REQUEST'` (request, then REQUE
 Loop: `visp work` → implement → `visp done` → `visp next`. Run `visp accept` only when `visp next` directs it.
 
 - Keep request with --source-brief; preserve outcomes, expectations and scope.allowed.
+- Scope: change only what the request needs, inside the scope visp work authorizes; hooks refuse edits outside it. Do not push, install packages, or delete or rewrite files the request does not need.
 - Before editing run visp work; build runnable behavior. Functional outcomes need tests or kind:"browser-journey" with real input. Browser journeys must not mutate VISP state. Source strings and screenshots alone do not prove behavior.
 - Stateful: act, settle, repeat; test failure/restart.
 - If the request has a UI, show status, counts, errors as word-labeled text (`Score: 1500`, `Stone: 2`), not only canvas/icons.
 - Image-file result (render, chart, SVG): give its brief check `images: [out.png]` (a PNG or SVG it writes; keep the requested format too) and an experience outcome naming what the picture must show.
 - UI previews (aim line, predicted path): use the real action's function and start point; check with real input. Do not delete or shrink requested content to pass a check.
+- visp feature lists the request's requirements (R001…). Deliver each, including every parallel branch; the done that completes the feature takes --account R001=<passing check id> per requirement, or "R001=not done: <reason>".
 - If visp done runs VISP's reviewer, run or delegate no review; visp next waits. Fix findings, rerun done. Run visp critic/review only when visp next prints it.
 - Run feature/done/verify/accept/next with the host's maximum shell timeout. Leave feature running; background it on blocking hosts. At its id, run visp work; never rerun feature; after kill/error recover by id.
 - Sandbox denied? Rerun with escalation.
@@ -362,6 +364,8 @@ workflow:
     - .git
   validationCommands: []
   flipCheck: auto
+  profile: lean
+  worker: strong
 graph:
   languages:
     - typescript

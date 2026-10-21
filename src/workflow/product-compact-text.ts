@@ -289,6 +289,8 @@ function compactVerificationText(
         : undefined,
     checks: rows(data.executions).map(executionSummary),
     regressionGate: data.regressionGate,
+    profile: data.profile,
+    requirements: data.requirements,
     flipExtraMs: data.flipDurationMs,
     unresolved,
     gaps: closureGaps(data.gaps, unresolved),
@@ -368,12 +370,13 @@ function compactBriefText(name: string, value: unknown, channel: ReplyChannel = 
     branchCreated: data.branchCreated,
     branchWarning: data.branchWarning,
     redactionNotice: data.redactionNotice,
+    profile: data.profile,
   };
   const warning = [data.hostHooksWarning, data.inheritedChangesNote]
     .filter((text): text is string => typeof text === "string")
     .map((text) => `\nWarning: ${text}`)
     .join("");
-  const notes = [data.duplicateNote, data.testsNote, data.draftNote]
+  const notes = [data.duplicateNote, data.testsNote, data.requirementsNote, data.draftNote]
     .filter((text): text is string => typeof text === "string")
     .map((text) => `\nNote: ${text}`)
     .join("");
@@ -388,7 +391,17 @@ function compactBriefText(name: string, value: unknown, channel: ReplyChannel = 
         : name.endsWith("feature")
           ? wording.template(feature)
           : wording.next(feature);
-  return `${name}: ${JSON.stringify(summary)}${warning}${notes}${rulesText(data.projectRules)}${memoryText(data.projectMemory, data.projectMemoryLaterChanges)}\nNext: ${next}\nRead the full brief with ${wording.readBrief(feature)}.`;
+  return `${name}: ${JSON.stringify(summary)}${warning}${notes}${requirementsText(data.requirements)}${rulesText(data.projectRules)}${memoryText(data.projectMemory, data.projectMemoryLaterChanges)}\nNext: ${next}\nRead the full brief with ${wording.readBrief(feature)}.`;
+}
+
+/** Every listed requirement, one per line: the worker accounts for each by its ID. */
+function requirementsText(requirements: unknown): string {
+  if (!Array.isArray(requirements) || !requirements.length) return "";
+  const lines = requirements.map((entry) => {
+    const text = String(entry);
+    return `\n- ${text.length > 240 ? `${text.slice(0, 239)}…` : text}`;
+  });
+  return `\nRequirements:${lines.join("")}`;
 }
 
 function rows(value: unknown): Record<string, unknown>[] {

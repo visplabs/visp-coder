@@ -6,6 +6,7 @@ import { err, ok, type Result } from "../../../core/result.js";
 import { cliCommand } from "../../next-action.js";
 import type { WorkspaceState } from "../../state.js";
 import { finalProductAssessmentGaps, productEvidenceGaps } from "../assessment.js";
+import { profileSettings } from "../profile.js";
 import { independentJudgments, independentReviewSchema } from "../review/independent-review.js";
 import { deliveredReviewEvidenceIds } from "../review/review-context.js";
 import {
@@ -72,7 +73,7 @@ export async function finishReview(
         response,
         false,
         adapterCompletionTime(request, pending, adapterReturnedAt),
-        workspace.config.workflow.requestGaps === "required",
+        profileSettings(workspace, selected.value.record).requestGaps === "required",
       );
   const { result, current, message } = await applyValidatedReview(
     workspace,

@@ -132,6 +132,10 @@
         }
       }
     ],
+    "profile": {
+      "name": "full",
+      "reason": "workflow.profile is full"
+    },
     "outcomes": [
       {
         "id": "O001",

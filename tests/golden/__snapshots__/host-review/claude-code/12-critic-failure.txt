@@ -1,94 +1,16 @@
-$ visp critic --attempt <UUID-1> --failure 'The host refused to delegate the review'
+$ visp critic --attempt missing --failure 'The host refused to delegate the review'
 --- stdout
-{
-  "enabled": true,
-  "phase": "product",
-  "model": "claude-sonnet-5",
-  "reasoningEffort": "high",
-  "transport": "native",
-  "config": {
-    "model": "claude-sonnet-5",
-    "reasoningEffort": "high",
-    "transport": "native",
-    "harness": "claude-code",
-    "maxCalls": 3,
-    "timeoutMs": 180000,
-    "maxImageBytes": 4194304
-  },
-  "callsUsed": 1,
-  "lifecycle": {
-    "configured": true,
-    "reserved": true,
-    "failureKind": "invocation-failed",
-    "invocationClaimed": false,
-    "invoked": null,
-    "invocationNote": "A persisted claim prevents replay. Adapter call timing measures the host method, not provider startup or billing. Interrupted or failed transport may leave actual model invocation unknown; do not retry automatically.",
-    "returned": false,
-    "acceptedReview": false,
-    "provenance": "host-reported",
-    "status": "invocation-failed"
-  },
-  "recovery": {
-    "after": "<UUID-1>",
-    "failureKind": "invocation-failed",
-    "previousFailure": "The host refused to delegate the review",
-    "invocation": "possibly-invoked",
-    "provenance": "host-reported",
-    "availableWithinBudget": true,
-    "command": "visp critic --feature 001-return-two-from-the-public --task T001 --phase product --preflight --retry-after <UUID-1> --reason \"<resolved blocker and authorization for a fresh attempt>\" --capabilities <project-file>",
-    "guidance": "Use authorization already supplied in this task; do not request it again for the same scope. Confirm the blocker is resolved and the host permits a fresh call. Retry preflight is read-only; use the same retry-after/reason with prepare or an attached adapter's dispatch. The old attempt remains spent. A possibly invoked call may have incurred cost; never retry it automatically. Reuse unchanged evidence; worker approval cannot resolve a missing critic."
-  },
-  "callsRemaining": 2,
-  "reviewCapacity": {
-    "limit": 3,
-    "understandingCalls": 0,
-    "productCalls": 1,
-    "remainingCalls": 2,
-    "reservableCalls": 2,
-    "canReviewAndRecheck": true,
-    "guidance": "Design consultation, product review and a fresh repair review each consume a call. A two-call limit cannot cover all three. Source changes need fresh product evidence. If critic capacity is exhausted, continue baseline host review and disclose the independent-review limitation. Budgets never increase automatically."
-  },
-  "assessmentCurrent": false,
-  "sourceOnly": false,
-  "stopped": "Previous critic attempt unavailable: The host refused to delegate the review. No new invocation was attempted. Inspect critic recovery when useful; otherwise continue baseline host review and disclose this independent-review limitation.",
-  "subjectDigest": "<SHA256-1>",
-  "candidates": [
-    {
-      "id": "<CAN-1>",
-      "path": "<PROJECT>/.visp/features/001-return-two-from-the-public/candidates/<CAN-1>.json",
-      "subject": "<SHA256-1>",
-      "status": "unavailable",
-      "phase": "product"
-    }
-  ],
-  "next": "unresolved",
-  "gaps": [],
-  "comparisons": [],
-  "findings": [],
-  "limitation": "Critic judgments are advisory evidence, not automatic acceptance or proof of the best candidate.",
-  "selectionCallsUsed": 1,
-  "featureBudget": {
-    "scope": "feature",
-    "limit": 3,
-    "callsUsed": 1,
-    "callsRemaining": 2,
-    "reservableCalls": 2,
-    "reservedMs": 180000,
-    "remainingMs": 900000,
-    "maxReservedMs": 1080000,
-    "understandingCalls": 0,
-    "productCalls": 1,
-    "accounting": "Full timeout reserved per attempt, including uncertain or interrupted calls; unavailable VISP attempts without a response spend time only; not measured provider time or cost"
-  },
-  "hasObservedProduct": true,
-  "renderedEvidence": {
-    "relevant": false,
-    "recorded": false
-  },
-  "action": "unresolved",
-  "reason": "The host refused to delegate the review"
-}
 
 --- stderr
+Error: [
+  {
+    "validation": "uuid",
+    "code": "invalid_string",
+    "message": "Invalid uuid",
+    "path": [
+      "attempt"
+    ]
+  }
+]
 
---- exit 0
+--- exit 1

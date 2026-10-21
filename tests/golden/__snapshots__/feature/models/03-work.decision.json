@@ -5,7 +5,7 @@
     "command": "visp done --feature 002-return-two-from-the-public --task T001",
     "mayEdit": true,
     "task": "T001",
-    "evidence": 2
+    "evidence": 3
   },
   "product": {
     "status": "active",

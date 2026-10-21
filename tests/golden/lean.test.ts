@@ -3,14 +3,12 @@ import { DECLINED_TESTER, FakeModels, testerSuite } from "./support/fake-models.
 import { BRIEF, CLAUDE, GOAL, GoldenProject, REQUEST, Recorder } from "./support/project.js";
 
 /**
- * Lean mode: a picture request is drafted before any check (`workflow.draftFirst`), the
- * reviewer tags gaps against the request and VISP makes them required while other findings
- * become notes (`workflow.requestGaps`), and only the completing slice is reviewed
- * (`workflow.reviewCadence`).
+ * The default lean profile: a picture request is drafted before any check, the reviewer tags
+ * gaps against the request and VISP makes them required while other findings become notes, and
+ * only the completing slice is reviewed, by the cheaper lean reviewer.
  */
 vi.mock("node:dns/promises", () => ({ lookup: async () => ({ address: "127.0.0.1", family: 4 }) }));
 const models = FakeModels.install();
-const LEAN = { draftFirst: "visual", reviewCadence: "feature", requestGaps: "required" };
 const PICTURE = "Create an SVG of a PS5 controller in controller.svg.";
 const PICTURE_CHECK = {
   "checks/picture.check.mjs":
@@ -24,7 +22,7 @@ afterEach(async () => {
 });
 
 it("drafts a picture first, then reviews it with request gaps required", async () => {
-  project = await GoldenProject.create({ ...CLAUDE, workflow: LEAN, files: PICTURE_CHECK });
+  project = await GoldenProject.create({ ...CLAUDE, files: PICTURE_CHECK });
   await models.plan({
     tester: DECLINED_TESTER,
     reviews: ["failed", "satisfied"],
@@ -64,7 +62,7 @@ it("drafts a picture first, then reviews it with request gaps required", async (
 it("names a drafted picture VISP could not render, rather than sending no image", async () => {
   vi.stubEnv("CHROME_BIN", "/missing/chrome");
   try {
-    project = await GoldenProject.create({ ...CLAUDE, workflow: LEAN, files: PICTURE_CHECK });
+    project = await GoldenProject.create({ ...CLAUDE, files: PICTURE_CHECK });
     await models.plan({ tester: DECLINED_TESTER, reviews: ["satisfied"] });
     const run = new Recorder(project, "lean/picture-unrendered");
     await run.cli("01-feature", ["feature", "Draw a PS5 controller", "--source-brief", PICTURE]);
@@ -85,7 +83,7 @@ it("names a drafted picture VISP could not render, rather than sending no image"
 it("reviews only the slice that completes the feature", async () => {
   const [check] = BRIEF.checks;
   const [slice] = BRIEF.slices;
-  project = await GoldenProject.create({ ...CLAUDE, workflow: LEAN });
+  project = await GoldenProject.create(CLAUDE);
   await models.plan({
     tester: testerSuite([["value is two", "value === 2"]]),
     reviews: ["satisfied"],
@@ -109,5 +107,29 @@ it("reviews only the slice that completes the feature", async () => {
   await project.workspace.write("src/value.mjs", "export const value = 2; // kept\n");
   await run.cli("05-done-completing-slice", ["done"]);
   await run.models("05-done-completing-slice", models);
+  await run.cli("06-next", ["next"]);
+});
+
+it("lists the request's requirements and closes once each is accounted for", async () => {
+  project = await GoldenProject.create(CLAUDE);
+  await models.plan({ reviews: ["satisfied"] });
+  const run = new Recorder(project, "lean/requirements");
+  const request = [
+    "Change the public value module:",
+    "- `value` returns two instead of one.",
+    '- Add a `label` export that is "two".',
+  ].join("\n");
+  await run.cli("01-feature", ["feature", GOAL, "--source-brief", request]);
+  await run.cli("02-work", ["work", "--check", "node checks/value.check.mjs"]);
+  await project.setValue(2);
+  await run.cli("03-done-unaccounted", ["done"]);
+  await run.models("03-done-unaccounted", models);
+  await run.cli("04-next", ["next"]);
+  await run.cli("05-done-accounted", [
+    "done",
+    "--account",
+    "R001=C001 value is two",
+    "R002=not done: the label export is left for a later request",
+  ]);
   await run.cli("06-next", ["next"]);
 });

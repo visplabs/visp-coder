@@ -27,6 +27,14 @@
       "acceptanceBaseline": [],
       "branch": "main"
     },
+    "profile": {
+      "name": "lean"
+    },
+    "requirements": [
+      "R001: From now on, never log request bodies.",
+      "R002: Make the public value module return two instead of one."
+    ],
+    "requirementsNote": "The request states 2 requirements (R001–R002), parallel branches listed separately. Deliver every one. The visp done that completes the feature asks for an account of each: --account R001=<passing check id> [test name], or --account \"R001=not done: <reason>\".",
     "projectRules": [
       {
         "id": "R-<HEX-1>",

@@ -2,17 +2,25 @@
   "tool": "visp_next",
   "ok": true,
   "data": {
-    "action": "wait",
     "feature": "001-return-two-from-the-public",
-    "objective": "Independent review is still running. Run the command again to wait for its findings; editing pauses until it returns.",
-    "command": "visp next --feature 001-return-two-from-the-public",
-    "evidence": [],
-    "mayEdit": false
+    "action": "refine",
+    "objective": "Review the assembled product against every mandatory outcome and retained expectation",
+    "command": "visp review --handoff --feature 001-return-two-from-the-public",
+    "evidence": [
+      "O001: final goal assessment unassessed; review the current product against the original request"
+    ],
+    "mayEdit": false,
+    "criticAdvice": {
+      "status": "suggested",
+      "command": "visp critic --feature 001-return-two-from-the-public --preflight",
+      "guidance": "Ask the independent critic for useful feedback on this candidate. If unavailable, use the baseline host review of actual behavior and images; disclose the missing independent review."
+    }
   },
-  "nextCommand": "visp_next {\"feature\":\"001-return-two-from-the-public\"}",
+  "nextCommand": "visp_review {\"handoff\":true,\"feature\":\"001-return-two-from-the-public\"}",
   "nextAction": {
-    "tool": "visp_next",
+    "tool": "visp_review",
     "arguments": {
+      "handoff": true,
       "feature": "001-return-two-from-the-public"
     }
   }

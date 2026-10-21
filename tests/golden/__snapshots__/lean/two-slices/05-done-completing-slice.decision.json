@@ -15,17 +15,12 @@
     "executions": [
       "C001/T001: passed",
       "C001: passed",
-      "C002/T002: passed",
-      "PINNED_1: passed"
+      "C002/T002: passed"
     ],
     "reviews": 1,
     "openFindings": {
       "required": 0,
       "advisory": 0
     }
-  },
-  "independentTests": {
-    "status": "pinned",
-    "disputes": []
   }
 }

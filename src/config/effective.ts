@@ -77,12 +77,15 @@ const operationNotes: Readonly<Record<string, string>> = {
   "workflow.blockedPaths": "Blocks matching paths in product scope and source access.",
   "workflow.validationCommands":
     "Runs configured project checks during product verification; results are evidence, not review judgments.",
+  "workflow.profile":
+    "lean runs one review at the end by critic.leanModel and no tester on a new project; full runs the independent loop. A lean feature moves to full when a check fails on two versions, the change is large or the request lists many requirements.",
+  "workflow.worker": "weak runs every feature with the full profile.",
   "workflow.draftFirst":
-    "Lean mode: visual authorizes a picture request as one slice at visp work, before any check, so the whole picture is drafted first.",
+    "visual authorizes a picture request as one slice at visp work, before any check, so the whole picture is drafted first. Unset follows the feature's profile.",
   "workflow.reviewCadence":
-    "Lean mode: feature reviews only the slice that completes the feature and stops after two reviews unless required findings remain.",
+    "feature reviews only the slice that completes the feature, at most twice, the second time only while a required finding is open. Unset follows the feature's profile.",
   "workflow.requestGaps":
-    "Lean mode: required makes reviewer findings tagged as gaps against the request required and shows other findings as notes.",
+    "required makes reviewer findings tagged as gaps against the request required and shows other findings as notes. Unset follows the feature's profile.",
   "workflow.regressionGate":
     "At done and accept, advise runs the existing tests the change reaches and earlier work's checks, comparing failures with the old code; gate also blocks on a test that passed before and fails now.",
   "graph.languages":

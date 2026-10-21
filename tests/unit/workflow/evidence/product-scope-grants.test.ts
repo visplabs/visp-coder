@@ -125,7 +125,7 @@ it("applies relaxed allowed-file policy without losing hard blocked paths", asyn
   const relaxed = { ...state, policy: { ...state.policy, strictness: "relaxed" as const } };
   expect(await checkProductScope(relaxed, record.value, slice)).toEqual({
     ok: true,
-    value: { committedChanges: [] },
+    value: { committedChanges: [], changed: ["notes/extra.md"] },
   });
   await project.write(".env", "SECRET=still-protected\n");
   expect(await checkProductScope(relaxed, record.value, slice)).toMatchObject({

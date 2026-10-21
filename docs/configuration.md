@@ -14,6 +14,7 @@ critic:                     # see docs/critic.md
   # launch: codex-exec
   # webSearch: true        # reviewer web search, every query logged (codex-exec only)
   # existingCodeTests: true # experimental: independent tester on existing codebases
+  # leanModel: claude-haiku-5-5 # reviewer of lean features (claude-code default)
   # mode: auto
 
 workflow:
@@ -24,11 +25,13 @@ workflow:
   validationCommands: []    # for example: - pnpm test
   acceptanceChecks: []
   flipCheck: auto           # off | auto | on; see workflow.flipCheck below
-  # Lean mode (experimental, not yet measured; see docs/workflow.md#lean-mode):
-  # draftFirst: off         # off | visual
-  # reviewCadence: slice    # slice | feature
-  # requestGaps: reviewer   # reviewer | required
-  # regressionGate: off     # off | advise | gate (experimental; see docs/workflow.md#regression-gate)
+  profile: lean             # lean | full; see docs/workflow.md#profiles
+  worker: strong            # strong | weak (weak runs every feature with the full profile)
+  regressionGate: advise    # off | advise | gate; see docs/workflow.md#regression-gate
+  # Set to override the profile (unset: lean uses the first value, full the second):
+  # draftFirst: visual      # visual | off
+  # reviewCadence: feature  # feature | slice
+  # requestGaps: required   # required | reviewer
 
 graph:
   languages: [typescript, javascript, python]
@@ -54,6 +57,7 @@ telemetry:
 | `profile` | How much always-resident text is installed. `minimal` installs a short guide and the core MCP tools (every other capability stays available as a CLI command); `standard` installs the full guide and all MCP tools. Rerun `visp install` after changing it. |
 | `critic` | Reviewer host, launch mode (`host`, `codex-exec`, `claude-exec`), feedback mode, model and budgets. See [the critic guide](critic.md). |
 | `critic.webSearch` | With `launch: codex-exec`, lets the reviewer search the web for public documentation; every query is logged and listed by `visp pr`. |
+| `critic.leanModel` | The reviewer model of a lean feature, pinned when the feature starts. Unset: `claude-haiku-5-5` under `critic.harness: claude-code`; other hosts use `critic.model`. `critic.model` reviews full features. |
 | `critic.existingCodeTests` | Experimental. With `launch: codex-exec`, also runs the independent tester on existing codebases, in a disposable copy with network access. See [the critic guide](critic.md#independent-acceptance-tests). |
 | `workflow.strictness` | Default rule strictness until a policy is recorded; afterwards use `visp policy set-strictness <mode>`. `locked` is `strict` with overrides refused. |
 | `workflow.reviewMode` | `observation-preview` is an opt-in review mode; see [product review](product-review.md). |
@@ -62,10 +66,12 @@ telemetry:
 | `workflow.validationCommands` | Commands run with every slice's checks as `CONFIG_1`, `CONFIG_2`, … One entry is one command, run without a shell; write `pnpm test` and `pnpm lint` as two entries, or give an argument list such as `["pnpm", "test", "--", "--reporter=dot"]`. |
 | `workflow.acceptanceChecks` | `{command, files}` checks pinned into each new feature and run at `visp accept`. |
 | `workflow.flipCheck` | `off`, `auto` (default) or `on`. For each passing declared check, VISP runs the check a second time on the old implementation, in a temporary relocated copy of the project (tests kept), to show whether it fails without the change. The result is display only and never gates acceptance. References to the project by its absolute path in copied, overlaid or scanned files are rewritten to the copy, or make the comparison unchecked when they sit in binary or UTF-16 bytes. Other spellings are not detected and can reach the project: a symbolic link to the project directory, escaped forms (JSON `\/` or `\u002F`, URL `%2F`, `\x2F` in source strings) and paths the check builds at run time (for example from `HOME`). The check's external side effects (databases, services, files outside the project) happen again. Set `workflow.flipCheck: off` for checks that must not run twice. `auto` compares changes to existing implementation; `on` also compares added files. A comparison is skipped and reported unchecked when the project has git-ignored state it cannot reproduce. |
-| `workflow.draftFirst` | Lean mode, experimental. `visual` lets a picture request (an SVG, pixel or voxel art, an image or illustration, not a game, app, API or engine) start with `visp work` and no check: the worker drafts the whole picture, then declares its check with `visp work --check`. Default `off`. See [lean mode](workflow.md#lean-mode). |
-| `workflow.reviewCadence` | Lean mode, experimental. `feature` reviews only the slice that completes the feature, and a review after the second runs only while a required finding is open. Default `slice`. |
-| `workflow.regressionGate` | Experimental. At `visp done` and `visp accept`, once the call's own checks pass, VISP runs existing tests linked to the changed files, by the repository index or by convention, through the runner the project's checks use, the pinned suite and other closed slices' checks of this feature, and the pinned suites and checks of up to ten earlier accepted features. A failure runs once more, then on the old code in a temporary copy, as the flip check does. `advise` reports the results in the reply and to the reviewer; `gate` also refuses closure or acceptance while a test that passed on the old code fails now. Flaky, timed-out, environment and pre-existing failures never block. At most 12 commands and 180 s per call. With `workflow.flipCheck: off` nothing runs twice, so failures are reported unchecked. Default `off`. See [regression gate](workflow.md#regression-gate). |
-| `workflow.requestGaps` | Lean mode, experimental. `required` makes every reviewer finding that begins "Request gap:" required and shows the other findings as notes the worker is told not to act on. Default `reviewer`, which keeps the reviewer's own labels. |
+| `workflow.profile` | `lean` (default) or `full`. A lean feature works the request as one slice, drafts a picture before declaring its check, gets one review when the feature is done (by `critic.leanModel`), at most two review rounds and no independent tester on a new project. `full` is the independent loop: a review per slice by `critic.model`, the tester, up to `critic.maxCalls` reviews. A lean feature moves to full on its own when a check fails on two versions of the product, its change touches more than 15 files or more than 4 top-level directories, or the request lists more than 20 requirements. See [profiles](workflow.md#profiles). |
+| `workflow.worker` | `strong` (default) or `weak`. `weak` runs every feature with the full profile. |
+| `workflow.draftFirst` | `visual` lets a picture request (an SVG, pixel or voxel art, an image or illustration, not a game, app, API or engine) start with `visp work` and no check: the worker drafts the whole picture, then declares its check with `visp work --check`. Unset follows the feature's profile: `visual` when lean, `off` when full. |
+| `workflow.reviewCadence` | `feature` reviews only the slice that completes the feature, at most twice, and the second time only while a required finding is open. `slice` reviews each slice, up to the review budget. Unset follows the feature's profile: `feature` when lean, `slice` when full. |
+| `workflow.regressionGate` | At `visp done` and `visp accept`, once the call's own checks pass, VISP runs existing tests linked to the changed files, by the repository index or by convention, through the runner the project's checks use, the pinned suite and other closed slices' checks of this feature, and the pinned suites and checks of up to ten earlier accepted features. A failure runs once more, then on the old code in a temporary copy, as the flip check does. `advise` (default) reports the results in the reply and to the reviewer; `gate` also refuses closure or acceptance while a test that passed on the old code fails now; `off` runs nothing. Flaky, timed-out, environment and pre-existing failures never block. At most 12 commands and 180 s per call. With `workflow.flipCheck: off` nothing runs twice, so failures are reported unchecked. See [regression gate](workflow.md#regression-gate). |
+| `workflow.requestGaps` | `required` makes every reviewer finding that begins "Request gap:" required and shows the other findings as notes the worker is told not to act on. `reviewer` keeps the reviewer's own labels. Unset follows the feature's profile: `required` when lean, `reviewer` when full. |
 | `graph.languages`, `graph.exclude`, `graph.maxFileBytes` | What the repository index parses. |
 | `context.tokenBudget` | Approximate budget for the complete context `work` delivers. |
 | `context.maxSnippets` | Maximum source excerpts in delivered context. |

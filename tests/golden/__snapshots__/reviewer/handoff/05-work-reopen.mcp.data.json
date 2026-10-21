@@ -234,10 +234,6 @@
       ],
       "limitations": [],
       "comparisons": []
-    },
-    "independentTests": {
-      "status": "declined",
-      "reason": "The tester wrote no file: The request states one value; the worker's own check covers it."
     }
   },
   "nextCommand": "visp_work {\"feature\":\"001-return-two-from-the-public\",\"task\":\"T001\"}",

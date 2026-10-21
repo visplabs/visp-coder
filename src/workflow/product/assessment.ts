@@ -24,7 +24,14 @@ import {
   type ProductSlice,
 } from "./model.js";
 import { currentProbeResponses, validateProbeResponses } from "./probe-feedback.js";
+import {
+  accountedRequirements,
+  readRequirementAccounts,
+  requirementGaps,
+  requirementSummary,
+} from "./requirements.js";
 import { deferredOutcomeReview } from "./review/review-cadence.js";
+import { completesFeature } from "./review/review-selection.js";
 import type { ProductRecord } from "./store.js";
 import { productContractDigest } from "./subject.js";
 
@@ -221,9 +228,54 @@ export async function productEvidenceGaps(
       gaps.push(`Pinned expectation changed or is unavailable: ${file.path}`);
   }
   gaps.push(...currentJourneyFailures(record, subject, slice?.id));
+  gaps.push(...(await requirementEvidenceGaps(workspace, record, slice)));
   gaps.push(...(await currentAssessmentEvidenceGaps(workspace, record, subject, slice)));
   gaps.push(...(await productImageEvidenceGaps(workspace, record, subject, slice)));
   return [...new Set(gaps)];
+}
+
+/** Listed requirements count where the feature closes: its completing slice, and acceptance. */
+async function requirementAccounts(
+  workspace: WorkspaceState,
+  record: ProductRecord,
+  slice: ProductSlice | undefined,
+) {
+  if (record.state.status !== "active" || (slice && !completesFeature(record, slice.id)))
+    return undefined;
+  const listed = accountedRequirements(record.brief.originalRequest);
+  if (!listed.length) return undefined;
+  const stored = await readRequirementAccounts(workspace, record.brief.feature, listed);
+  return { listed, accounts: stored.ok ? stored.value.accounts : [] };
+}
+
+/** A cited check counts when its latest run passed; acceptance reruns every check. */
+function passedChecks(record: ProductRecord): Set<string> {
+  return new Set(
+    latestExecutionsByOwner(record.state.executions)
+      .filter((execution) => execution.status === "passed")
+      .map((execution) => execution.check),
+  );
+}
+
+async function requirementEvidenceGaps(
+  workspace: WorkspaceState,
+  record: ProductRecord,
+  slice: ProductSlice | undefined,
+): Promise<string[]> {
+  const accounted = await requirementAccounts(workspace, record, slice);
+  return accounted
+    ? requirementGaps(accounted.listed, accounted.accounts, passedChecks(record))
+    : [];
+}
+
+/** Where each listed requirement stands, for the reply of the call that closes the feature. */
+export async function requirementStatus(
+  workspace: WorkspaceState,
+  record: ProductRecord,
+  slice: ProductSlice | undefined,
+): Promise<string[]> {
+  const accounted = await requirementAccounts(workspace, record, slice);
+  return accounted ? requirementSummary(accounted.listed, accounted.accounts) : [];
 }
 
 function currentCheckExecutions(

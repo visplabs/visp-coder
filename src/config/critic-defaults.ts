@@ -173,6 +173,7 @@ export async function resolveCriticPolicyDetails(
     launch: _launch,
     webSearch: _webSearch,
     existingCodeTests: _existingCodeTests,
+    leanModel: _leanModel,
     ...options
   } = overrides;
   try {

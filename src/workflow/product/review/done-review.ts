@@ -17,6 +17,7 @@ import { hasPendingCriticReview } from "../critic/critic-policy.js";
 import { type ProductVerification, runProductAccept, runProductDone } from "../evidence.js";
 import { openRequiredFindings, outstandingFeedback } from "../findings.js";
 import { checksFor, latestExecutionsByOwner } from "../model.js";
+import { profileSettings } from "../profile.js";
 import type { ProductNext } from "../status.js";
 import { runProductNext } from "../status.js";
 import { type ProductRecord, type ProductSelection, readProductRecord } from "../store.js";
@@ -49,7 +50,7 @@ export interface DoneCriticSummary {
   readonly running?: boolean;
   readonly summary?: string;
   readonly findings: readonly { problem: string; nextCheck?: string; required?: boolean }[];
-  /** Lean mode (`workflow.requestGaps: required`): advisory findings, which the worker need not act on. */
+  /** Lean profile (`workflow.requestGaps: required`): advisory findings, which the worker need not act on. */
   readonly notes?: readonly string[];
   readonly notesAdvice?: string;
   readonly callsRemaining?: number;
@@ -302,19 +303,26 @@ async function launchReview(
   )
     return withNotes(
       workspace,
+      selection.feature,
       summarize(
         await runProductCritic(workspace, { operation: "status", feature: selection.feature }),
       ),
     );
-  return withNotes(workspace, critic);
+  return withNotes(workspace, selection.feature, critic);
 }
 
 const NOTES_ADVICE =
   "Notes are not gaps against the request. Do not edit for them; fix the required findings, if any.";
 
-/** Lean mode: only required findings ask for work; the reviewer's other findings become notes. */
-function withNotes(workspace: WorkspaceState, critic: DoneCriticSummary): DoneCriticSummary {
-  if (workspace.config.workflow.requestGaps !== "required") return critic;
+/** Lean profile: only required findings ask for work; the reviewer's other findings become notes. */
+async function withNotes(
+  workspace: WorkspaceState,
+  feature: string,
+  critic: DoneCriticSummary,
+): Promise<DoneCriticSummary> {
+  const record = await readProductRecord(workspace, { feature });
+  if (!record.ok || profileSettings(workspace, record.value).requestGaps !== "required")
+    return critic;
   const notes = critic.findings.filter((finding) => finding.required !== true);
   if (!notes.length) return critic;
   return {
@@ -393,7 +401,7 @@ async function reviewNotNeeded(
       reason: "The independent review already ruled on this exact source",
     };
   if (!record || !task) return undefined;
-  if (featureReviewCadence(workspace) && !completesFeature(record, task))
+  if (featureReviewCadence(workspace, record) && !completesFeature(record, task))
     return { reviewed: false, findings: [], reason: LEAN_MIDDLE_SLICE_REASON };
   const capacity = await reviewerCapacity(workspace, feature, subject, task);
   if (!skippableReview(record, task, subject, capacity.reserveCompletingReview)) return undefined;

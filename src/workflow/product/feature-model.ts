@@ -1,6 +1,7 @@
 import type { RiskLevel } from "../../core/constants.js";
 import type { Intent } from "../artifacts/feature.js";
 import type { ProductBrief } from "./model.js";
+import type { FeatureProfile } from "./profile.js";
 import type { ProjectRule } from "./project-rules.js";
 
 export interface ProductFeatureOptions {
@@ -29,6 +30,11 @@ export interface ProductFeatureOutcome {
   readonly duplicateNote?: string;
   /** Set by `visp feature` when its tester is writing tests in the same process, or was refused. */
   readonly testsNote?: string;
+  /** The workflow profile the feature starts with, and why it is full. */
+  readonly profile?: FeatureProfile;
+  /** The requirements the request states, as `R001: <statement>`, each to be accounted for at `done`. */
+  readonly requirements?: readonly string[];
+  readonly requirementsNote?: string;
   /** Lean draft-first start: the command that authorizes the draft, and why. */
   readonly draftCommand?: string;
   readonly draftNote?: string;

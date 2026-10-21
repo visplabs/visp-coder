@@ -135,10 +135,6 @@
         "C001: not executed for current product"
       ],
       "mayEdit": true
-    },
-    "independentTests": {
-      "status": "declined",
-      "reason": "The tester wrote no file: The request states one value; the worker's own check covers it."
     }
   },
   "nextCommand": "visp_done {\"feature\":\"001-return-two-from-the-public\",\"task\":\"T001\"}",

@@ -1,6 +1,6 @@
 import { afterEach, it, vi } from "vitest";
 import { FakeModels, testerSuite } from "./support/fake-models.js";
-import { BRIEF, CLAUDE, GOAL, GoldenProject, REQUEST, Recorder } from "./support/project.js";
+import { BRIEF, CLAUDE, FULL, GOAL, GoldenProject, REQUEST, Recorder } from "./support/project.js";
 
 /** The reviewer and tester VISP launches as `claude -p` for a Claude Code project. */
 vi.mock("node:dns/promises", () => ({ lookup: async () => ({ address: "127.0.0.1", family: 4 }) }));
@@ -14,7 +14,7 @@ afterEach(async () => {
 });
 
 it("launches claude -p as the tester and reviewer of a new project", async () => {
-  project = await GoldenProject.create(CLAUDE);
+  project = await GoldenProject.create({ ...CLAUDE, workflow: FULL });
   await models.plan({ tester: TWO, reviews: ["satisfied"] });
   const run = new Recorder(project, "claude/new-project");
   await run.cli("01-feature", ["feature", GOAL, "--source-brief", REQUEST]);

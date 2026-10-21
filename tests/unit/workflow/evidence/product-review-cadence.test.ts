@@ -18,7 +18,7 @@ import type { IndependentReview } from "../../../../src/workflow/product/review/
 import { runProductWork } from "../../../../src/workflow/product/work.js";
 import { productWorkspace } from "../../support/product-workspace.js";
 
-/** Lean mode's `workflow.reviewCadence: feature`: one review at the end, two rounds unless required findings remain. */
+/** The lean `workflow.reviewCadence: feature`: one review at the end; a second, the last, only for required findings. */
 const config = {
   model: "test-critic",
   reasoningEffort: "high" as const,
@@ -183,7 +183,8 @@ it("reviews only the slice that completes the feature", async () => {
 
 it.each([
   { cadence: "feature" as const, verdicts: ["required", "clean"] as const, available: false },
-  { cadence: "feature" as const, verdicts: ["required", "required"] as const, available: true },
+  // At most two rounds, even while a required finding remains: it goes to the person.
+  { cadence: "feature" as const, verdicts: ["required", "required"] as const, available: false },
   { cadence: "slice" as const, verdicts: ["required", "clean"] as const, available: true },
 ])(
   "after two reviews ($verdicts) with $cadence cadence, another review available=$available",
@@ -213,3 +214,21 @@ it.each([
     );
   },
 );
+
+it("reviews a second time under the feature cadence only while a required finding is open", async () => {
+  await feature("feature", 1);
+  const reviewer = host(["clean"]);
+  const first = await done("T001", reviewer, 1);
+  expect(first).toMatchObject({ ok: true, value: { critic: { reviewed: true } } });
+  if (!first.ok) return;
+  expect(
+    await reviewerCapacity(
+      await setup.workspace.state(),
+      setup.brief.feature,
+      first.value.subjectDigest,
+    ),
+  ).toMatchObject({
+    available: false,
+    reason: expect.stringContaining("no required finding is open"),
+  });
+});

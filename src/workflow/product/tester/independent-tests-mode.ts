@@ -5,6 +5,7 @@ import { applyFileTransaction } from "../../../core/file-transaction.js";
 import { hashValue } from "../../../core/hash.js";
 import { err, ok, type Result } from "../../../core/result.js";
 import type { WorkspaceState } from "../../state.js";
+import { featureProfile } from "../profile.js";
 import type { ProductRecord } from "../store.js";
 import { productSourceSnapshot } from "../subject.js";
 import { retryBusy } from "./independent-tests-record.js";
@@ -132,11 +133,17 @@ export async function testerApplies(
   record: ProductRecord,
 ): Promise<boolean> {
   if (record.brief.acceptanceBaseline.length || record.state.status === "accepted") return false;
-  if (
-    workspace.config.critic?.existingCodeTests !== true &&
-    (await existingCode(workspace.paths.root))
-  )
-    return false;
+  const existing = await existingCode(workspace.paths.root);
+  if (existing && workspace.config.critic?.existingCodeTests !== true) return false;
+  // A lean feature on a new project gets no tester: with Haiku 5.5 workers bare runs already
+  // passed about 100% of hidden checks, and in September the tester had given about 16% of
+  // VISP's gain with Haiku 4.5. Only the signs known at the start count, since a tester
+  // launched after the work is written keeps no test that fails against it.
+  if (!existing && featureProfile(workspace, { brief: record.brief }).name === "lean") return false;
+  return criticEnabled(workspace);
+}
+
+async function criticEnabled(workspace: WorkspaceState): Promise<boolean> {
   const policy = await resolveCriticPolicy(workspace.config.harness, workspace.config.critic);
   return policy.ok && policy.value.enabled;
 }
