@@ -155,19 +155,30 @@ export async function openPage(url, { width = 1280, height = 800, touch = false,
     const nav = await send("Page.navigate", { url });
     if (nav.errorText) throw new Error("cannot load " + url + ": " + nav.errorText);
     const page = {
-      /** Run a function (or expression string) in the page; the result must be JSON-serializable. */
+      /** Run fn(...args) in the page; a string is an expression, called with args when its value is a function. JSON result. */
       async evaluate(code, ...args) {
-        const expression = typeof code === "function" ? "(" + code + ")(..." + JSON.stringify(args) + ")" : String(code);
-        const r = await send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
-        if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description ?? r.exceptionDetails.text);
-        return r.result.value;
+        const run = async (expression) => {
+          const r = await send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
+          if (!r.exceptionDetails) return r.result;
+          const m = String(r.exceptionDetails.exception?.description ?? r.exceptionDetails.text).split("\n")[0];
+          throw new Error(m.startsWith("ReferenceError") ? m + " (page code cannot read Node variables; pass them as args)" : m);
+        };
+        const call = async () => (await run("(" + code + ")(..." + JSON.stringify(args) + ")")).value;
+        if (typeof code === "function") return call();
+        const r = await run(String(code));
+        if (r.type === "function") return call();
+        if (args.length) throw new Error("evaluate got arguments, but the string is not a function");
+        return r.value;
       },
-      /** Wait until fn() (run in the page) returns truthy. Bounded. */
-      async waitFor(fn, { timeoutMs: limit = 8000, everyMs = 50 } = {}) {
+      /** Wait until fn(...args), run in the page, returns truthy. Bounded. */
+      async waitFor(fn, options, ...args) {
+        if (typeof (options ?? {}) !== "object") throw new TypeError("waitFor(fn, options, ...args) takes an options object second");
+        const { timeoutMs: limit = 8000, everyMs = 50 } = options ?? {};
         const end = Date.now() + limit;
+        let last;
         for (;;) {
-          try { const v = await page.evaluate(fn); if (v) return v; } catch (error) { if (error instanceof BrowserUnavailable) throw error; }
-          if (Date.now() > end) throw new Error("waitFor timed out");
+          try { const v = await page.evaluate(fn, ...args); last = undefined; if (v) return v; } catch (e) { if (e instanceof BrowserUnavailable) throw e; last = e; }
+          if (Date.now() > end) throw new Error("waitFor timed out after " + limit + "ms" + (last ? "; last error: " + last.message : ""));
           await kitSleep(everyMs);
         }
       },
