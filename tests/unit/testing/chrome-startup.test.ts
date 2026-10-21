@@ -92,4 +92,16 @@ describe("Chrome startup diagnostics", () => {
       message: expect.stringMatching(/EPERM.*permission/s),
     });
   });
+
+  it("turns the GPU off only for a caller that asks, since journeys may need WebGL", async () => {
+    vi.mocked(spawn).mockImplementation(() => {
+      queueMicrotask(() => child.emit("error", new Error("stop")));
+      return child;
+    });
+    await launchChrome({ binary: "/installed/chromium", gpu: false }).catch(() => undefined);
+    await launchChrome({ binary: "/installed/chromium" }).catch(() => undefined);
+    const [software, usual] = vi.mocked(spawn).mock.calls.map((call) => call[1] as string[]);
+    expect(software).toContain("--disable-gpu");
+    expect(usual).not.toContain("--disable-gpu");
+  });
 });

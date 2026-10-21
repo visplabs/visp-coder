@@ -19,11 +19,15 @@ export interface SvgRasterizer {
  * shared. Once it fails to start, or a render fails in a way that may be the browser's (an
  * error or timeout rather than a picture that does not load), later renders report "browser"
  * without trying again, so a missing browser costs one attempt per run rather than one per file.
+ * The browser renders in software: a still picture needs no GPU, and on a host without one (CI
+ * runners, most VMs) Chrome's SwiftShader fallback made the screenshot pass the then 10 s
+ * timeout under load, so the reviewer lost the picture. Each step now gets 30 s: on CI a render
+ * step took up to 8-10 s, and a slow worker machine is no broken browser.
  */
 export function svgRasterizer(
   options: { binary?: string; timeoutMs?: number } = {},
 ): SvgRasterizer {
-  const timeoutMs = options.timeoutMs ?? 10_000;
+  const timeoutMs = options.timeoutMs ?? 30_000;
   let transport: Promise<ChromeTransport | undefined> | undefined;
   let broken = false;
   const browser = () => {
@@ -31,6 +35,7 @@ export function svgRasterizer(
       binary: options.binary,
       startupTimeoutMs: timeoutMs,
       operationTimeoutMs: timeoutMs,
+      gpu: false,
     }).catch(() => undefined);
     return transport;
   };

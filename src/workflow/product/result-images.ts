@@ -170,7 +170,7 @@ async function resultImageBytes(workspace: WorkspaceState, path: string, svgs: S
  * One browser for a run's SVGs, started on the first one not already known not to render;
  * after the browser fails, the run's other SVGs are skipped, and so are the next hour's runs
  * on the same browser executable: a browser that hangs at startup cost every done, verify
- * and accept its 10 s startup timeout.
+ * and accept its startup timeout (then 10 s, now 30 s).
  */
 class SvgRendering {
   readonly unrendered: string[] = [];
