@@ -60,6 +60,13 @@ it("answers Codex's prompt, shell, stop and apply_patch hooks", async () => {
     ),
   );
   await codex("06-patch-unreadable", patch("*** Rename File: README.md"));
+  await codex("07-patch-not-found", {
+    hook_event_name: "PreToolUse",
+    tool_name: "apply_patch",
+    tool_input: {
+      patch_text: "*** Begin Patch\n*** Add File: README.md\n+# Value\n*** End Patch\n",
+    },
+  });
 });
 
 it("refuses an out-of-scope commit in the Git hook", async () => {

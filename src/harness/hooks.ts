@@ -7,7 +7,7 @@ import {
   STATE_DIR,
 } from "../core/constants.js";
 import { runtimeIdentity } from "../core/version.js";
-import { HOST_SESSION_FILE } from "../workflow/product/host-prompts.js";
+import { HOST_SESSION_FILE, UNRECOGNIZED_PATCH_FILE } from "../workflow/product/host-prompts.js";
 import { AUTHORIZATION_CHECK } from "./authorization-check.js";
 import { hookCommand } from "./claude-settings.js";
 import patchPaths from "./scripts/patch-paths.script.mjs?raw";
@@ -35,6 +35,7 @@ export function renderPreToolUseHook(executable = runtimeIdentity().executable):
     PRODUCT_NAME,
     CLI: JSON.stringify(executable),
     HOST_SESSION_FILE,
+    UNRECOGNIZED_PATCH_FILE,
     PACKAGE_NAME,
     STATE_DIR,
     EXIT_REFUSED: String(EXIT.refused),

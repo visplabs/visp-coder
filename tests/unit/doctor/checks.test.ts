@@ -158,6 +158,23 @@ it("reports Codex hook trust as unknown until the project and hooks are trusted"
   expect(await check("codex hooks trust")).toMatchObject({ status: "ok" });
 });
 
+// The Codex edit hook lets an apply_patch call through when it cannot find the patch, so
+// doctor says that scope was checked only at commit and by \`visp done\`.
+it("warns when the Codex edit hook could not find a patch in an apply_patch call", async () => {
+  await setConfigScalar((await workspace.state()).paths, "harness", "codex");
+  expect(await check("codex edit hook")).toMatchObject({ status: "ok" });
+  const session = join(workspace.root, ".visp", "session");
+  await mkdir(session, { recursive: true });
+  await writeFile(
+    join(session, "apply-patch-unrecognized.json"),
+    JSON.stringify({ at: "2026-10-21T00:00:00.000Z", fields: ["patch_text"] }),
+  );
+  expect(await check("codex edit hook")).toMatchObject({
+    status: "warn",
+    detail: expect.stringContaining("apply_patch payload shape not recognized"),
+  });
+});
+
 // A killed reviewer's sign-in copy should not wait for the next review to be removed.
 it("removes a sign-in copy left by a reviewer that has ended only with --fix", async () => {
   const temporary = join(workspace.root, "tmp-sandbox");

@@ -1025,7 +1025,10 @@ function authorizationState() {
 
 // Codex edits through apply_patch, which names its files inside the patch text. A patch
 // whose files cannot be read is refused while a task is authorized, as a write that cannot
-// be checked is.
+// be checked is. Patch text is expected as tool_input or tool_input.command; no live payload
+// has been captured, so a call without patch text in either place is let through and
+// recorded for `visp doctor`, rather than refusing every edit of a slice. The Git
+// hook and `visp done` still check its files.
 const patchPaths = (function patchPaths(patch) {
   const lines = String(patch).split("\n").map((line) => line.replace(/\r$/, ""));
   const begin = lines.findIndex((line) => line.trim() === "*** Begin Patch");
@@ -1065,7 +1068,21 @@ const patchPaths = (function patchPaths(patch) {
 });
 const patching = input?.tool_name === "apply_patch";
 const patch = typeof input?.tool_input === "string" ? input.tool_input : input?.tool_input?.command;
-const patched = patching ? patchPaths(Array.isArray(patch) ? patch.join("\n") : (patch ?? "")) : undefined;
+const patchText =
+  typeof patch === "string" ? patch : Array.isArray(patch) && patch.every((part) => typeof part === "string") ? patch.join("\n") : "";
+if (patching && !patchText.trim()) {
+  try {
+    const directory = join(root, ".visp", "session");
+    mkdirSync(directory, { recursive: true });
+    const fields = input?.tool_input && typeof input.tool_input === "object" ? Object.keys(input.tool_input).slice(0, 20) : [];
+    writeFileSync(
+      join(directory, "apply-patch-unrecognized.json"),
+      JSON.stringify({ at: new Date().toISOString(), fields }),
+    );
+  } catch {}
+  process.exit(0);
+}
+const patched = patching ? patchPaths(patchText) : undefined;
 if (patching && patched === undefined) {
   if (authorizationState() === "inactive") process.exit(0);
   process.stdout.write(

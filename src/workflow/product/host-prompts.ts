@@ -10,6 +10,11 @@ import type { WorkspaceState } from "../state.js";
 export const HOST_PROMPTS_FILE = "user-prompts.jsonl";
 /** The host session of the latest user prompt, written beside the prompts; never consumed. */
 export const HOST_SESSION_FILE = "host-session.json";
+/**
+ * Written by the Codex edit hook when an apply_patch call carries no patch text where it
+ * looks; the call was let through, so its files were checked only at commit and by `done`.
+ */
+export const UNRECOGNIZED_PATCH_FILE = "apply-patch-unrecognized.json";
 
 /** Written while `visp feature` records a request; its age tells `next` and `work` to wait. */
 export const FEATURE_STARTING_FILE = "feature-starting.json";

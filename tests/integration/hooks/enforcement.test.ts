@@ -1112,14 +1112,36 @@ describe("Codex apply_patch", () => {
     );
   });
 
-  it("refuses an apply_patch call without patch text", () => {
+  // No live Codex payload has been captured. If Codex puts the patch somewhere other than
+  // tool_input or tool_input.command, refusing would stop every edit in a slice; the call is
+  // allowed and recorded for `visp doctor`, and commit and `visp done` still check scope.
+  it("allows and records an apply_patch call whose patch it cannot find", async () => {
+    const { readFile } = await import("node:fs/promises");
+    const record = join(project.root, ".visp/session/apply-patch-unrecognized.json");
     const raw = execFileSync(process.execPath, [hook()], {
       cwd: project.root,
       input: JSON.stringify({
         cwd: project.root,
         hook_event_name: "PreToolUse",
         tool_name: "apply_patch",
-        tool_input: {},
+        tool_input: { patch_text: "*** Begin Patch\n*** Add File: README.md\n+x\n*** End Patch" },
+      }),
+      encoding: "utf8",
+      env: project.env(),
+    });
+    expect(raw).toBe("");
+    expect(JSON.parse(await readFile(record, "utf8"))).toMatchObject({ fields: ["patch_text"] });
+    await rm(record);
+  });
+
+  it("refuses patch text that is not a patch while a slice is authorized", () => {
+    const raw = execFileSync(process.execPath, [hook()], {
+      cwd: project.root,
+      input: JSON.stringify({
+        cwd: project.root,
+        hook_event_name: "PreToolUse",
+        tool_name: "apply_patch",
+        tool_input: { command: "echo hello > README.md" },
       }),
       encoding: "utf8",
       env: project.env(),
