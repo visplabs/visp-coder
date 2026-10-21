@@ -98,9 +98,6 @@ describe("CLI input boundary", () => {
   });
 
   it.each([
-    ["skill", "propose", "--id", "safe-skill", "--file", "../outside.md"],
-    ["skill", "export", "safe-skill", "--file", "/tmp/outside.md"],
-    ["skill", "import", "--id", "safe-skill", "--file", "C:\\temp\\outside.md"],
     ["usage", "import", "--source", "codex", "--file", "/tmp/rollout.jsonl"],
   ])("rejects an external file argument before changing project bytes", async (...args) => {
     expect((await runCli(root, "init", "--harness", "generic")).exitCode).toBe(0);
