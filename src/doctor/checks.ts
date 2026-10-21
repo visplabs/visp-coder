@@ -9,9 +9,6 @@ import { isRepository, workingTreeChanges } from "../core/git.js";
 import { ok, type Result } from "../core/result.js";
 import { inspectStateLock, STATE_LOCK_DIRECTORY } from "../core/state-lock.js";
 import { checkCurrency, openProjectStore } from "../graph/index.js";
-import { skillCatalog } from "../skills/catalog.js";
-import { SKILL_STATES } from "../skills/schema.js";
-import { readIndex } from "../skills/store.js";
 import { findTask, type TaskGraph } from "../workflow/artifacts/tasks.js";
 import { foreignHostFile, hostFileProtection } from "../workflow/product/byproducts.js";
 import { describeProductCheck } from "../workflow/product/check/check-command.js";
@@ -81,7 +78,6 @@ export async function runChecks(
     await checkBrowser(state),
     await checkIndex(state),
     await checkEvidenceTracked(state),
-    await checkSkillLibrary(state),
     checkPolicy(state),
     await checkFeature(state),
   ];
@@ -364,39 +360,6 @@ async function checkTransactions(state: WorkspaceState): Promise<Check> {
     };
   }
   return { name: "file transactions", status: "ok", detail: "No interrupted file updates" };
-}
-
-async function checkSkillLibrary(state: WorkspaceState): Promise<Check> {
-  const index = await readIndex(state);
-  if (!index.ok) {
-    return {
-      name: "skill library",
-      status: "unknown",
-      detail: `Could not read the skill library: ${index.error.message}`,
-    };
-  }
-  if (index.value.skills.length === 0) {
-    const available = skillCatalog().map((skill) => skill.id);
-    return {
-      name: "skill library",
-      status: "ok",
-      detail:
-        "The skill library is empty; no procedure can enter a context pack" +
-        (available.length > 0
-          ? `. Optional catalog: ${available.join(", ")} (run: ${PRODUCT_NAME} skill catalog)`
-          : ""),
-    };
-  }
-
-  const counts = SKILL_STATES.flatMap((skillState) => {
-    const count = index.value.skills.filter((skill) => skill.state === skillState).length;
-    return count === 0 ? [] : [`${skillState} ${count}`];
-  });
-  return {
-    name: "skill library",
-    status: "ok",
-    detail: `${index.value.skills.length} skills: ${counts.join(", ")}`,
-  };
 }
 
 async function checkState(state: WorkspaceState): Promise<Check> {

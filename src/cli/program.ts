@@ -29,7 +29,6 @@ import { reportCommand } from "./commands/report.js";
 import { rulesCommand } from "./commands/rules.js";
 import { serveCommand } from "./commands/serve.js";
 import { initCommand } from "./commands/setup.js";
-import { skillCommand } from "./commands/skill.js";
 import { trailCommand } from "./commands/trail.js";
 import { uiCommand } from "./commands/ui.js";
 import { uninstallCommand } from "./commands/uninstall.js";
@@ -81,7 +80,6 @@ export function buildProgram(
   program.addCommand(usageCommand());
   program.addCommand(policyCommand());
   program.addCommand(overrideCommand());
-  program.addCommand(skillCommand());
   program.addCommand(serveCommand());
   program.addCommand(uiCommand());
 

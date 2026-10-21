@@ -7,8 +7,30 @@ void publicApi.authorizeImplement;
 void publicApi.buildContextPack;
 // @ts-expect-error Removed acceptance alias; use runProductAccept.
 void publicApi.runProductAcceptance;
-// @ts-expect-error Removed fixed legacy templates; use explicit createProposalFromContent.
+// @ts-expect-error Removed fixed legacy templates; project skills were removed later.
 void publicApi.proposeFailureSkills;
+// @ts-expect-error Removed with project skills: no context pack carries skills.
+void publicApi.createProposalFromContent;
+// @ts-expect-error Removed with project skills.
+void publicApi.transitionSkill;
+// @ts-expect-error Removed with project skills.
+void publicApi.skillSelectionSnapshot;
+// @ts-expect-error Removed with project skills.
+void publicApi.rollbackSkill;
+// @ts-expect-error Removed with project skills.
+void publicApi.readSkillHistory;
+// @ts-expect-error Removed with project skills.
+void publicApi.readSkillRevision;
+// @ts-expect-error Removed with project skills.
+void publicApi.recordSkillEvaluation;
+// @ts-expect-error Removed with project skills.
+void publicApi.promoteSkill;
+// @ts-expect-error Removed with project skills.
+void publicApi.checkSkillEvaluation;
+// @ts-expect-error Removed with project skills.
+void publicApi.readSkillEvaluation;
+// @ts-expect-error Removed with project skills.
+void publicApi.skillPreregistrationSchema;
 // @ts-expect-error Removed legacy stage inspection; use runProductNext/runProductStatus.
 void publicApi.evaluateGate;
 // @ts-expect-error Removed legacy gate rendering; use runProductReport.

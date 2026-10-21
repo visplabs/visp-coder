@@ -4,7 +4,6 @@ $ visp work --json
   "command": "work",
   "ok": true,
   "data": {
-    "skills": [],
     "feedbackPlan": {
       "observationPlan": {
         "session": "For browser checks: use the same browser session and one journey.actions array. Captures start fresh.",
@@ -123,11 +122,10 @@ $ visp work --json
     "feedback": [],
     "budget": {
       "tokenBudget": 12000,
-      "estimatedTokens": 1392,
+      "estimatedTokens": 1386,
       "status": "within-budget",
       "omitted": {
         "files": 0,
-        "skills": 0,
         "feedbackCharacters": 0
       },
       "sources": [

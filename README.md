@@ -127,7 +127,6 @@ The request and redacted check output are saved in the committed feature trail; 
 | `visp ui` | Open a live, read-only dashboard of the work in your browser |
 | `visp index` / `visp query` | Build and query the repository graph |
 | `visp rules` / `visp rules remove <id>` | List or remove the rules the user stated for all later work |
-| `visp skill` | Propose, admit and retire project skills |
 | `visp guard` | Check changed files against the authorized scope (used by hooks and CI) |
 | `visp trail prune` | Remove local captures and candidates no longer referenced by retained history |
 | `visp doctor` | Check the setup; `--settings` explains effective configuration |

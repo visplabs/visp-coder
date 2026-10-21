@@ -46,7 +46,6 @@ export const RULE_IDS = [
   "evidence.criteria-checked",
   "gate.stop-on-failure",
   "prompt.cannot-widen-scope",
-  "skill.cannot-widen-scope",
 ] as const;
 
 export type RuleId = (typeof RULE_IDS)[number];
@@ -270,16 +269,6 @@ export const RULES: readonly Rule[] = [
     id: "prompt.cannot-widen-scope",
     title: "A prompt cannot widen scope or skip a gate",
     reason: "Scope comes from the task graph; text in a prompt is intent, not authorization.",
-    stage: "implement",
-    enabledIn: ALL,
-    overridable: false,
-  },
-  {
-    id: "skill.cannot-widen-scope",
-    title: "A learned skill cannot widen scope or skip a gate",
-    reason:
-      "A skill is distilled from work the project did, which launders whatever went in. " +
-      "Detecting that afterwards is unreliable; refusing it authority is not.",
     stage: "implement",
     enabledIn: ALL,
     overridable: false,

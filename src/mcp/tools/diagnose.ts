@@ -6,8 +6,6 @@ import { ok } from "../../core/result.js";
 import { withRuntimeDiagnostic } from "../../core/runtime-agreement.js";
 import { runtimeIdentity } from "../../core/version.js";
 import { runChecks } from "../../doctor/checks.js";
-import { readCurrentLineage } from "../../skills/lineage.js";
-import { readIndex, readSkillBody, skillRecord } from "../../skills/store.js";
 import { TOOL } from "../constants.js";
 import { workspaceFor } from "../context.js";
 import { failure, reply } from "../reply.js";
@@ -55,71 +53,6 @@ export function registerDiagnoseTools(server: McpServer, root: string): void {
                 (check.recovery ? ` (fix: ${check.recovery})` : ""),
             ),
           ].join("\n"),
-      });
-    },
-  );
-}
-
-/**
- * Skills are readable here and nothing more. Proposing one writes to the
- * project; admitting one decides what future work is told to do. Both belong
- * at the CLI, where a person is the one doing it.
- */
-export function registerSkillTools(server: McpServer, root: string): void {
-  server.registerTool(
-    TOOL.skillList,
-    {
-      title: "List this project's skills",
-      description: "Skills the project has learned, and where each one stands.",
-      inputSchema: {},
-      annotations: { readOnlyHint: true },
-    },
-    async () => {
-      const state = await workspaceFor(root);
-      if (!state.ok) return failure(TOOL.skillList, state.error);
-
-      const skills = await readCurrentLineage(state.value);
-      if (!skills.ok) return failure(TOOL.skillList, skills.error);
-
-      return reply(TOOL.skillList, ok({ skills: skills.value }), {
-        text: (data) =>
-          data.skills.length === 0
-            ? "No skills yet."
-            : data.skills
-                .map((skill) => `${skill.state} ${skill.trust} ${skill.id}: ${skill.description}`)
-                .join("\n"),
-      });
-    },
-  );
-
-  server.registerTool(
-    TOOL.skillShow,
-    {
-      title: "Read one skill",
-      description: "The body of a skill, with what it was drawn from and who admitted it.",
-      inputSchema: { id: z.string().describe("Skill id, from visp_skill_list") },
-      annotations: { readOnlyHint: true },
-    },
-    async (args) => {
-      const state = await workspaceFor(root);
-      if (!state.ok) return failure(TOOL.skillShow, state.error);
-
-      const index = await readIndex(state.value);
-      if (!index.ok) return failure(TOOL.skillShow, index.error);
-
-      const record = skillRecord(index.value, args.id);
-      if (!record) {
-        return failure(TOOL.skillShow, {
-          code: "ARTIFACT_MISSING",
-          message: `No skill named ${args.id}`,
-          recovery: `${PRODUCT_NAME} skill list`,
-        });
-      }
-
-      const body = await readSkillBody(state.value, args.id);
-
-      return reply(TOOL.skillShow, ok({ ...record, body: body.ok ? (body.value ?? "") : "" }), {
-        text: (data) => data.body,
       });
     },
   );

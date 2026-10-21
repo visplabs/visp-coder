@@ -4,7 +4,6 @@ import { isApplicationSource } from "../../graph/coverage-notes.js";
 import { type GraphStore, isTestPath, openProjectStore } from "../../graph/index.js";
 import type { WorkspaceState } from "../state.js";
 import { describeProductCheck } from "./check/check-command.js";
-import { observedProductGraphCurrency } from "./context-graph.js";
 import type { ProductSlice } from "./model.js";
 import { currentRegressionGate, regressionGateGaps } from "./regression/regression-report.js";
 import { namesExistingTest } from "./regression-command-matching.js";
@@ -114,7 +113,6 @@ async function coveredRelatedTests(
   const identity = store.readHeadIdentity();
   if (!identity.ok || !identity.value) return undefined;
   const snapshotId = identity.value.split("\0")[0] ?? "";
-  if (observedProductGraphCurrency(workspace, snapshotId)?.gap) return undefined;
   const hashes = await changedContentHashes(workspace, changed);
   if (!hashes) return undefined;
   const key = `${workspace.paths.root}\0${store.cachePath}\0${identity.value}\0${hashValue([...hashes])}`;

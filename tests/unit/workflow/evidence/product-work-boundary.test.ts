@@ -408,6 +408,5 @@ describe("bounded and optional product context", () => {
     expect(constrained.budget.status).toBe("essential-overflow");
     expect(constrained.outcomes).toEqual(context.outcomes);
     expect(constrained.scope).toEqual(context.scope);
-    expect(constrained.skills).toEqual([]);
   });
 });

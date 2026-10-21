@@ -227,35 +227,6 @@ it("keeps capture replay identity and the committed next action visible in compa
     expect(text).toContain(value);
 });
 
-it("shows compact skills as plain text while preserving complete structured capability data", () => {
-  const data = {
-    feature: "001-game",
-    taskClass: "bugfix",
-    skills: Array.from({ length: 4 }, (_, index) => ({
-      path: `.visp/skills/skill-${index}/SKILL.md`,
-      content: `---\nname: skill-${index}\n---\n${"procedure ".repeat(100)}`,
-      truncated: false,
-      advisory: true,
-    })),
-  };
-  const response = productReply("visp_work", ok(data));
-  const text = response.content
-    .flatMap((entry) => (entry.type === "text" ? [entry.text] : []))
-    .join("\n");
-  const summary = JSON.parse(text.split("\n")[0]?.slice("visp_work: ".length) ?? "{}");
-  expect(summary).not.toHaveProperty("skills");
-  expect(text).toContain(
-    "\nSkill skill-0 (advisory, .visp/skills/skill-0/SKILL.md):\nprocedure procedure",
-  );
-  expect(text).toContain("… Read the file for the rest.");
-  expect(text).not.toContain("name: skill-0");
-  expect(text).not.toContain("Skill skill-3");
-  expect(text).toContain("1 more skill(s) in the full result.");
-  expect(summary.taskClass).toBe("bugfix");
-  expect(response.structuredContent).toMatchObject({ data });
-  expect(data.skills.every((entry) => !entry.truncated)).toBe(true);
-});
-
 const fixture = (name: string) =>
   JSON.parse(
     readFileSync(new URL(`../../fixtures/product-replies/${name}.json`, import.meta.url), "utf8"),

@@ -1,15 +1,9 @@
 /** Historical context fixture builder; never imported by production entry points. */
-import { FILE, PRODUCT_NAME } from "../../../src/core/constants.js";
+import { FILE } from "../../../src/core/constants.js";
 import { vispError } from "../../../src/core/errors.js";
 import { applyFileTransaction, withStateMutation } from "../../../src/core/file-transaction.js";
-import { sha256 } from "../../../src/core/hash.js";
 import { err, ok, type Result } from "../../../src/core/result.js";
 import { recordActivity } from "../../../src/orchestrate/session.js";
-import type { ApplicationFacts } from "../../../src/skills/applies.js";
-import { reconcileLineage } from "../../../src/skills/lineage.js";
-import { rankSkills } from "../../../src/skills/rank.js";
-import type { SkillRecord } from "../../../src/skills/schema.js";
-import { fingerprint, readIndex, readSkillBody, skillPath } from "../../../src/skills/store.js";
 import { now } from "../../../src/workflow/artifacts/common.js";
 import type {
   AttemptFeedback,
@@ -24,11 +18,9 @@ import type { WorkspaceState } from "../../../src/workflow/state.js";
 import { fitContextBudget } from "./legacy-context/budget.js";
 import { readContextContract } from "./legacy-context/contract.js";
 import { legacyContextDefaults } from "./legacy-context/defaults.js";
-import { readCandidates, regionsOfSnippets } from "./legacy-context/delivery.js";
+import { readCandidates } from "./legacy-context/delivery.js";
 import { extractFailurePaths } from "./legacy-context/failure-paths.js";
-import { estimateDeliveredFileTokens } from "./legacy-context/render.js";
 import { type Candidate, selectFiles } from "./legacy-context/select.js";
-import { extractSnippets } from "./legacy-context/snippets.js";
 import { sourceHash } from "./legacy-context/source-hash.js";
 import type { ContextOptions, ContextOutcome } from "./legacy-context/types.js";
 import { updateStatus } from "./writers.js";
@@ -79,7 +71,6 @@ async function buildLockedContextPack(
     pack: compiled.value.pack,
     manifest: manifest.value,
     path: persisted.value,
-    skippedSkills: compiled.value.skippedSkills,
   });
 }
 
@@ -92,7 +83,6 @@ interface ResolvedContextTask {
 interface CompiledContext {
   readonly pack: ContextPack;
   readonly feedback?: AttemptFeedback;
-  readonly skippedSkills: readonly string[];
 }
 
 async function resolveContextTask(
@@ -140,7 +130,6 @@ async function compileContextPack(
     feedback.value,
     [],
     [],
-    [],
   );
 
   const candidates = contextCandidates(
@@ -157,9 +146,6 @@ async function compileContextPack(
   );
   if (!contents.ok) return contents;
 
-  const skills = await selectSkillFiles(state, contextSkillFacts(options, resolved.task));
-  if (!skills.ok) return skills;
-
   return ok({
     pack: assembleContextPack(
       state,
@@ -168,12 +154,9 @@ async function compileContextPack(
       contract.value,
       feedback.value,
       contents.value.files,
-      skills.value.files,
       contents.value.omitted,
-      skills.value.skipped,
     ),
     ...(feedback.value ? { feedback: feedback.value } : {}),
-    skippedSkills: skills.value.skipped,
   });
 }
 
@@ -199,21 +182,6 @@ function contextCandidates(
   });
 }
 
-function contextSkillFacts(options: ContextOptions, task: Task): ApplicationFacts {
-  return {
-    // The stages this pack serves — not SELECTING_STAGES, which now also names
-    // the drafting stages. Passing the whole list here made a spec-only skill
-    // match every implementation pack, which is exactly the over-firing the
-    // stage dimension exists to prevent.
-    stages: PACK_STAGES,
-    taskClass: task.taskClass,
-    scopePaths: [...task.allowedFiles, ...task.expectedFiles],
-    ...(options.graph
-      ? { entrypointKinds: options.graph.entrypointKinds, languages: options.graph.languages }
-      : {}),
-  };
-}
-
 function assembleContextPack(
   state: WorkspaceState,
   options: ContextOptions,
@@ -221,9 +189,7 @@ function assembleContextPack(
   contract: ContextContract,
   feedback: AttemptFeedback | undefined,
   files: readonly ContextFile[],
-  skillFiles: readonly ContextFile[],
   omitted: ContextPack["omitted"],
-  skillDiagnostics: readonly string[] = [],
 ): ContextPack {
   const budget = state.config.context.tokenBudget;
   const pack: ContextPack = {
@@ -234,9 +200,8 @@ function assembleContextPack(
     goal: task.title,
     contract,
     artifactRef: state.paths.relative(state.paths.contextFile(options.feature, task.id)),
-    files: [...files, ...skillFiles],
+    files: [...files],
     omitted,
-    ...(skillDiagnostics.length ? { skillDiagnostics: [...skillDiagnostics] } : {}),
     entrypoints: [...(options.graph?.entrypoints ?? [])],
     unknowns: [...(options.graph?.unknowns ?? [])],
     ...(feedback ? { attemptFeedback: feedback } : {}),
@@ -284,108 +249,6 @@ async function persistContextPack(
       : taskId,
   });
   return ok(packPath);
-}
-
-/** A context pack is compiled at `context` and read for the implementation. */
-const PACK_STAGES: ApplicationFacts["stages"] = ["context", "implement"];
-
-interface SelectedSkills {
-  readonly files: ContextFile[];
-  /** Skills that matched but could not be used, so their absence is explained. */
-  readonly skipped: string[];
-}
-
-/**
- * The admitted skills whose triggers fire here, as ordinary context entries.
- *
- * They arrive the same way files do — with a reason, against the same budget —
- * because a pack that grows by a route of its own is a pack nobody can reason
- * about. They arrive *after* the files for the same reason: advice must never
- * displace the code the task is actually about.
- *
- * The cap counts what actually goes in rather than what was ranked, so a skill
- * that turns out to be unusable gives its slot back to the next match instead of
- * quietly shrinking the pack.
- */
-async function selectSkillFiles(
-  state: WorkspaceState,
-  facts: ApplicationFacts,
-): Promise<Result<SelectedSkills>> {
-  const empty: SelectedSkills = { files: [], skipped: [] };
-  if (!state.config.skills.enabled || state.config.skills.maxPerPack <= 0) return ok(empty);
-
-  // A skill whose source work has gone still reads as `admitted` until someone
-  // looks, and the pack is exactly the place that must not act on it. A failed
-  // reconciliation leaves support unknown, so compilation cannot use that state.
-  const lineage = await reconcileLineage(state);
-  if (!lineage.ok) return lineage;
-
-  const index = await readIndex(state);
-  if (!index.ok) return index;
-
-  const files: ContextFile[] = [];
-  const skipped: string[] = [];
-
-  for (const candidate of rankSkills({ skills: index.value.skills, facts })) {
-    if (files.length >= state.config.skills.maxPerPack) break;
-
-    const entry = await readSkillEntry(state, candidate.skill);
-    if (!entry.ok) return entry;
-
-    if (entry.value === undefined) {
-      // Says only what was established — the file is not the one admitted —
-      // rather than guessing between edited and gone. `skill diff` says which.
-      skipped.push(
-        `${candidate.skill.id} applies here, but its file is not the one that was admitted, ` +
-          `so it was left out. Run: ${PRODUCT_NAME} skill diff ${candidate.skill.id}`,
-      );
-      continue;
-    }
-
-    files.push(entry.value);
-  }
-
-  return ok({ files, skipped });
-}
-
-/**
- * One skill as a context entry, or undefined when it is not the skill that was
- * admitted — the file is gone, or its text has moved on from what a person
- * signed off. Including it under that name would claim a review of this text
- * that never happened.
- */
-async function readSkillEntry(
-  state: WorkspaceState,
-  skill: SkillRecord,
-): Promise<Result<ContextFile | undefined>> {
-  const body = await readSkillBody(state, skill.id);
-  if (!body.ok) return body;
-  if (body.value === undefined || fingerprint(body.value) !== skill.contentHash) {
-    return ok(undefined);
-  }
-
-  const path = state.paths.relative(skillPath(state, skill.id));
-  if (path === undefined) return ok(undefined);
-
-  const { snippets, truncated } = extractSnippets(body.value, {
-    cap: legacyContextDefaults.snippetCap,
-    maxSnippets: state.config.context.maxSnippets,
-    maxLines: legacyContextDefaults.maxSnippetLines,
-  });
-
-  const entry: ContextFile = {
-    path,
-    reason: "skill",
-    hash: sha256(body.value),
-    regions: regionsOfSnippets(snippets),
-    snippets: legacyContextDefaults.includeSnippets ? snippets : [],
-    estimatedTokens: 0,
-    truncated,
-  };
-  return ok({
-    ...entry,
-    estimatedTokens: estimateDeliveredFileTokens(entry, legacyContextDefaults.includeSnippets),
-  });
 }
 
 /** Per failing command, so one noisy command cannot spend the whole feedback. */

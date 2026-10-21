@@ -34,7 +34,7 @@ export function fitProductContext(
       tokenBudget,
       estimatedTokens: 0,
       status: "within-budget",
-      omitted: { files: 0, skills: 0, feedbackCharacters: 0 },
+      omitted: { files: 0, feedbackCharacters: 0 },
       sources,
     },
   };
@@ -43,15 +43,7 @@ export function fitProductContext(
     budget: { ...fitted.budget, omitted: { ...fitted.budget.omitted, feedbackCharacters } },
   });
   fitted = fitAdvisoryContext(fitted);
-  // Admitted skills are small and are the only place a procedure reaches the worker;
-  // source excerpts go first because the worker can read those files itself.
-  for (const [key, counter] of [
-    ["files", "files"],
-    ["skills", "skills"],
-  ] as const) {
-    if (fitted.budget.estimatedTokens <= tokenBudget) break;
-    fitted = fitPrefix(fitted, key, counter);
-  }
+  if (fitted.budget.estimatedTokens > tokenBudget) fitted = fitFiles(fitted);
   return fitted.budget.estimatedTokens <= tokenBudget
     ? fitted
     : price({ ...fitted, budget: { ...fitted.budget, status: "essential-overflow" } });
@@ -88,19 +80,15 @@ function fitAdvisoryContext(context: ProductWorkContext): ProductWorkContext {
 }
 
 /** Bounded prefix search avoids repeatedly copying a growing omission ledger. */
-function fitPrefix(
-  context: ProductWorkContext,
-  key: "skills" | "files",
-  counter: "skills" | "files",
-): ProductWorkContext {
-  const entries = context[key];
+function fitFiles(context: ProductWorkContext): ProductWorkContext {
+  const entries = context.files;
   const candidate = (count: number) =>
     price({
       ...context,
-      [key]: entries.slice(0, count),
+      files: entries.slice(0, count),
       budget: {
         ...context.budget,
-        omitted: { ...context.budget.omitted, [counter]: entries.length - count },
+        omitted: { ...context.budget.omitted, files: entries.length - count },
       },
     });
   let best = candidate(0);

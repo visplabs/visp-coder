@@ -2,7 +2,7 @@ import { expect, it } from "vitest";
 import { parseConfig } from "../../../src/config/load.js";
 import { configSchema } from "../../../src/config/schema.js";
 
-it.each(["workflow", "graph", "context", "skills", "memory", "telemetry", "critic"])(
+it.each(["workflow", "graph", "context", "memory", "telemetry", "critic"])(
   "rejects an unknown key in %s instead of silently applying defaults",
   (section) => {
     const result = configSchema.safeParse({ [section]: { misspelledSetting: true } });

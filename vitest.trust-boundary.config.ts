@@ -94,7 +94,6 @@ const trustBoundaryTests = [
   "tests/unit/core/state-lock.test.ts",
   "tests/unit/telemetry/journal.test.ts",
   "tests/unit/telemetry/configured-enabled.test.ts",
-  "tests/unit/skills/configured-support.test.ts",
   "tests/unit/telemetry/store.test.ts",
   "tests/unit/telemetry/schema.test.ts",
   "tests/unit/telemetry/codex.test.ts",

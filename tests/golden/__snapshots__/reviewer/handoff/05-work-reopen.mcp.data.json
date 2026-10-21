@@ -2,7 +2,6 @@
   "tool": "visp_work",
   "ok": true,
   "data": {
-    "skills": [],
     "feedbackPlan": {
       "observationPlan": {
         "session": "For browser checks: use the same browser session and one journey.actions array. Captures start fresh.",
@@ -172,11 +171,10 @@
     "feedback": [],
     "budget": {
       "tokenBudget": 12000,
-      "estimatedTokens": 1961,
+      "estimatedTokens": 1955,
       "status": "within-budget",
       "omitted": {
         "files": 0,
-        "skills": 0,
         "feedbackCharacters": 0
       },
       "sources": [

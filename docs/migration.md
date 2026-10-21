@@ -60,7 +60,7 @@ Preview reports invalid artifacts per feature with their paths and recovery hint
 | `runProductAcceptance(state, feature)` | `runProductAccept(state, {feature})` |
 | `buildGateContext`, `evaluateGate` | `runProductContext`, `runProductNext`, `runProductStatus` |
 | `renderGateResult` | `runProductReport` |
-| `proposeFailureSkills` | `createProposalFromContent(state, input, content)` with explicit content and support |
+| `proposeFailureSkills` | None: project skills were removed after 0.5.0-beta.4 |
 
 Obtain state with `loadWorkspace(root)` before calling these services. A historical gate decision cannot be re-evaluated under current rules; keep an old installation if you need to reproduce one.
 

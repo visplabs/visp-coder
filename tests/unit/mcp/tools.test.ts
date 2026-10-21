@@ -68,8 +68,6 @@ const VALID_ARGS: Record<string, Record<string, unknown>> = {
   [TOOL.query]: { operation: "describe" },
   [TOOL.index]: {},
   [TOOL.doctor]: {},
-  [TOOL.skillList]: {},
-  [TOOL.skillShow]: { id: "some-skill" },
 };
 
 const roots: string[] = [];

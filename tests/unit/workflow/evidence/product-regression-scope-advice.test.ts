@@ -7,7 +7,6 @@ import type { Result } from "../../../../src/core/result.js";
 import { GraphStore, openProjectStore, refreshRepository } from "../../../../src/graph/index.js";
 import { registerWorkflowTools } from "../../../../src/mcp/tools/workflow.js";
 import { productEvidenceGaps } from "../../../../src/workflow/product/assessment.js";
-import * as contextGraph from "../../../../src/workflow/product/context-graph.js";
 import {
   runProductAccept,
   runProductDone,
@@ -382,7 +381,6 @@ it("uses changed-content coverage without a currency walk and caches related pat
   const state = await workspace.state();
   const record = value(await readProductRecord(state, { feature }));
   const snapshot = value(await productSourceSnapshot(state, record.brief));
-  const currency = vi.spyOn(contextGraph, "productGraphCurrencyGap");
   const readHead = vi.spyOn(GraphStore.prototype, "requireHead");
   const readScope = vi.spyOn(GraphStore.prototype, "readTestScope");
   try {
@@ -393,39 +391,13 @@ it("uses changed-content coverage without a currency walk and caches related pat
       advice(),
     );
     expect(readScope.mock.calls.length).toBe(reads);
-    expect(currency).not.toHaveBeenCalled();
     // A cache hit must still reject changed bytes, even with an old source snapshot supplied.
     await workspace.write("src/value.mjs", "export const value = 3;\n");
     expect(await regressionScopeAdvice(state, record, undefined, snapshot)).toBeUndefined();
     await refresh();
     expect(await regressionScopeAdvice(state, record)).toBe(advice());
   } finally {
-    currency.mockRestore();
     readHead.mockRestore();
     readScope.mockRestore();
   }
 });
-
-it.each(["current", "divergent"])(
-  "reuses a reply's %s currency observation without rechecking",
-  async (currencyState) => {
-    await change();
-    const state = await workspace.state();
-    const record = value(await readProductRecord(state, { feature }));
-    if (currencyState === "divergent")
-      await workspace.write("src/unrelated.mjs", "export const other = 1;\n");
-    const store = value(await openProjectStore(state.files, state.paths.graphStore));
-    const snapshot = value(store.requireHead());
-    store.close();
-    const currency = vi.spyOn(contextGraph, "productGraphCurrencyGap");
-    try {
-      await contextGraph.productGraphCurrencyGap(state, snapshot);
-      expect(await regressionScopeAdvice(state, record)).toBe(
-        currencyState === "current" ? advice() : undefined,
-      );
-      expect(currency).toHaveBeenCalledTimes(1);
-    } finally {
-      currency.mockRestore();
-    }
-  },
-);

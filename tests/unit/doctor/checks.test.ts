@@ -22,7 +22,6 @@ import {
 import { readInstallState } from "../../../src/harness/install-state.js";
 import { CODEX_CONFIG_FILE } from "../../../src/harness/mcp-registration.js";
 import { planFor } from "../../../src/harness/targets.js";
-import { upsert } from "../../../src/skills/store.js";
 import { now } from "../../../src/workflow/artifacts/common.js";
 import { updateProductBrief } from "../../../src/workflow/product/index.js";
 import { legacyStore } from "../support/legacy-store.js";
@@ -1266,51 +1265,6 @@ describe("repository-intelligence support", () => {
     expect(result.detail).toContain("fall back to paths");
   });
 });
-
-describe("the skill library check", () => {
-  it("reports an empty library as an explicit healthy state", async () => {
-    const result = await check("skill library");
-
-    expect(result.status).toBe("ok");
-    expect(result.detail).toContain("empty");
-    expect(result.detail).toContain("research-the-craft");
-    expect(result.detail).toContain("visp skill catalog");
-  });
-
-  it("summarizes the lifecycle states that are present", async () => {
-    const state = await workspace.state();
-    for (const record of [
-      skillRecord("one-skill", "admitted"),
-      skillRecord("two-skill", "proposed"),
-      skillRecord("three-skill", "proposed"),
-    ]) {
-      const written = await upsert(state, record);
-      expect(written.ok).toBe(true);
-    }
-
-    const result = await check("skill library");
-
-    expect(result.status).toBe("ok");
-    expect(result.detail).toContain("3 skills");
-    expect(result.detail).toContain("admitted 1");
-    expect(result.detail).toContain("proposed 2");
-  });
-});
-
-function skillRecord(id: string, state: "admitted" | "proposed") {
-  return {
-    id,
-    name: id,
-    description: "",
-    state,
-    trust: "advisory" as const,
-    origin: "seeded" as const,
-    derivedFrom: [],
-    contentHash: "abc123",
-    createdAt: now(),
-    ...(state === "admitted" ? { admittedBy: "tester", admittedAt: now() } : {}),
-  };
-}
 
 describe("applyFixes", () => {
   it("installs the enforcement surfaces it found missing", async () => {

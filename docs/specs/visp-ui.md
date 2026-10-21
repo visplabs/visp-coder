@@ -29,7 +29,6 @@ Also added from use: a pasted fresh link recovers an open tab; unchanged data ne
 
 - **No human surface.** VISP is driven by the agent through the CLI and MCP. A person sees state only by running `visp status`, `visp next` or `visp pr` and reading text. Nothing tells them when the agent is waiting on them.
 - **Human input is unauthenticated.** Every human-reserved input is recorded as a claim:
-  - `--by <name>` is "Claimed reviewer name (not authenticated)" (`src/cli/commands/skill.ts`).
   - An intent change records "Origin of the intent-change decision; not proof of human identity" (`src/cli/commands/product.ts`).
   - `visp critic feedback --reply` records "the user's verbatim feedback; never an actor-written answer", but nothing distinguishes an actor-written reply.
   - Internals: "local hashes identify content without authenticating who produced it."

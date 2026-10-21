@@ -42,10 +42,4 @@ export interface ContextOutcome {
   readonly pack: ContextPack;
   readonly manifest: ContextManifest;
   readonly path: string;
-  /**
-   * Admitted skills that applied here and were left out anyway. Reported to the
-   * person who ran the command and carried separately in the pack's
-   * skillDiagnostics. Repository unknowns and learning upkeep have different meanings.
-   */
-  readonly skippedSkills: readonly string[];
 }
