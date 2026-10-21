@@ -20,7 +20,6 @@ export const DIR = {
   cache: "cache",
   features: "features",
   evidence: "evidence",
-  memory: "memory",
   prompts: "prompts",
   reports: "reports",
   session: "session",

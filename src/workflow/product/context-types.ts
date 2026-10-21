@@ -1,5 +1,4 @@
 import type { QueryRow } from "../../graph/index.js";
-import type { RelevantMemoryNote } from "../../memory/store.js";
 import type { criticUnderstanding } from "./critic/critic-understanding.js";
 import type { currentJourneyFeedback } from "./evidence-references.js";
 import type { productFeedbackPlan } from "./feedback.js";
@@ -37,8 +36,6 @@ export interface ProductContextContent {
   readonly checks: ProductBrief["checks"];
   readonly files: readonly { path: string; content: string; truncated: boolean }[];
   readonly graph: readonly QueryRow[];
-  /** Released project memory is advisory and may be stale; see each item's labels. */
-  readonly memory?: readonly RelevantMemoryNote[];
   readonly notes: readonly string[];
   readonly mayEdit: boolean;
   readonly subjectDigest: string;
@@ -80,7 +77,6 @@ export interface ProductWorkContext extends ProductContextContent {
     readonly omitted: {
       readonly files: number;
       readonly graphRows: number;
-      readonly memory: number;
       readonly skills: number;
       readonly feedbackCharacters: number;
       readonly probes?: number;

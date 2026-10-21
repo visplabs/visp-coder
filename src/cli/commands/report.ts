@@ -1,6 +1,5 @@
 import { Command } from "commander";
 import { ok } from "../../core/result.js";
-import { learn, recall } from "../../memory/store.js";
 import { type CapabilityUtilization, capabilityUtilization } from "../../telemetry/capabilities.js";
 import {
   type ReportedTokens,
@@ -8,74 +7,8 @@ import {
   summarize,
   type TelemetryReport,
 } from "../../telemetry/store.js";
-import { isJson, mutatingWorkspace, options, workspace } from "../context.js";
+import { isJson, options, workspace } from "../context.js";
 import { emit, emitError } from "../output.js";
-
-export function learnCommand(): Command {
-  return new Command("learn")
-    .description("Record a note about this project for later recall")
-    .argument("<note>", "What you want remembered")
-    .action(async (note: string, _flags: unknown, command: Command) => {
-      const opts = options(command);
-      const state = await mutatingWorkspace(opts);
-      if (!state.ok) {
-        process.exitCode = emitError("learn", state.error, { json: isJson(opts) });
-        return;
-      }
-
-      if (!state.value.config.memory.enabled) {
-        process.exitCode = emitError(
-          "learn",
-          {
-            code: "UNSUPPORTED",
-            message: "Memory is turned off for this project",
-            recovery: "Set memory.enabled to true in visp.yml",
-          },
-          { json: isJson(opts) },
-        );
-        return;
-      }
-
-      const result = await learn(state.value, note);
-      process.exitCode = emit("learn", result, {
-        json: isJson(opts),
-        text: (saved) => `Recorded note ${saved.id}.`,
-      });
-    });
-}
-
-export function recallCommand(): Command {
-  return new Command("recall")
-    .description("Show recorded notes about this project")
-    .argument("[query]", "Case-insensitive substring; omit to show all recorded notes")
-    .action(async (query: string | undefined, _flags: unknown, command: Command) => {
-      const opts = options(command);
-      const state = await workspace(opts);
-      if (!state.ok) {
-        process.exitCode = emitError("recall", state.error, { json: isJson(opts) });
-        return;
-      }
-
-      const result = await recall(state.value, query);
-      process.exitCode = emit("recall", result, {
-        json: isJson(opts),
-        text: (notes) => {
-          if (notes.length === 0)
-            return query
-              ? "No notes matched this query. Run visp recall without a query to inspect recorded notes."
-              : "No notes recorded yet.";
-
-          return notes
-            .map((note) =>
-              note.quarantined
-                ? `${note.id}  [withheld: ${note.quarantined}]`
-                : `${note.id}  ${note.text}`,
-            )
-            .join("\n\n");
-        },
-      });
-    });
-}
 
 export function reportCommand(): Command {
   return new Command("report")

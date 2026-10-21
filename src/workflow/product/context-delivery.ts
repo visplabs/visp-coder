@@ -20,7 +20,6 @@ import type { ProductWorkContext } from "./context-types.js";
 const REPEATABLE = [
   "files",
   "graph",
-  "memory",
   "skills",
   "examples",
   "decisions",

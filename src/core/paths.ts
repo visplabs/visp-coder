@@ -178,10 +178,6 @@ export class ProjectPaths {
     return join(this.sessionDir, FILE.session);
   }
 
-  get memoryDir(): string {
-    return join(this.state, DIR.memory);
-  }
-
   get hooksDir(): string {
     return join(this.state, DIR.hooks);
   }
