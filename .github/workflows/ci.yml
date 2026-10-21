@@ -25,7 +25,11 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           node-version: ${{ matrix.node }}
+      # The declaration build needs about 2 GB of heap, at the default limit of Node 22 on
+      # the 7 GB macOS runner, where it ran out of memory.
       - run: pnpm build
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
       - name: Check confined storage and transactional installation
         run: >-
           pnpm exec vitest run
