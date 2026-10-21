@@ -120,7 +120,6 @@
         "endLine": 1
       }
     ],
-    "memory": [],
     "notes": [],
     "mayEdit": true,
     "subjectDigest": "<SHA256-1>",
@@ -134,19 +133,17 @@
     "feedback": [],
     "budget": {
       "tokenBudget": 12000,
-      "estimatedTokens": 1458,
+      "estimatedTokens": 1448,
       "status": "within-budget",
       "omitted": {
         "files": 0,
         "graphRows": 0,
-        "memory": 0,
         "skills": 0,
         "feedbackCharacters": 0
       },
       "sources": [
         ".visp/features/001-return-two-from-the-public/brief.yaml",
-        ".visp/features/001-return-two-from-the-public/product-state.json",
-        ".visp/memory"
+        ".visp/features/001-return-two-from-the-public/product-state.json"
       ]
     },
     "contextId": "<HEX-2>",

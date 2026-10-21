@@ -86,8 +86,6 @@ describe("the command surface", () => {
       "status",
       "handoff",
       "doctor",
-      "learn",
-      "recall",
       "report",
     ]) {
       expect(help, `${command} is missing from --help`).toContain(command);

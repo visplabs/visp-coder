@@ -76,7 +76,7 @@ telemetry:
 | `context.tokenBudget` | Approximate budget for the complete context `work` delivers. |
 | `context.maxSnippets` | Maximum source excerpts in delivered context. |
 | `skills.*` | Skill selection: `minSupport` closed slices a derived proposal must cite; `maxPerPack` admitted skills per context (0 selects none). |
-| `memory.enabled` | Enable project notes and earlier-request recall. |
+| `memory.enabled` | Enable earlier-request recall; `false` turns every memory path off. |
 | `memory.recall` | With a reviewer VISP launches (`critic.launch: codex-exec` or `claude-exec`) and no `memory.service`, use its model to select decisions from earlier requests and append them to a new feature's original request and `work` replies. Defaults to `true`; set `false` to skip this recall. A reviewer the host runs (no `critic.launch`, as `visp init` sets up for Claude Code) gives VISP no model to call, so nothing is recalled. |
 | `memory.service.command`, `memory.service.select` | Optional Visp Memory CLI and selection mode (`model` or `keyword`) for long-term request decisions. |
 | `telemetry.enabled` | Local usage import; activity recording is independent. Records stay on the machine. |
@@ -115,8 +115,6 @@ visp query unknowns                    # what the index could not resolve
 Other operations are `entity`, `neighbors` and `callees`. `tracePath` takes a source and destination; MCP passes the destination as `to`. `--depth`, `--results`, `--nodes` and `--edges` bound a query (defaults 3, 50, 2,000 and 8,000; maxima 8, 200, 20,000 and 80,000). A truncated answer keeps its unknowns, so a partial result never looks complete. Query receipts include the snapshot ID and creation time, and replies flag source changes newer than that snapshot. MCP exposes `visp_index` and `visp_query`.
 
 ## Memory and skills
-
-`visp learn "<note>"` records a project note under `.visp/memory/`; `visp recall [query]` lists notes. `work` delivers up to four matching notes (6,000 bytes) labeled with their source; notes are untrusted context, not instructions.
 
 With the default `memory.recall: true` and a reviewer VISP launches (`critic.launch: codex-exec` or `claude-exec`), each new feature can receive relevant decisions from earlier feature requests: VISP records earlier requests in `.visp/state/request-history.json`, and the reviewer's model, at low effort and seeing only the notes, chooses the ones that constrain the new request. The selected decisions are appended to the feature's original request, so the tester and reviewer see them as part of that request. Set `memory.recall: false` to disable this step when no `memory.service` is configured. VISP calls a model only where the project lets it launch the reviewer, so with a reviewer the host runs (no `critic.launch`, the Claude Code default from `visp init`) nothing is recalled and rules are found by phrase matching; set `critic.launch: claude-exec` to turn both on.
 
@@ -159,7 +157,6 @@ See [internals](internals.md#skills) for revision, evaluation and rollback recor
 | `features/<id>/reviewer-activity.jsonl`, `tester-activity.jsonl` | yes | Web searches and commands of VISP-launched reviewer and tester sessions |
 | `policy.json`, `overrides.json` | yes | Recorded rules and exceptions |
 | `project.json` | yes | Preset and project identity |
-| `memory/` | yes | Project notes |
 | `skills/` | yes | Skill documents, revisions and lifecycle history |
 | `exports/`, `migrations/backups/` | yes | History exports and upgrade backups from `visp-migrate` |
 | `hooks/` | no | Generated, build-specific hook scripts; reinstall locally after cloning |

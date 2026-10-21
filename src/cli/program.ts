@@ -7,7 +7,6 @@ import { doctorCommand } from "./commands/doctor.js";
 import { indexCommand, queryCommand } from "./commands/graph.js";
 import { guardCommand } from "./commands/guard.js";
 import { installCommand } from "./commands/install.js";
-import { learnCommand, recallCommand, reportCommand } from "./commands/memory.js";
 import { observationsCommand } from "./commands/observations.js";
 import { overrideCommand } from "./commands/override.js";
 import { policyCommand } from "./commands/policy.js";
@@ -26,6 +25,7 @@ import {
   verifyCommand,
   workCommand,
 } from "./commands/product.js";
+import { reportCommand } from "./commands/report.js";
 import { rulesCommand } from "./commands/rules.js";
 import { serveCommand } from "./commands/serve.js";
 import { initCommand } from "./commands/setup.js";
@@ -75,8 +75,6 @@ export function buildProgram(
   program.addCommand(statusCommand());
   program.addCommand(handoffCommand());
   program.addCommand(doctorCommand());
-  program.addCommand(learnCommand());
-  program.addCommand(recallCommand());
   program.addCommand(rulesCommand());
   program.addCommand(trailCommand());
   program.addCommand(reportCommand());

@@ -11,11 +11,8 @@ import type { TestProject } from "../support/project.js";
 let project: TestProject | undefined;
 afterEach(async () => project?.destroy());
 
-it("delivers retained knowledge in a fresh work session and isolates memory, graph and skill ablations", async () => {
+it("delivers retained knowledge in a fresh work session and isolates graph and skill ablations", async () => {
   ({ project } = await productProject());
-  const note = "The public value remains numeric because existing consumers add it to totals.";
-  await project.write("PROJECT-NOTES.md", note);
-  succeeded(project, "learn", note);
   await project.write(
     "numeric-value.md",
     "---\nname: numeric-value\ndescription: Preserve numeric value compatibility\nappliesTo:\n  paths:\n    - src/**\n---\n\n## Procedure\n\nCheck numeric consumers when changing the public value.\n\n## Verification\n\nRun the public value test.\n",
@@ -103,12 +100,6 @@ it("delivers retained knowledge in a fresh work session and isolates memory, gra
   const full = context();
   expect(full.taskClass).toBe("bugfix");
   expect(full.skills.some((entry) => entry.path.includes("repair-review"))).toBe(true);
-  expect(full.memory?.some((entry) => entry.text === note)).toBe(true);
-  expect(
-    full.memory?.every(
-      (entry) => entry.verification === "unverified" && entry.freshness === "unknown",
-    ),
-  ).toBe(true);
   expect(full.graph.length).toBeGreaterThan(0);
   expect(full.notes.join("\n")).toContain("typed-review: trigger did not match");
   expect(full.notes.join("\n")).not.toContain("language facts are unavailable");
@@ -142,7 +133,6 @@ it("delivers retained knowledge in a fresh work session and isolates memory, gra
           taskClass: "bugfix",
           scope: full.scope,
           skills: full.skills,
-          memory: full.memory,
           graph: full.graph,
         },
       });
@@ -151,7 +141,6 @@ it("delivers retained knowledge in a fresh work session and isolates memory, gra
         .map((entry) => entry.text ?? "")
         .join("\n");
       expect(text).toContain("Check numeric consumers when changing the public value.");
-      expect(text).toContain(note);
       expect(text).toContain('"graph"');
       expect(text).toContain(full.graph[0]?.name);
       expect(text).toContain("bugfix");
@@ -160,18 +149,17 @@ it("delivers retained knowledge in a fresh work session and isolates memory, gra
     await client.close();
   }
 
-  for (const disabled of ["memory", "graph", "skills"] as const) {
+  for (const disabled of ["graph", "skills"] as const) {
     const changed = structuredClone(settings);
     if (disabled === "graph") changed.graph = { ...changed.graph, exclude: ["**"] };
     else changed[disabled] = { ...changed[disabled], enabled: false };
     await project.write("visp.yml", stringify(changed));
     const delivered = context();
     expect(delivered[disabled]?.length, `${disabled} treatment must actually be absent`).toBe(0);
-    for (const retained of ["memory", "graph", "skills"] as const)
+    for (const retained of ["graph", "skills"] as const)
       if (retained !== disabled) expect(delivered[retained]?.length).toBeGreaterThan(0);
     expect(delivered.scope).toEqual(full.scope);
     expect(delivered.outcomes).toEqual(full.outcomes);
-    expect(await project.read("PROJECT-NOTES.md")).toBe(note);
   }
 
   await project.write("visp.yml", stringify(settings));

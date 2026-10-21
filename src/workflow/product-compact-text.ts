@@ -76,7 +76,6 @@ const LIST_FIELDS = [
   "outcomes",
   "examples",
   "decisions",
-  "memory",
   "graph",
   "unresolved",
   "findings",
@@ -222,7 +221,6 @@ function addObservationSummary(data: Record<string, unknown>, summary: Record<st
 const SECTION_NAMES: Readonly<Record<string, string>> = {
   files: "source excerpts",
   graph: "related files",
-  memory: "memory notes",
   skills: "skills",
   examples: "examples",
   decisions: "decisions",

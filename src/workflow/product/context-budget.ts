@@ -21,7 +21,6 @@ export function fitProductContext(
   let feedbackCharacters = 0;
   let fitted: ProductWorkContext = {
     ...input,
-    memory: input.memory ?? [],
     feedback: input.feedback.map((entry) => {
       const output = entry.output.slice(0, 2000);
       feedbackCharacters += entry.output.length - output.length;
@@ -35,7 +34,7 @@ export function fitProductContext(
       tokenBudget,
       estimatedTokens: 0,
       status: "within-budget",
-      omitted: { files: 0, graphRows: 0, memory: 0, skills: 0, feedbackCharacters: 0 },
+      omitted: { files: 0, graphRows: 0, skills: 0, feedbackCharacters: 0 },
       sources,
     },
   };
@@ -47,7 +46,6 @@ export function fitProductContext(
   // Admitted skills are small and are the only place a procedure reaches the worker;
   // source excerpts go first because the worker can read those files itself.
   for (const [key, counter] of [
-    ["memory", "memory"],
     ["graph", "graphRows"],
     ["files", "files"],
     ["skills", "skills"],
@@ -106,10 +104,10 @@ function fitAdvisoryContext(context: ProductWorkContext): ProductWorkContext {
 /** Bounded prefix search avoids repeatedly copying a growing omission ledger. */
 function fitPrefix(
   context: ProductWorkContext,
-  key: "memory" | "skills" | "graph" | "files",
-  counter: "memory" | "skills" | "graphRows" | "files",
+  key: "skills" | "graph" | "files",
+  counter: "skills" | "graphRows" | "files",
 ): ProductWorkContext {
-  const entries = context[key] ?? [];
+  const entries = context[key];
   const candidate = (count: number) =>
     price({
       ...context,

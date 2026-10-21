@@ -7,7 +7,6 @@ import {
   refreshRepository,
 } from "../../graph/index.js";
 import { featureMemories } from "../../memory/memory-service.js";
-import { recallRelevant } from "../../memory/store.js";
 import { recordActivity } from "../../orchestrate/session.js";
 import { checkOutputNotes } from "../product-output-guidance.js";
 import type { WorkspaceState } from "../state.js";
@@ -99,31 +98,6 @@ export async function buildProductContext(
   );
   notes.unshift(...(await productInputWarnings(workspace, brief)));
   notes.push(...checkOutputNotes(checks));
-  const memory = await recallRelevant(workspace, {
-    terms: [
-      slice.id,
-      slice.goal,
-      brief.originalRequest,
-      ...brief.outcomes
-        .filter((outcome) => slice.outcomes.includes(outcome.id))
-        .map((outcome) => outcome.statement),
-      ...checks.flatMap((check) => [
-        check.id,
-        ...check.files,
-        ...(typeof check.command === "string"
-          ? [check.command]
-          : Array.isArray(check.command)
-            ? check.command
-            : []),
-      ]),
-    ],
-    paths,
-  });
-  if (!memory.ok) return memory;
-  if (memory.value.length)
-    notes.push(
-      "Project memory is advisory and unverified; its freshness is unknown. Confirm it against current files.",
-    );
   const { files, remaining } = await productExcerpts(workspace, excerptPaths, question);
   if (excerptPaths.length > files.length)
     notes.push("Context is bounded; read additional relevant files when needed.");
@@ -158,7 +132,6 @@ export async function buildProductContext(
         checks,
         files,
         graph,
-        memory: memory.value,
         notes,
         mayEdit,
         subjectDigest: subject.value,
@@ -205,9 +178,6 @@ export async function buildProductContext(
         workspace.paths.relative(briefPath(workspace, brief.feature)) ?? "brief.yaml",
         workspace.paths.relative(productStatePath(workspace, brief.feature)) ??
           "product-state.json",
-        ...(workspace.config.memory.enabled
-          ? [workspace.paths.relative(workspace.paths.memoryDir) ?? ".visp/memory"]
-          : []),
       ],
     ),
   );

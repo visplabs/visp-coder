@@ -93,7 +93,7 @@ const operationNotes: Readonly<Record<string, string>> = {
     "Bounds delivered product context approximately; essential intent may overflow with an explicit diagnostic.",
   "context.maxSnippets":
     "Limits source excerpts in product context; does not limit all evidence or skill entries.",
-  "memory.enabled": "Enables relevant project-memory recall; recalled notes remain advisory.",
+  "memory.enabled": "Enables earlier-request recall; false turns every memory path off.",
   "memory.recall":
     "With a reviewer VISP launches (codex-exec or claude-exec) and no memory service, its model selects relevant earlier requests for each new feature; a reviewer the host runs recalls nothing.",
   "memory.service.command":

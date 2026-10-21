@@ -91,7 +91,7 @@ context:
   maxSnippets: ${LIMITS.maxSnippets}
 
 memory:
-  # Durable project notes under .visp/memory, recalled as untrusted context.
+  # Earlier-request recall for new features; false turns every memory path off.
   enabled: true
 
 telemetry:
