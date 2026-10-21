@@ -1042,6 +1042,157 @@ describe("hard resets over untracked work", () => {
   });
 });
 
+/**
+ * Codex edits files through apply_patch, whose PreToolUse input carries the whole patch in
+ * tool_input.command. Every file the patch names is checked before Codex applies it.
+ */
+describe("Codex apply_patch", () => {
+  let project: TestProject;
+  const hook = () => join(project.root, ".visp/hooks/codex-hooks.mjs");
+
+  beforeAll(async () => {
+    project = await TestProject.create({
+      "src/auth/login.ts": "export const login = () => null;\n",
+    });
+    project.run("init", "--harness", "generic");
+    project.run("install", "--harness", "codex", "--hooks", "git");
+    await project.installShim();
+    project.commit("add visp");
+    await setUpTask(project);
+  });
+
+  afterAll(async () => {
+    await project.destroy();
+  });
+
+  function applyPatch(...lines: string[]): { decision: string; reason: string } {
+    const raw = execFileSync(process.execPath, [hook()], {
+      cwd: project.root,
+      input: JSON.stringify({
+        session_id: "codex-session",
+        cwd: project.root,
+        hook_event_name: "PreToolUse",
+        tool_name: "apply_patch",
+        tool_input: { command: ["*** Begin Patch", ...lines, "*** End Patch", ""].join("\n") },
+      }),
+      encoding: "utf8",
+      env: project.env(),
+    });
+    const output = raw ? (JSON.parse(raw).hookSpecificOutput as Record<string, string>) : {};
+    return {
+      decision: output.permissionDecision ?? "",
+      reason: output.permissionDecisionReason ?? "",
+    };
+  }
+
+  // Codex trusts each hook entry by its position and content: the edit hook is a new entry
+  // after the shell one, so a trusted shell hook keeps its place when a project upgrades.
+  it("registers apply_patch as a PreToolUse entry after the shell one", async () => {
+    const { readFile } = await import("node:fs/promises");
+    const hooks = JSON.parse(await readFile(join(project.root, ".codex/hooks.json"), "utf8"));
+    expect(hooks.hooks.PreToolUse.map((entry: { matcher: string }) => entry.matcher)).toEqual([
+      "Bash",
+      "apply_patch",
+    ]);
+  });
+
+  it("allows a patch whose files are all in scope", () => {
+    expect(
+      applyPatch(
+        "*** Update File: src/auth/login.ts",
+        "@@",
+        "-export const login = () => null;",
+        "+export const login = () => 1;",
+        "*** Add File: src/auth/token.ts",
+        "+export const token = 1;",
+      ),
+    ).toEqual({ decision: "", reason: "" });
+  });
+
+  it("refuses a patch that also touches a file outside the scope and names it", () => {
+    const result = applyPatch(
+      "*** Add File: src/auth/token.ts",
+      "+export const token = 1;",
+      "*** Add File: src/billing/invoice.ts",
+      "+export const invoice = 1;",
+    );
+    expect(result.decision).toBe("deny");
+    expect(result.reason).toContain("src/billing/invoice.ts");
+  });
+
+  it("refuses moving an in-scope file out of the scope", () => {
+    const result = applyPatch("*** Update File: src/auth/login.ts", "*** Move to: src/login.ts");
+    expect(result.decision).toBe("deny");
+    expect(result.reason).toContain("src/login.ts");
+  });
+
+  it("refuses deleting a file outside the scope", () => {
+    expect(applyPatch("*** Delete File: README.md").decision).toBe("deny");
+  });
+
+  it("refuses a patch to VISP state", () => {
+    const result = applyPatch("*** Add File: .visp/state/forged.json", "+{}");
+    expect(result.decision).toBe("deny");
+    expect(result.reason).toContain("VISP state");
+  });
+
+  it("leaves a file outside the project to Codex's own rules", () => {
+    expect(applyPatch(`*** Add File: ${join(project.root, "../codex-scratch.txt")}`, "+x")).toEqual(
+      { decision: "", reason: "" },
+    );
+  });
+
+  // No live Codex payload has been captured. If Codex puts the patch somewhere other than
+  // tool_input or tool_input.command, refusing would stop every edit in a slice; the call is
+  // allowed and recorded for `visp doctor`, and commit and `visp done` still check scope.
+  it("allows and records an apply_patch call whose patch it cannot find", async () => {
+    const { readFile } = await import("node:fs/promises");
+    const record = join(project.root, ".visp/session/apply-patch-unrecognized.json");
+    const raw = execFileSync(process.execPath, [hook()], {
+      cwd: project.root,
+      input: JSON.stringify({
+        cwd: project.root,
+        hook_event_name: "PreToolUse",
+        tool_name: "apply_patch",
+        tool_input: { patch_text: "*** Begin Patch\n*** Add File: README.md\n+x\n*** End Patch" },
+      }),
+      encoding: "utf8",
+      env: project.env(),
+    });
+    expect(raw).toBe("");
+    expect(JSON.parse(await readFile(record, "utf8"))).toMatchObject({ fields: ["patch_text"] });
+    await rm(record);
+  });
+
+  it("refuses patch text that is not a patch while a slice is authorized", () => {
+    const raw = execFileSync(process.execPath, [hook()], {
+      cwd: project.root,
+      input: JSON.stringify({
+        cwd: project.root,
+        hook_event_name: "PreToolUse",
+        tool_name: "apply_patch",
+        tool_input: { command: "echo hello > README.md" },
+      }),
+      encoding: "utf8",
+      env: project.env(),
+    });
+    expect(JSON.parse(raw).hookSpecificOutput.permissionDecision).toBe("deny");
+  });
+
+  it("refuses a patch it cannot read only while a slice is authorized", async () => {
+    const unreadable = applyPatch("*** Rename File: src/billing/invoice.ts");
+    expect(unreadable.decision).toBe("deny");
+    expect(unreadable.reason).toContain("could not read");
+    const marker = join(project.root, ".visp/state/product-authorizations");
+    await rename(marker, `${marker}.parked`);
+    try {
+      expect(applyPatch("*** Rename File: src/billing/invoice.ts").decision).toBe("");
+    } finally {
+      await rename(`${marker}.parked`, marker);
+    }
+  });
+});
+
 async function malformedGuardEnv(project: TestProject): Promise<NodeJS.ProcessEnv> {
   return fakeGuardEnv(project, ".bad-bin", "#!/bin/sh\necho not-json\n");
 }

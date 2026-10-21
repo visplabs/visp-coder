@@ -532,13 +532,62 @@ function discardedChanges(command) {
   );
 }
 
-const target = input?.tool_input?.file_path ?? input?.tool_input?.notebook_path;
+const root = projectRoot();
 
-if (!target) {
+// Whether a task is authorized, read without the CLI: "inactive", or anything else when one
+// is or the answer is unknown.
+function authorizationState() {
+  try {
+    return execFileSync(process.execPath, ["-e", __HOOK_AUTHORIZATION_CHECK__], {
+      cwd: root,
+      stdio: ["ignore", "pipe", "ignore"],
+    }).toString().trim();
+  } catch {
+    return "unknown";
+  }
+}
+
+// Codex edits through apply_patch, which names its files inside the patch text. A patch
+// whose files cannot be read is refused while a task is authorized, as a write that cannot
+// be checked is. Patch text is expected as tool_input or tool_input.command; no live payload
+// has been captured, so a call without patch text in either place is let through and
+// recorded for `__HOOK_PRODUCT_NAME__ doctor`, rather than refusing every edit of a slice. The Git
+// hook and `__HOOK_PRODUCT_NAME__ done` still check its files.
+const patchPaths = __HOOK_PATCH_PATHS__;
+const patching = input?.tool_name === "apply_patch";
+const patch = typeof input?.tool_input === "string" ? input.tool_input : input?.tool_input?.command;
+const patchText =
+  typeof patch === "string" ? patch : Array.isArray(patch) && patch.every((part) => typeof part === "string") ? patch.join("\n") : "";
+if (patching && !patchText.trim()) {
+  try {
+    const directory = join(root, ".visp", "session");
+    mkdirSync(directory, { recursive: true });
+    const fields = input?.tool_input && typeof input.tool_input === "object" ? Object.keys(input.tool_input).slice(0, 20) : [];
+    writeFileSync(
+      join(directory, "__HOOK_UNRECOGNIZED_PATCH_FILE__"),
+      JSON.stringify({ at: new Date().toISOString(), fields }),
+    );
+  } catch {}
+  process.exit(0);
+}
+const patched = patching ? patchPaths(patchText) : undefined;
+if (patching && patched === undefined) {
+  if (authorizationState() === "inactive") process.exit(0);
+  process.stdout.write(
+    JSON.stringify(
+      deny(
+        "__HOOK_PRODUCT_NAME__ could not read which files this patch changes, so it was refused rather than applied unchecked. Use apply_patch's own format: `*** Begin Patch`, then `*** Add File: <path>`, `*** Update File: <path>` or `*** Delete File: <path>` sections, then `*** End Patch`.",
+      ),
+    ),
+  );
+  process.exit(0);
+}
+const targets = patched ?? [input?.tool_input?.file_path ?? input?.tool_input?.notebook_path].filter(Boolean);
+
+if (targets.length === 0) {
   process.exit(0);
 }
 
-const root = projectRoot();
 function realPath(path, depth = 0) {
   if (depth > 40) throw new Error("Too many symlinks in " + path);
   try {
@@ -561,35 +610,46 @@ function outside(path) {
   return path === ".." || path.startsWith(".." + sep) || isAbsolute(path);
 }
 
-const absoluteTarget = isAbsolute(target) ? target : resolve(input?.cwd ?? root, target);
-const logical = relative(root, absoluteTarget);
-const physical = relative(realPath(root), realPath(absoluteTarget));
-if (isAbsolute(target) && outside(logical) && outside(physical)) process.exit(0);
-if (!outside(logical) && outside(physical)) {
-  process.stdout.write(JSON.stringify(deny(String(target) + " resolves outside the project root")));
-  process.exit(0);
-}
-const path = isAbsolute(target) ? (outside(logical) ? physical : logical) : target;
-const paths = physical !== path && !outside(physical) ? [path, physical] : [path];
+const named = [];
+const paths = [];
+for (const target of targets) {
+  const absoluteTarget = isAbsolute(target) ? target : resolve(input?.cwd ?? root, target);
+  const logical = relative(root, absoluteTarget);
+  const physical = relative(realPath(root), realPath(absoluteTarget));
+  if (isAbsolute(target) && outside(logical) && outside(physical)) continue;
+  if (!outside(logical) && outside(physical)) {
+    process.stdout.write(JSON.stringify(deny(String(target) + " resolves outside the project root")));
+    process.exit(0);
+  }
+  const path = isAbsolute(target) ? (outside(logical) ? physical : logical) : target;
 
-// VISP state changes only through visp commands, which validate and record it. A worker
-// that hand-edited the brief left it unreadable and abandoned the workflow. Drafts are
-// the one place the workflow asks agents to write.
-const statePath = path.replaceAll(String.fromCharCode(92), "/").toLowerCase();
-if (
-  (statePath === "__HOOK_STATE_DIR__" || statePath.startsWith("__HOOK_STATE_DIR__/")) &&
-  !statePath.startsWith("__HOOK_STATE_DIR__/drafts/") &&
-  !statePath.split("/").includes("..")
-) {
-  process.stdout.write(
-    JSON.stringify(
-      deny(
-        `${path} is VISP state; change it only through \`__HOOK_PRODUCT_NAME__\` commands. For the brief, pipe changed fields: \`__HOOK_PRODUCT_NAME__ brief --patch - --reason "<why>"\`.`,
+  // VISP state changes only through visp commands, which validate and record it. A worker
+  // that hand-edited the brief left it unreadable and abandoned the workflow. Drafts are
+  // the one place the workflow asks agents to write.
+  const statePath = path.replaceAll(String.fromCharCode(92), "/").toLowerCase();
+  if (
+    (statePath === "__HOOK_STATE_DIR__" || statePath.startsWith("__HOOK_STATE_DIR__/")) &&
+    !statePath.startsWith("__HOOK_STATE_DIR__/drafts/") &&
+    !statePath.split("/").includes("..")
+  ) {
+    process.stdout.write(
+      JSON.stringify(
+        deny(
+          `${path} is VISP state; change it only through \`__HOOK_PRODUCT_NAME__\` commands. For the brief, pipe changed fields: \`__HOOK_PRODUCT_NAME__ brief --patch - --reason "<why>"\`.`,
+        ),
       ),
-    ),
-  );
+    );
+    process.exit(0);
+  }
+  named.push(path);
+  paths.push(path);
+  if (physical !== path && !outside(physical)) paths.push(physical);
+}
+
+if (paths.length === 0) {
   process.exit(0);
 }
+const path = named.join(", ");
 
 /**
  * The guard envelope, or undefined when this output did not come from guard.
@@ -648,13 +708,7 @@ try {
 const envelope = guardEnvelope(stdout);
 
 if (envelope === undefined) {
-  let authorization = "unknown";
-  try {
-    authorization = execFileSync(process.execPath, ["-e", __HOOK_AUTHORIZATION_CHECK__], {
-      cwd: root,
-      stdio: ["ignore", "pipe", "ignore"],
-    }).toString().trim();
-  } catch {}
+  const authorization = authorizationState();
   // No task is active, so there is nothing to enforce: leave Claude's own permission decision in place.
   if (authorization === "inactive") process.exit(0);
   let guardError;

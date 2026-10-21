@@ -24,7 +24,7 @@ description: Use for any code change in this project. Keeps edits inside a decla
 Follow `AGENTS.visp.md`. Run `visp next` and carry out the one command it prints.
 === .git/hooks/pre-commit (executable)
 #!/bin/sh
-# managed by visp; hook-version: 17
+# managed by visp; hook-version: 18
 # Refuses a commit whose staged files fall outside the active task's scope.
 
 

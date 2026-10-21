@@ -54,7 +54,7 @@ export function planFor(
       ...plan.manualSteps,
       ...(harness === "codex"
         ? [
-            "Codex runs project hooks only after you trust them: run /hooks in Codex once and trust VISP's hooks in .codex/hooks.json.",
+            "Codex runs project hooks only after you trust them: run /hooks in Codex and trust VISP's hooks in .codex/hooks.json, again whenever install rewrites that file (an upgrade can add a hook). `visp doctor` names any hook still untrusted.",
           ]
         : []),
     ],

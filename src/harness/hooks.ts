@@ -7,9 +7,10 @@ import {
   STATE_DIR,
 } from "../core/constants.js";
 import { runtimeIdentity } from "../core/version.js";
-import { HOST_SESSION_FILE } from "../workflow/product/host-prompts.js";
+import { HOST_SESSION_FILE, UNRECOGNIZED_PATCH_FILE } from "../workflow/product/host-prompts.js";
 import { AUTHORIZATION_CHECK } from "./authorization-check.js";
 import { hookCommand } from "./claude-settings.js";
+import patchPaths from "./scripts/patch-paths.script.mjs?raw";
 import preToolUseHook from "./scripts/pretooluse.script.mjs?raw";
 
 /**
@@ -20,7 +21,7 @@ import preToolUseHook from "./scripts/pretooluse.script.mjs?raw";
 
 /** Identifies a file visp wrote, so install never clobbers a foreign hook. */
 export const HOOK_MARKER = "managed by visp";
-export const HOOK_TEMPLATE_VERSION = 17;
+export const HOOK_TEMPLATE_VERSION = 18;
 
 /**
  * Claude Code PreToolUse hook. Receives the tool call on stdin and blocks a
@@ -34,6 +35,7 @@ export function renderPreToolUseHook(executable = runtimeIdentity().executable):
     PRODUCT_NAME,
     CLI: JSON.stringify(executable),
     HOST_SESSION_FILE,
+    UNRECOGNIZED_PATCH_FILE,
     PACKAGE_NAME,
     STATE_DIR,
     EXIT_REFUSED: String(EXIT.refused),
@@ -41,6 +43,7 @@ export function renderPreToolUseHook(executable = runtimeIdentity().executable):
     BUILD_ID: JSON.stringify(runtimeIdentity().buildId),
     RUNTIME_VERSION: JSON.stringify(runtimeIdentity().version).replaceAll("'", "\\u0027"),
     AUTHORIZATION_CHECK: JSON.stringify(AUTHORIZATION_CHECK),
+    PATCH_PATHS: `(${patchPaths.slice(patchPaths.indexOf("function patchPaths")).trim()})`,
   });
 }
 
@@ -292,9 +295,11 @@ const CODEX_HOOK_COMMAND =
 
 /**
  * Codex reads `.codex/hooks.json` in Claude Code's format. The same script records user
- * prompts, sends a stopping worker back to unfinished work and refuses shell commands that
- * would delete VISP state. Codex edits files through apply_patch rather than a file-path
- * tool, so edit scope is enforced by the Git hook and `visp done`, not here.
+ * prompts, sends a stopping worker back to unfinished work, refuses shell commands that
+ * would delete VISP state and refuses apply_patch edits outside the authorized scope. Codex
+ * trusts each entry by its event and position, so the edit hook is a second PreToolUse entry:
+ * the shell entry a project already trusted keeps its place, and only the new one needs
+ * trust. The Git hook and `visp done` still check every edit.
  */
 export function renderCodexHooks(): string {
   const entry = (extra: Record<string, unknown> = {}) => ({
@@ -305,7 +310,10 @@ export function renderCodexHooks(): string {
       hooks: {
         UserPromptSubmit: [entry()],
         Stop: [entry({ timeout: 180 })],
-        PreToolUse: [{ matcher: "Bash", ...entry() }],
+        PreToolUse: [
+          { matcher: "Bash", ...entry() },
+          { matcher: "apply_patch", ...entry() },
+        ],
       },
     },
     null,

@@ -52,7 +52,7 @@ Command examples and recovery: VISP.commands.md. Full guide: AGENTS.visp.md
 
 === .git/hooks/pre-commit (executable)
 #!/bin/sh
-# managed by visp; hook-version: 17
+# managed by visp; hook-version: 18
 # Refuses a commit whose staged files fall outside the active task's scope.
 
 

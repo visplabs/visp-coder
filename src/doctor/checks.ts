@@ -15,6 +15,7 @@ import { readIndex } from "../skills/store.js";
 import { findTask, type TaskGraph } from "../workflow/artifacts/tasks.js";
 import { foreignHostFile, hostFileProtection } from "../workflow/product/byproducts.js";
 import { describeProductCheck } from "../workflow/product/check/check-command.js";
+import { UNRECOGNIZED_PATCH_FILE } from "../workflow/product/host-prompts.js";
 import { readProductRecord } from "../workflow/product/store.js";
 import type { WorkspaceState } from "../workflow/state.js";
 import {
@@ -70,6 +71,7 @@ export async function runChecks(
     await checkHarnessAssets(state),
     await checkMcpRegistration(state),
     await checkCodexTrust(state),
+    await checkCodexEditHook(state),
     await checkCodexCli(state),
     await checkClaudeCli(state),
     await checkHarnessActivation(state),
@@ -147,8 +149,17 @@ async function checkCodexTrust(state: WorkspaceState): Promise<Check> {
     };
   }
   const prefix = `${state.paths.root}/.codex/hooks.json:`;
-  const events = ["user_prompt_submit", "pre_tool_use", "stop"];
-  const missing = events.filter((event) => !config.includes(`${prefix}${event}:`));
+  // Codex keys trust by event and entry position; the edit hook came later than the others,
+  // so a project trusted before it has no entry for it and the hook does not run.
+  const entries = [
+    ["user_prompt_submit:0:", "the prompt hook"],
+    ["pre_tool_use:0:", "the shell hook"],
+    ["pre_tool_use:1:", "the edit hook"],
+    ["stop:0:", "the Stop hook"],
+  ];
+  const missing = entries
+    .filter(([entry]) => !config.includes(`${prefix}${entry}`))
+    .map(([, name]) => name);
   const projectSection = config
     .split(`[projects.${JSON.stringify(state.paths.root)}]`)[1]
     ?.split(/^\[/mu)[0];
@@ -158,14 +169,36 @@ async function checkCodexTrust(state: WorkspaceState): Promise<Check> {
     ? {
         name: "codex hooks trust",
         status: "ok",
-        detail: "Project trust and prompt, shell and Stop hook trust entries exist",
+        detail: "Project trust and prompt, shell, edit and Stop hook trust entries exist",
       }
     : {
         name: "codex hooks trust",
         status: "unknown",
         detail: `Codex hook trust is unverified for ${missing.join(", ")}`,
-        recovery: "Open Codex and run /hooks to trust .codex/hooks.json before headless runs",
+        recovery:
+          "Open Codex and run /hooks to trust .codex/hooks.json before headless runs, again after an upgrade adds a hook",
       };
+}
+
+async function checkCodexEditHook(state: WorkspaceState): Promise<Check> {
+  const name = "codex edit hook";
+  if (state.config.harness !== "codex")
+    return { name, status: "ok", detail: "Codex is not the selected coding host" };
+  let record: { at?: unknown; fields?: unknown };
+  try {
+    record = JSON.parse(
+      await readFile(join(state.paths.sessionDir, UNRECOGNIZED_PATCH_FILE), "utf8"),
+    );
+  } catch {
+    return { name, status: "ok", detail: "No apply_patch call went unchecked" };
+  }
+  const fields = Array.isArray(record.fields) ? record.fields.map(String).join(", ") : "";
+  return {
+    name,
+    status: "warn",
+    detail: `apply_patch payload shape not recognized${typeof record.at === "string" ? ` at ${record.at}` : ""} (tool_input fields: ${fields || "none"}); scope enforced by pre-commit and \`${PRODUCT_NAME} done\` only`,
+    recovery: `Report the Codex version and these fields to the VISP maintainers, then delete ${STATE_DIR}/session/${UNRECOGNIZED_PATCH_FILE}`,
+  };
 }
 
 async function checkCodexCli(state: WorkspaceState): Promise<Check> {

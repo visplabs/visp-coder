@@ -11,7 +11,7 @@ Installed visp assets for codex:
   wrote    .codex/config.toml  (registered as an MCP server)
 
 - Restart the Codex task so it reloads the project instructions activated in AGENTS.md.
-- Codex runs project hooks only after you trust them: run /hooks in Codex once and trust VISP's hooks in .codex/hooks.json.
+- Codex runs project hooks only after you trust them: run /hooks in Codex and trust VISP's hooks in .codex/hooks.json, again whenever install rewrites that file (an upgrade can add a hook). `visp doctor` names any hook still untrusted.
 
 Before starting a feature, review and commit the project baseline including setup changes. VISP does not stage files or create the commit.
 
@@ -83,6 +83,15 @@ args = ["<REPO>/dist/cli.js", "serve", "--mcp"]
             "command": "node \"$(git rev-parse --show-toplevel)/.visp/hooks/codex-hooks.mjs\" || exit 2"
           }
         ]
+      },
+      {
+        "matcher": "apply_patch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/.visp/hooks/codex-hooks.mjs\" || exit 2"
+          }
+        ]
       }
     ]
   }
@@ -90,7 +99,7 @@ args = ["<REPO>/dist/cli.js", "serve", "--mcp"]
 
 === .git/hooks/pre-commit (executable)
 #!/bin/sh
-# managed by visp; hook-version: 17
+# managed by visp; hook-version: 18
 # Refuses a commit whose staged files fall outside the active task's scope.
 
 
@@ -253,7 +262,7 @@ esac
 
 === .visp/hooks/codex-hooks.mjs (executable)
 #!/usr/bin/env node
-// managed by visp; hook-version: 17
+// managed by visp; hook-version: 18
 // Refuses edits outside the active task's declared scope.
 // Decisions come from `visp guard`, so this file holds no rules of its own.
 
@@ -786,13 +795,98 @@ function discardedChanges(command) {
   );
 }
 
-const target = input?.tool_input?.file_path ?? input?.tool_input?.notebook_path;
+const root = projectRoot();
 
-if (!target) {
+// Whether a task is authorized, read without the CLI: "inactive", or anything else when one
+// is or the answer is unknown.
+function authorizationState() {
+  try {
+    return execFileSync(process.execPath, ["-e", "\nconst { readFileSync, readdirSync, lstatSync } = require(\"node:fs\");\nconst { join } = require(\"node:path\");\nlet unknown = false;\nfunction entries(directory) {\n  try {\n    if (lstatSync(directory).isSymbolicLink()) { unknown = true; return []; }\n    return readdirSync(directory, { withFileTypes: true }).filter(entry => {\n      if (entry.isSymbolicLink()) unknown = true;\n      return entry.isFile() && entry.name.endsWith(\".json\");\n    });\n  } catch(error) {\n    if (error?.code !== \"ENOENT\") unknown = true;\n    return [];\n  }\n}\nfunction read(path) {\n  if (lstatSync(path).isSymbolicLink()) throw new Error(\"Linked state\");\n  return JSON.parse(readFileSync(path, \"utf8\"));\n}\nfunction validIdentity(marker) {\n  return typeof marker?.feature === \"string\" && /^\\d{3}-[a-z0-9][a-z0-9-]*$/.test(marker.feature)\n    && typeof marker.task === \"string\" && /^T\\d{3,}$/.test(marker.task);\n}\nfor (const [directory, version] of [[\".visp/state/product-authorizations\", 2], [\".visp/state/implement-allowed\", 1]]) {\n  for (const entry of entries(directory)) {\n    try {\n      const marker = read(join(directory, entry.name));\n      if (!validIdentity(marker)) throw new Error(\"Invalid authorization identity\");\n      try { lstatSync(join(\".visp\", \"features\", marker.feature)); }\n      catch (error) { if (error?.code === \"ENOENT\") continue; throw error; }\n      if (version === 2) {\n        if (marker.version !== 2) throw new Error(\"Invalid product authorization\");\n        const state = read(join(\".visp\", \"features\", marker.feature, \"product-state.json\"));\n        if (state?.version !== 3 || state.feature !== marker.feature || !state.slices?.[marker.task]) throw new Error(\"Missing product state\");\n        const status = state.slices[marker.task].status;\n        if (status === \"closed\" || status === \"legacy-closed\") continue;\n        if (status !== \"pending\" && status !== \"in-progress\") throw new Error(\"Invalid slice status\");\n      } else {\n        if (marker.kind !== \"implement-marker\") throw new Error(\"Invalid historical marker\");\n        const graph = read(join(\".visp\", \"features\", marker.feature, \"tasks.json\"));\n        if (graph?.kind !== \"tasks\" || graph.feature !== marker.feature || !Array.isArray(graph.tasks)) throw new Error(\"Invalid historical graph\");\n        const matching = graph.tasks.filter(task => task?.id === marker.task);\n        if (matching.length !== 1) throw new Error(\"Missing historical task\");\n        if (matching[0].status === \"done\") continue;\n      }\n      console.log(\"active\");\n      process.exit(0);\n    } catch { unknown = true; }\n  }\n}\nconsole.log(unknown ? \"unknown\" : \"inactive\");\n"], {
+      cwd: root,
+      stdio: ["ignore", "pipe", "ignore"],
+    }).toString().trim();
+  } catch {
+    return "unknown";
+  }
+}
+
+// Codex edits through apply_patch, which names its files inside the patch text. A patch
+// whose files cannot be read is refused while a task is authorized, as a write that cannot
+// be checked is. Patch text is expected as tool_input or tool_input.command; no live payload
+// has been captured, so a call without patch text in either place is let through and
+// recorded for `visp doctor`, rather than refusing every edit of a slice. The Git
+// hook and `visp done` still check its files.
+const patchPaths = (function patchPaths(patch) {
+  const lines = String(patch).split("\n").map((line) => line.replace(/\r$/, ""));
+  const begin = lines.findIndex((line) => line.trim() === "*** Begin Patch");
+  if (begin < 0) return undefined;
+  const headers = [
+    ["*** Add File: ", "add"],
+    ["*** Update File: ", "update"],
+    ["*** Delete File: ", "delete"],
+  ];
+  const paths = [];
+  let body;
+  // A move is the line right after its Update header.
+  let movable = false;
+  for (const line of lines.slice(begin + 1)) {
+    const header = line.trim();
+    if (header === "*** End Patch") return paths;
+    if (movable && header.startsWith("*** Move to: ")) {
+      const target = header.slice("*** Move to: ".length).trim();
+      if (!target) return undefined;
+      paths.push(target);
+      movable = false;
+      continue;
+    }
+    movable = false;
+    if (body === "add" && line.startsWith("+")) continue;
+    if (body === "update" && (/^[ +-]/.test(line) || line.startsWith("@@") || header === "*** End of File")) continue;
+    if (header === "") continue;
+    const found = headers.find(([prefix]) => header.startsWith(prefix));
+    if (!found) return undefined;
+    const path = header.slice(found[0].length).trim();
+    if (!path) return undefined;
+    paths.push(path);
+    body = found[1];
+    movable = body === "update";
+  }
+  return undefined;
+});
+const patching = input?.tool_name === "apply_patch";
+const patch = typeof input?.tool_input === "string" ? input.tool_input : input?.tool_input?.command;
+const patchText =
+  typeof patch === "string" ? patch : Array.isArray(patch) && patch.every((part) => typeof part === "string") ? patch.join("\n") : "";
+if (patching && !patchText.trim()) {
+  try {
+    const directory = join(root, ".visp", "session");
+    mkdirSync(directory, { recursive: true });
+    const fields = input?.tool_input && typeof input.tool_input === "object" ? Object.keys(input.tool_input).slice(0, 20) : [];
+    writeFileSync(
+      join(directory, "apply-patch-unrecognized.json"),
+      JSON.stringify({ at: new Date().toISOString(), fields }),
+    );
+  } catch {}
+  process.exit(0);
+}
+const patched = patching ? patchPaths(patchText) : undefined;
+if (patching && patched === undefined) {
+  if (authorizationState() === "inactive") process.exit(0);
+  process.stdout.write(
+    JSON.stringify(
+      deny(
+        "visp could not read which files this patch changes, so it was refused rather than applied unchecked. Use apply_patch's own format: `*** Begin Patch`, then `*** Add File: <path>`, `*** Update File: <path>` or `*** Delete File: <path>` sections, then `*** End Patch`.",
+      ),
+    ),
+  );
+  process.exit(0);
+}
+const targets = patched ?? [input?.tool_input?.file_path ?? input?.tool_input?.notebook_path].filter(Boolean);
+
+if (targets.length === 0) {
   process.exit(0);
 }
 
-const root = projectRoot();
 function realPath(path, depth = 0) {
   if (depth > 40) throw new Error("Too many symlinks in " + path);
   try {
@@ -815,35 +909,46 @@ function outside(path) {
   return path === ".." || path.startsWith(".." + sep) || isAbsolute(path);
 }
 
-const absoluteTarget = isAbsolute(target) ? target : resolve(input?.cwd ?? root, target);
-const logical = relative(root, absoluteTarget);
-const physical = relative(realPath(root), realPath(absoluteTarget));
-if (isAbsolute(target) && outside(logical) && outside(physical)) process.exit(0);
-if (!outside(logical) && outside(physical)) {
-  process.stdout.write(JSON.stringify(deny(String(target) + " resolves outside the project root")));
-  process.exit(0);
-}
-const path = isAbsolute(target) ? (outside(logical) ? physical : logical) : target;
-const paths = physical !== path && !outside(physical) ? [path, physical] : [path];
+const named = [];
+const paths = [];
+for (const target of targets) {
+  const absoluteTarget = isAbsolute(target) ? target : resolve(input?.cwd ?? root, target);
+  const logical = relative(root, absoluteTarget);
+  const physical = relative(realPath(root), realPath(absoluteTarget));
+  if (isAbsolute(target) && outside(logical) && outside(physical)) continue;
+  if (!outside(logical) && outside(physical)) {
+    process.stdout.write(JSON.stringify(deny(String(target) + " resolves outside the project root")));
+    process.exit(0);
+  }
+  const path = isAbsolute(target) ? (outside(logical) ? physical : logical) : target;
 
-// VISP state changes only through visp commands, which validate and record it. A worker
-// that hand-edited the brief left it unreadable and abandoned the workflow. Drafts are
-// the one place the workflow asks agents to write.
-const statePath = path.replaceAll(String.fromCharCode(92), "/").toLowerCase();
-if (
-  (statePath === ".visp" || statePath.startsWith(".visp/")) &&
-  !statePath.startsWith(".visp/drafts/") &&
-  !statePath.split("/").includes("..")
-) {
-  process.stdout.write(
-    JSON.stringify(
-      deny(
-        `${path} is VISP state; change it only through \`visp\` commands. For the brief, pipe changed fields: \`visp brief --patch - --reason "<why>"\`.`,
+  // VISP state changes only through visp commands, which validate and record it. A worker
+  // that hand-edited the brief left it unreadable and abandoned the workflow. Drafts are
+  // the one place the workflow asks agents to write.
+  const statePath = path.replaceAll(String.fromCharCode(92), "/").toLowerCase();
+  if (
+    (statePath === ".visp" || statePath.startsWith(".visp/")) &&
+    !statePath.startsWith(".visp/drafts/") &&
+    !statePath.split("/").includes("..")
+  ) {
+    process.stdout.write(
+      JSON.stringify(
+        deny(
+          `${path} is VISP state; change it only through \`visp\` commands. For the brief, pipe changed fields: \`visp brief --patch - --reason "<why>"\`.`,
+        ),
       ),
-    ),
-  );
+    );
+    process.exit(0);
+  }
+  named.push(path);
+  paths.push(path);
+  if (physical !== path && !outside(physical)) paths.push(physical);
+}
+
+if (paths.length === 0) {
   process.exit(0);
 }
+const path = named.join(", ");
 
 /**
  * The guard envelope, or undefined when this output did not come from guard.
@@ -902,13 +1007,7 @@ try {
 const envelope = guardEnvelope(stdout);
 
 if (envelope === undefined) {
-  let authorization = "unknown";
-  try {
-    authorization = execFileSync(process.execPath, ["-e", "\nconst { readFileSync, readdirSync, lstatSync } = require(\"node:fs\");\nconst { join } = require(\"node:path\");\nlet unknown = false;\nfunction entries(directory) {\n  try {\n    if (lstatSync(directory).isSymbolicLink()) { unknown = true; return []; }\n    return readdirSync(directory, { withFileTypes: true }).filter(entry => {\n      if (entry.isSymbolicLink()) unknown = true;\n      return entry.isFile() && entry.name.endsWith(\".json\");\n    });\n  } catch(error) {\n    if (error?.code !== \"ENOENT\") unknown = true;\n    return [];\n  }\n}\nfunction read(path) {\n  if (lstatSync(path).isSymbolicLink()) throw new Error(\"Linked state\");\n  return JSON.parse(readFileSync(path, \"utf8\"));\n}\nfunction validIdentity(marker) {\n  return typeof marker?.feature === \"string\" && /^\\d{3}-[a-z0-9][a-z0-9-]*$/.test(marker.feature)\n    && typeof marker.task === \"string\" && /^T\\d{3,}$/.test(marker.task);\n}\nfor (const [directory, version] of [[\".visp/state/product-authorizations\", 2], [\".visp/state/implement-allowed\", 1]]) {\n  for (const entry of entries(directory)) {\n    try {\n      const marker = read(join(directory, entry.name));\n      if (!validIdentity(marker)) throw new Error(\"Invalid authorization identity\");\n      try { lstatSync(join(\".visp\", \"features\", marker.feature)); }\n      catch (error) { if (error?.code === \"ENOENT\") continue; throw error; }\n      if (version === 2) {\n        if (marker.version !== 2) throw new Error(\"Invalid product authorization\");\n        const state = read(join(\".visp\", \"features\", marker.feature, \"product-state.json\"));\n        if (state?.version !== 3 || state.feature !== marker.feature || !state.slices?.[marker.task]) throw new Error(\"Missing product state\");\n        const status = state.slices[marker.task].status;\n        if (status === \"closed\" || status === \"legacy-closed\") continue;\n        if (status !== \"pending\" && status !== \"in-progress\") throw new Error(\"Invalid slice status\");\n      } else {\n        if (marker.kind !== \"implement-marker\") throw new Error(\"Invalid historical marker\");\n        const graph = read(join(\".visp\", \"features\", marker.feature, \"tasks.json\"));\n        if (graph?.kind !== \"tasks\" || graph.feature !== marker.feature || !Array.isArray(graph.tasks)) throw new Error(\"Invalid historical graph\");\n        const matching = graph.tasks.filter(task => task?.id === marker.task);\n        if (matching.length !== 1) throw new Error(\"Missing historical task\");\n        if (matching[0].status === \"done\") continue;\n      }\n      console.log(\"active\");\n      process.exit(0);\n    } catch { unknown = true; }\n  }\n}\nconsole.log(unknown ? \"unknown\" : \"inactive\");\n"], {
-      cwd: root,
-      stdio: ["ignore", "pipe", "ignore"],
-    }).toString().trim();
-  } catch {}
+  const authorization = authorizationState();
   // No task is active, so there is nothing to enforce: leave Claude's own permission decision in place.
   if (authorization === "inactive") process.exit(0);
   let guardError;
