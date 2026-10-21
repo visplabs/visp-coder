@@ -160,6 +160,29 @@ Three experimental `workflow` switches, off by default, aim to cut ceremony wher
 - **`reviewCadence: feature`.** Only the slice that completes the feature starts VISP's reviewer; earlier slices close on their checks, and their outcomes are assessed by that whole-feature review. A middle slice with an open required finding or a pending dispute is still reviewed. After two product reviews, another review runs only while a required finding is open; otherwise `visp next` hands off to `visp pr` as it does for a spent budget.
 - **`requestGaps: required`.** The reviewer is told to list what the request names and to begin a finding about a named thing that is missing, broken or unrecognizable with "Request gap:". VISP makes every such finding required, whatever the reviewer's flag. The `done` and `accept` replies list only required findings; the rest arrive under `critic.notes` with advice not to edit for them, and the feedback plan leaves them out.
 
+## Regression gate
+
+`workflow.regressionGate` (experimental, default `off`) runs earlier tests at `visp done` and `visp accept`, after the call's own checks pass.
+
+- **What runs.** In order, up to 12 commands:
+  - existing test files the repository index links to a changed file: the tests that import it first, then tests of its importers, up to three steps away;
+  - this feature's pinned suite (on a slice that does not run it already) and the checks of its other closed slices;
+  - the pinned suites, then the declared checks, of up to ten earlier accepted features, newest first.
+
+  A test file runs the way its project runs it: a unittest or pytest module with that runner, a `node:test` file with `node --test`, and with vitest, jest or mocha when the project has it in `node_modules/.bin`. Commands the call already ran, browser journeys and tests added by this work are left out. The reply lists what was left out and why, including a time budget of 180 s.
+- **How a failure is judged.** A failing command runs once more. A test whose failure differs on that rerun is flaky. A consistent failure then runs on the old code: the baseline from the slice's `visp work` (at `accept`, the last slice's), rebuilt in a temporary copy with the current tests, as the flip check does. Failures are compared by test name and normalized message, not by exit code:
+  - passed on the old code, fails now: **regression**;
+  - failed on the old code too: **pre-existing**;
+  - flaky, timed out, failed to start, or the old code could not run: **unchecked**.
+- **What it changes.**
+  - The `done` and `accept` replies carry a short `regressionGate` entry.
+  - The reviewer packet carries one line with the executed results.
+  - `visp next` names a current regression.
+  - The advice to run related tests by hand is not shown, since VISP runs them.
+  - With `advise`, nothing blocks. With `gate`, a regression keeps the slice open, or the feature unaccepted, and no review is spent until it is fixed. If the request changes that behavior, update the test to the request; a test that fails on the old code does not block.
+- **Never a pass by default.** A missing index or baseline, or no test reaching the change, makes the result `unchecked`. Pre-existing and unchecked failures never block.
+- **Safety.** The gate never edits or discards work: the old code runs only in a temporary tree. With `workflow.flipCheck: off`, no command runs twice, so failures are reported but not compared. Results are cached per product version, so the `done` that follows a review does not run them again.
+
 ## Repairing a finding
 
 1. Run the declared check that shows the defect.
