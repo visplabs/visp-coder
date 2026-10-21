@@ -332,7 +332,7 @@ function priorDispute(
   if (prior?.status === "upheld" && !unverified)
     return "Already upheld and waived; nothing to dispute";
   if (open.length >= MAX_OPEN_DISPUTES)
-    return `At most ${MAX_OPEN_DISPUTES} disputes can await a ruling at once`;
+    return `At most ${MAX_OPEN_DISPUTES} disputes can await a ruling at once. Keep the product as the request says, report the request sentence and the tests that disagree in your final message, and run visp pr`;
   if (prior?.status === "rejected" && prior.ruling?.subject === subject)
     return `The reviewer rejected this dispute on this exact source (${prior.ruling.reasoning.slice(0, 300)}). Change the product before disputing it again`;
   if (prior && !unverified && prior.status !== "open" && prior.filings >= MAX_FILINGS_PER_TEST)
@@ -455,11 +455,16 @@ export async function disputePacketEntries(
     ? await workspace.files.readTextIfExists(join(workspace.paths.root, record.file))
     : undefined;
   const content = source?.ok ? (source.value ?? "") : "";
-  return state.pending.map((entry) => ({
+  // One defect often fails many tests with one reason and one run: show each text once.
+  const sameAs = (text: string, index: number, field: "reason" | "failure") => {
+    const first = state.pending.findIndex((entry) => entry[field] === text);
+    return first < index ? `Same as for ${JSON.stringify(state.pending[first]?.test)}.` : text;
+  };
+  return state.pending.map((entry, index) => ({
     test: entry.test,
     requestQuote: record.tests?.find((test) => test.name === entry.test)?.quote ?? "",
-    workerReason: entry.reason,
-    failureOutput: entry.failure,
+    workerReason: sameAs(entry.reason, index, "reason"),
+    failureOutput: sameAs(entry.failure, index, "failure"),
     suiteFile: record.file ?? "",
     testSource: sourceExcerpt(content, entry.test),
     ...(entry.history.length

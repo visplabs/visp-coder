@@ -21,8 +21,13 @@ import type { ProductExecution } from "../model.js";
 export const TESTS_RECORD = "acceptance-tests.json";
 /** JSON array of waived test names, given to every run of the pinned suite. */
 export const WAIVED_TESTS_ENV = "VISP_WAIVED_TESTS";
-/** Most disputes that may await a ruling at once, and most tests one call may dispute. */
-export const MAX_OPEN_DISPUTES = 5;
+/**
+ * Most disputes that may await a ruling at once, and most tests one call may dispute. It matches
+ * the tester's 30-test guidance, so one defect that turns a whole suite red (a broken helper) can
+ * be disputed in one call and ruled on in one review: the reviewer launches only when every
+ * failing test is disputed, and a lower cap left such suites with no review at all.
+ */
+export const MAX_OPEN_DISPUTES = 30;
 export const MIN_REASON_LENGTH = 20;
 /** A dispute is filed at most this often per test, and reviewed at most this often per filing. */
 export const MAX_FILINGS_PER_TEST = 2;

@@ -17,7 +17,11 @@ interface Page {
     options?: { held?: () => Promise<void> },
   ): Promise<void>;
   click(point: { x: number; y: number }): Promise<void>;
-  waitFor(fn: string | (() => unknown)): Promise<unknown>;
+  waitFor(
+    fn: string | ((...args: never[]) => unknown),
+    options?: unknown,
+    ...args: unknown[]
+  ): Promise<unknown>;
   screenshot(path?: string): Promise<Buffer>;
   close(): Promise<void>;
 }
@@ -126,6 +130,49 @@ describe("tester browser kit in real Chrome", () => {
       expect([...png.subarray(0, 4)]).toEqual([0x89, 0x50, 0x4e, 0x47]);
       expect((await readFile(join(dir, "shot.png"))).equals(png)).toBe(true);
       expect(await chromeProcesses()).not.toEqual(before);
+    } finally {
+      await page.close();
+      server.close();
+    }
+  });
+
+  // Pinned suites of five slingshot runs failed on these forms, not on the product.
+  it("calls a function written as a string, with its arguments", async () => {
+    const server = await kit.serveDir(dir);
+    const page = await kit.openPage(server.url);
+    try {
+      expect(await page.evaluate("() => document.querySelector('#pad').textContent")).toBe("Ready");
+      expect(await page.evaluate("(a, b) => a + b", 2, 3)).toBe(5);
+      expect(await page.evaluate("async (s) => document.querySelector(s).id", "#pad")).toBe("pad");
+      const add = (a: number, b: number) => a * b;
+      expect(await page.evaluate(add.toString(), 4, 5)).toBe(20);
+      // Expressions and statements still return their value.
+      expect(await page.evaluate("document.querySelector('#pad').id")).toBe("pad");
+      expect(await page.evaluate("(() => 7)()")).toBe(7);
+      expect(await page.evaluate("window.kitTest = 2; window.kitTest + 1")).toBe(3);
+      await expect(page.evaluate("document.title", 1)).rejects.toThrow(/arguments.*not a function/);
+    } finally {
+      await page.close();
+      server.close();
+    }
+  });
+
+  it("passes waitFor arguments to the page function and names the last error on timeout", async () => {
+    const server = await kit.serveDir(dir);
+    const page = await kit.openPage(server.url);
+    try {
+      await page.evaluate("window.level = 2");
+      const level = (wanted: number) => (window as unknown as { level: number }).level === wanted;
+      expect(await page.waitFor(level, { timeoutMs: 1000 }, 2)).toBe(true);
+      expect(await page.waitFor("(l) => window.level === l", { timeoutMs: 1000 }, 2)).toBe(true);
+      expect(await page.waitFor(level, undefined, 2)).toBe(true);
+      await expect(page.waitFor(level, 2)).rejects.toThrow(/options object/);
+      const outside = 3;
+      await expect(
+        page.waitFor(() => (window as unknown as { level: number }).level === outside, {
+          timeoutMs: 200,
+        }),
+      ).rejects.toThrow(/timed out after 200ms.*outside is not defined.*pass them as args/);
     } finally {
       await page.close();
       server.close();

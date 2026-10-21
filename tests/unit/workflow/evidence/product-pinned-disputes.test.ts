@@ -32,6 +32,7 @@ import {
   environmentOnly,
   failingTests,
   failLineStats,
+  MAX_OPEN_DISPUTES,
   unreportedTests,
   waivedFailure,
 } from "../../../../src/workflow/product/tester/pinned-dispute-model.js";
@@ -579,8 +580,48 @@ it("does not treat a name in a PASS line as a failing test", async () => {
   });
 });
 
-it("allows at most five disputes to await a ruling", async () => {
-  const many = Array.from({ length: 7 }, (_, index) => [`case ${index}`, "value === 100"] as const);
+// p12-slingshot-game-visp-base-3 and pp-slingshot-game-visp-final-1/-2: one broken helper turned
+// 14-16 pinned tests red, VISP accepted five disputes and refused the rest, and the reviewer,
+// which launches only when every failing test is disputed, never ran.
+it("lets one review rule on every failing test of a suite broken by one defect", async () => {
+  const many = Array.from(
+    { length: 16 },
+    (_, index) => [`case ${index}`, "value === 100"] as const,
+  );
+  const fixture = await disputeWorkspace({ checks: many });
+  const { host, packets } = reviewer(upholdAll);
+  const done = await runProductDoneReviewed(
+    await state(),
+    { task: "T001", dispute: many.map(([name]) => name), disputeReason: REASON },
+    inlineReview(host),
+  );
+  expect(done.ok, JSON.stringify(done)).toBe(true);
+  if (!done.ok) return;
+  expect(done.value.pinnedTests?.filed?.map((entry) => entry.status)).toEqual(
+    many.map(() => "filed"),
+  );
+  expect(host.review).toHaveBeenCalledTimes(1);
+  const asked = packets[0]?.disputes ?? [];
+  expect(asked.map((entry) => entry.test)).toEqual(many.map(([name]) => name));
+  // One shared reason and failure output reach the reviewer once, not sixteen times.
+  expect(asked[0]).toMatchObject({ workerReason: REASON });
+  expect(asked[0]?.failureOutput).toContain("FAIL: case 15");
+  expect(asked.slice(1).every((entry) => entry.workerReason === 'Same as for "case 0".')).toBe(
+    true,
+  );
+  expect(asked.slice(1).every((entry) => entry.failureOutput === 'Same as for "case 0".')).toBe(
+    true,
+  );
+  const ruled = await disputes(await state(), fixture.brief.feature);
+  expect(ruled.map((entry) => entry.status)).toEqual(many.map(() => "upheld"));
+  expect(ruled.every((entry) => entry.reason === REASON)).toBe(true);
+});
+
+it("bounds how many disputes may await a ruling, with a refusal that says what to do", async () => {
+  const many = Array.from(
+    { length: MAX_OPEN_DISPUTES + 1 },
+    (_, index) => [`case ${index}`, "value === 100"] as const,
+  );
   const fixture = await disputeWorkspace({ checks: many });
   const failing = [
     {
@@ -596,27 +637,13 @@ it("allows at most five disputes to await a ruling", async () => {
     "digest",
   );
   expect(outcome.ok && outcome.value.map((entry) => entry.status)).toEqual([
-    "filed",
-    "filed",
-    "filed",
-    "filed",
-    "filed",
-    "refused",
+    ...many.slice(0, MAX_OPEN_DISPUTES).map(() => "filed"),
     "refused",
   ]);
-  expect(await disputes(await state(), fixture.brief.feature)).toHaveLength(5);
-  // Another call cannot exceed five open disputes either.
-  const again = await fileDisputes(
-    await state(),
-    fixture.brief.feature,
-    { tests: ["case 6"], reason: REASON },
-    failing,
-    "digest",
+  expect(outcome.ok && outcome.value.at(-1)?.detail).toContain(
+    "report the request sentence and the tests that disagree in your final message",
   );
-  expect(again.ok && again.value[0]).toMatchObject({
-    status: "refused",
-    detail: expect.stringContaining("At most 5"),
-  });
+  expect(await disputes(await state(), fixture.brief.feature)).toHaveLength(MAX_OPEN_DISPUTES);
 });
 
 it("ignores rulings from a native, host-submitted review", async () => {
