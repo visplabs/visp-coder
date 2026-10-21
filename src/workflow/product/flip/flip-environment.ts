@@ -39,6 +39,12 @@ const REGENERABLE_DIRECTORIES = new Set([
   "build",
 ]);
 const REGENERABLE_FILE = /^(?:\.coverage(?:\..+)?|\.DS_Store)$|\.pyc$/;
+/**
+ * Python bytecode caches name their source by absolute path in bytes that cannot be rebased.
+ * The comparison's interpreter rebuilds them from the tree's own sources, so they are neither
+ * copied nor counted as state the comparison lacks.
+ */
+const BYTECODE_CACHE = /(?:^|\/)__pycache__$|\.py[co]$/;
 // Flip temporary trees a crashed run left behind: the same names and age bound as reviewer runs.
 const FLIP_TEMPORARY = [
   /^visp-product-flip-[A-Za-z0-9]{6}$/,
@@ -91,7 +97,7 @@ async function ignoredEntries(root: string): Promise<string[]> {
   return [...names]
     .filter((name) => {
       const top = name.split("/")[0] ?? "";
-      return top !== PRIVATE_STATE && !ENVIRONMENTS.includes(top);
+      return top !== PRIVATE_STATE && !ENVIRONMENTS.includes(top) && !BYTECODE_CACHE.test(name);
     })
     .sort();
 }
