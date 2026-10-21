@@ -38,17 +38,22 @@ def _outcomes(scored):
     return {r["name"]: (r.get("step", 0), bool(r["passed"])) for r in results}
 
 
-def summarize(baseline, evaluations):
+def summarize(baseline, evaluations, redefined=None):
     """Per-step and whole-chain regression facts.
 
     baseline: the start's results with --step 0; evaluations: [(step, results with --step step)],
     in step order. A step without a result passes nothing, so its carried checks all regress.
+    redefined: {step: check names} that step's own request changes (a ChainSWE issue's
+    FAIL_TO_PASS tests can be earlier issues' tests its test patch rewrites); they are not
+    carried into that step.
     """
     previous = _outcomes(baseline)
     steps, carried, broken, events, evaluated = [], set(), set(), 0, 0
     for step, scored in evaluations:
         now = _outcomes(scored)
-        carried_here = sorted(name for name, (origin, passed) in previous.items() if passed and origin < step)
+        changed = (redefined or {}).get(step, set())
+        carried_here = sorted(name for name, (origin, passed) in previous.items()
+                              if passed and origin < step and name not in changed)
         regressions = [name for name in carried_here if not now.get(name, (None, False))[1]]
         new = [passed for origin, passed in now.values() if origin == step]
         steps.append({
