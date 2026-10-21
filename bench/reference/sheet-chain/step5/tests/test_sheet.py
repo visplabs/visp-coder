@@ -41,6 +41,8 @@ class SheetTest(unittest.TestCase):
         cells = [f"{chr(column)}{row}" for column in range(65, 91) for row in range(1, 100)]
         build = ["SET A1 1"] + [f"SET {cell} ={previous}+1" for previous, cell in zip(cells, cells[1:])]
         self.assertEqual(run(*build, "GET Z99", "SET A1 2", "GET Z99"), ["2574", "2575"])
+        self.assertEqual(run(*build, "GET Z99", "SET Z99 7", "GET Z98", "GET Z99", "SET Z99 =Z98", "GET Z99"),
+                         ["2574", "2573", "7", "2573"])
 
     def test_recalculation(self):
         self.assertEqual(run("SET A1 1", "SET A2 =A1+1", "GET A2", "SET A1 5", "GET A2"), ["2", "6"])

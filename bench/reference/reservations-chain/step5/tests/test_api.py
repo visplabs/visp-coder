@@ -96,7 +96,7 @@ class PersistenceTest(unittest.TestCase):
         from inventory.store import Store
 
         with tempfile.TemporaryDirectory() as directory:
-            path = os.path.join(directory, "state.json")
+            path = os.path.join(directory, "inventory.db")
             store = Store(path)
             store.create_item("P-1", 3)
             reservation = store.reserve([("P-1", 2)], 60, False, "k", {"sku": "P-1"})

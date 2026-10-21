@@ -29,19 +29,44 @@ def references(node):
 
 
 class Sheet:
+    """Cells, and the values computed from them, kept until a cell they depend on changes."""
+
     def __init__(self):
         self.raw = {}  # number and text content
         self.formulas = {}  # parsed formulas
-        self.current = None  # the values read since the last change
+        self.values = {}  # values computed since the cells they depend on last changed
+        self.dependents = {}  # cell -> formula cells that refer to it, ranges included
+        self.cycles = set()
+        self.cycles_stale = False
 
     def set(self, cell, content):
-        self.current = None
+        old = self.formulas.pop(cell, None)
+        if old is not None:
+            for reference in set(references(old)):
+                self.dependents[reference].discard(cell)
+        # Only a new formula can close a cycle; replacing a cycle's member can only open one.
+        self.cycles_stale = self.cycles_stale or cell in self.cycles or content.startswith("=")
         self.raw.pop(cell, None)
-        self.formulas.pop(cell, None)
         if content.startswith("="):
             self.formulas[cell] = parse_formula(content[1:])
+            for reference in set(references(self.formulas[cell])):
+                self.dependents.setdefault(reference, set()).add(cell)
         elif content:
             self.raw[cell] = content
+        self.invalidate(cell)
+
+    def invalidate(self, cell):
+        """Forget the values of the cell and of every cell that depends on it."""
+        pending, seen = [cell], {cell}
+        while pending:
+            current = pending.pop()
+            # A cell on a cycle is kept as #CYCLE! without its references being read, so the walk
+            # goes on through cells that have no value kept.
+            self.values.pop(current, None)
+            for dependent in self.dependents.get(current, ()):
+                if dependent not in seen:
+                    seen.add(dependent)
+                    pending.append(dependent)
 
     def insert_row(self, row):
         """Insert an empty row before `row`; False, changing nothing, when the last row is used."""
@@ -54,8 +79,6 @@ class Sheet:
         self.move_rows(deleted(row), row)
 
     def move_rows(self, move, deleted_row=None):
-        self.current = None
-
         def moved(cells):
             for cell, content in cells.items():
                 row = move(int(cell[1:]))
@@ -64,6 +87,10 @@ class Sheet:
 
         self.raw = dict(moved(self.raw))
         self.formulas = {cell: move_formula(node, move, deleted_row) for cell, node in moved(self.formulas)}
+        self.values, self.dependents, self.cycles_stale = {}, {}, True
+        for cell, node in self.formulas.items():
+            for reference in set(references(node)):
+                self.dependents.setdefault(reference, set()).add(cell)
 
     def cycle_members(self):
         """Cells on a reference cycle (Tarjan's strongly connected components)."""
@@ -100,18 +127,18 @@ class Sheet:
         return members
 
     def value(self, cell):
-        if self.current is None:
-            self.current = Evaluation(self)
-        return self.current.value(cell)
+        if self.cycles_stale:
+            self.cycles, self.cycles_stale = self.cycle_members(), False
+        return Evaluation(self).value(cell)
 
 
 class Evaluation:
-    """The sheet's values between two changes: each cell is evaluated once, when first read."""
+    """A read of the sheet: each cell is evaluated once and kept in the sheet's values."""
 
     def __init__(self, sheet):
         self.sheet = sheet
-        self.memo = {}
-        self.cycles = sheet.cycle_members()
+        self.memo = sheet.values
+        self.cycles = sheet.cycles
 
     def value(self, cell):
         if cell in self.memo:

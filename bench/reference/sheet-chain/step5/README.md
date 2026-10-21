@@ -37,4 +37,4 @@ Layout: `sheet/parser.py` tokenizes and parses formulas into tuple nodes, `sheet
   - A reference to a cell outside `A1`–`Z99` (for example `AA1` or `A100`) is `#REF!`.
   - A formula that cannot be parsed, or uses an unknown function, is `#PARSE!`.
   - Every cell whose formula is part of a reference cycle is `#CYCLE!`. A cell that depends on an error cell takes that error; if several operands are errors, the first one in left-to-right order in the formula wins, and inside a range the first in row order (row by row, left to right within a row).
-- Values always reflect the current contents of all cells (each value is computed once between two changes, and a chain of formulas through the whole grid evaluates): changing a cell updates every cell that depends on it, and removing a cycle removes the `#CYCLE!` results.
+- Values always reflect the current contents of all cells (a value is kept until a cell it depends on changes, and a chain of formulas through the whole grid evaluates): changing a cell updates every cell that depends on it, and removing a cycle removes the `#CYCLE!` results.

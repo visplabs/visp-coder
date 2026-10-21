@@ -16,8 +16,8 @@ Fixed-contract tasks for comparing coding workflows (bare coding, Spec Kit, BMAD
 | `sheet-carryover` | Two sessions on the existing spreadsheet engine: AVERAGE and ROUND, then MEDIAN and directed rounding carrying the empty-statistic rule and digits restriction | 22 core + 14 new + 8 memory |
 | `archive-carryover` | Two sessions on the existing reservations service: item archiving and a quantity cap, then bundles and restocking that must preserve those feature decisions | 15 core + 17 new + 7 memory |
 | `conventions-carryover-prose` | `conventions-carryover` with the first request stating the conventions in conversational prose instead of a labelled list | as `conventions-carryover` |
-| `reservations-chain` | Five requests in turn on the existing reservations service, each in a fresh session: restocking and a stock list, bundle reservations and reservation lookup, error bodies with `status`, `detail` (`message` kept) and `field`, case-insensitive SKUs, state kept in a file across restarts | 39 start + 9, 17, 10, 9 and 10 per step |
-| `sheet-chain` | Five requests in turn on the existing spreadsheet engine: `AVERAGE` and `COUNT`, comparisons and `IF`, text literals with `&` and `LEN`, row insertion and deletion, then a whole-grid chain that must read fast without crashing | 13 start + 9, 14, 12, 14 and 5 per step |
+| `reservations-chain` | Five requests in turn on the existing reservations service, each in a fresh session: restocking and a stock list, bundle reservations and reservation lookup, error bodies with `status`, `detail` (`message` kept) and `field`, case-insensitive SKUs, then the state moved into SQLite (in memory by default, a file that survives restarts) | 39 start + 9, 17, 10, 9 and 11 per step |
+| `sheet-chain` | Five requests in turn on the existing spreadsheet engine: `AVERAGE` and `COUNT`, comparisons and `IF`, text literals with `&` and `LEN`, row insertion and deletion, then a whole-grid chain that must read fast without crashing and stay fast to edit, so a change recomputes only its dependents | 16 start + 10, 15, 13, 15 and 6 per step |
 | `archive-carryover-raised` | `archive-carryover` after an intermediate feature (`intermediate.md`) raised the quantity cap to 50,000, with ten unrelated earlier requests (`noise.md`) in the store; checks use the raised cap | as `archive-carryover` |
 | `slingshot-game` | New browser game: drag-to-launch slingshot, physics, three levels, test hooks on `window.gameTest` | 22 core + 6 UI |
 | `catapult-game` | New browser game: catapult with four projectile kinds, three materials, per-level ammunition and three levels | request only; hidden checks not yet published |
@@ -166,9 +166,11 @@ months) fail some checks but not all, that a nonzero program exit fails even whe
 matches, that the audit's start fails only its `fix:` checks, and that importing a third-party
 date library fails every recurrence check. For the chains they verify that each step's reference
 passes every check up to its step, that the previous step's reference fails only the new step's
-checks, that variants breaking an earlier step (text comparisons added with text literals, a value
-cache or cycle set kept across changes, a single reservation answered as a bundle, a store without
-its lock) fail that earlier step's checks, and how the chain summary counts regressions. They use temporary copies and the standard library,
+checks, that variants breaking an earlier step (text comparisons added with text literals, values kept
+across a row move, cycles not looked for again after a cycle member is replaced, invalidation that
+stops at a cell with no value kept, a single reservation answered as a bundle, a store without its
+lock, an SQL confirm that reduces only a bundle's first line) fail that earlier step's checks, and
+how the chain summary counts regressions. They use temporary copies and the standard library,
 without calling models. Oracle qualification is not a comparison of coding workflows.
 
 ## Timing the dashboard

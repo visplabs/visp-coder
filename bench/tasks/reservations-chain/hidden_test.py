@@ -7,9 +7,9 @@ check's own step defines, and SKUs differ in more than case across all checks. A
 passed after its own step and fails after a later one is a regression. Each result carries its
 step.
 
-Steps 0-4 share one server started without INVENTORY_DATA_FILE. Step 5 checks start their own
-servers with a fresh data file and restart them (SIGTERM, as a deploy would) to check what
-survives.
+Steps 0-4 share one server started without INVENTORY_DB, so from step 5 on they run against the
+in-memory database. Step 5 checks start their own servers with a fresh database file and restart
+them (SIGTERM, as a deploy would) to check what survives.
 """
 import argparse
 import http.client
@@ -17,6 +17,7 @@ import json
 import os
 import signal
 import socket
+import sqlite3
 import subprocess
 import tempfile
 import threading
@@ -34,23 +35,31 @@ def free_port():
         return s.getsockname()[1]
 
 
-def call(method, path, body=None, headers=None, raw=None, timeout=5):
-    conn = http.client.HTTPConnection("127.0.0.1", PORT, timeout=timeout)
+def call(method, path, body=None, headers=None, raw=None, timeout=5, attempts=3):
+    """(status, parsed body), or (None, the error). A connection reset or refused before any
+    response is tried again: the start's ThreadingHTTPServer listens with a backlog of five, so a
+    burst of concurrent requests to a slower store can be turned away before it is read."""
     data = raw if raw is not None else (json.dumps(body).encode() if body is not None else None)
     hdrs = {"Content-Type": "application/json"} if headers is None else headers
-    try:
-        conn.request(method, path, body=data, headers=hdrs)
-        response = conn.getresponse()
-        payload = response.read()
+    for attempt in range(attempts):
+        conn = http.client.HTTPConnection("127.0.0.1", PORT, timeout=timeout)
         try:
-            parsed = json.loads(payload) if payload else None
-        except ValueError:
-            parsed = payload.decode(errors="replace")
-        return response.status, parsed
-    except Exception as error:  # noqa: BLE001
-        return None, repr(error)
-    finally:
-        conn.close()
+            conn.request(method, path, body=data, headers=hdrs)
+            response = conn.getresponse()
+            payload = response.read()
+            try:
+                parsed = json.loads(payload) if payload else None
+            except ValueError:
+                parsed = payload.decode(errors="replace")
+            return response.status, parsed
+        except (ConnectionResetError, ConnectionRefusedError) as error:
+            if attempt == attempts - 1:
+                return None, repr(error)
+            time.sleep(0.2)
+        except Exception as error:  # noqa: BLE001
+            return None, repr(error)
+        finally:
+            conn.close()
 
 
 def error(status, body, expected, code):
@@ -671,7 +680,7 @@ CHECKS = [
 
 
 class Server:
-    """One run of ./start.sh on a free port, optionally with INVENTORY_DATA_FILE."""
+    """One run of ./start.sh on a free port, optionally with INVENTORY_DB."""
 
     def __init__(self, data_file=None, port=None):
         self.port = port or free_port()
@@ -680,10 +689,10 @@ class Server:
 
     def start(self):
         global PORT
-        env = {k: v for k, v in os.environ.items() if k != "INVENTORY_DATA_FILE"}
+        env = {k: v for k, v in os.environ.items() if k != "INVENTORY_DB"}
         env["PYTHONDONTWRITEBYTECODE"] = "1"
         if self.data_file:
-            env["INVENTORY_DATA_FILE"] = str(self.data_file)
+            env["INVENTORY_DB"] = str(self.data_file)
         log = open(ROOT.parent / f"{ROOT.name}-hidden-server.log", "a")
         self.process = subprocess.Popen(["bash", "start.sh", str(self.port)], cwd=ROOT, env=env, stdout=log, stderr=log,
                                         start_new_session=True)
@@ -718,13 +727,13 @@ class Server:
 
 
 def with_data(scenario):
-    """A step 5 check: a server on a fresh data file, which the scenario may restart."""
+    """A step 5 check: a server on a fresh database file, which the scenario may restart."""
     def run():
         with tempfile.TemporaryDirectory(prefix="inventory-data-") as directory:
-            server = Server(Path(directory) / "state.json")
+            server = Server(Path(directory) / "inventory.db")
             try:
                 if not server.start():
-                    return False, "the server did not start with INVENTORY_DATA_FILE set"
+                    return False, "the server did not start with INVENTORY_DB set"
                 return scenario(server)
             finally:
                 server.stop()
@@ -817,22 +826,40 @@ def p_spelling(server):
 
 
 def p_concurrent(server):
-    item("Pf-Box-1", 10)
-    statuses = [status for status, _ in parallel(30, lambda _: reserve("Pf-Box-1", 1, 60))]
+    # Twelve at once: the start's ThreadingHTTPServer listens with a backlog of five, and a slow
+    # disk can make more simultaneous connections reset.
+    item("Pf-Box-1", 5)
+    statuses = [status for status, _ in parallel(12, lambda _: reserve("Pf-Box-1", 1, 60))]
     restarted = server.restart()
-    ok = statuses.count(201) == 10 and statuses.count(409) == 20 and restarted and available("Pf-Box-1") == 0
+    ok = statuses.count(201) == 5 and statuses.count(409) == 7 and restarted and available("Pf-Box-1") == 0
     return ok, {"201": statuses.count(201), "409": statuses.count(409), "available": available("Pf-Box-1")}
 
 
 def p_missing_file():
     with tempfile.TemporaryDirectory(prefix="inventory-data-") as directory:
-        server = Server(Path(directory) / "state.json")
+        server = Server(Path(directory) / "inventory.db")
         try:
             started = server.start()
             ok = started and error(*call("GET", "/v1/items/Pf-Item-1"), 404, "not_found")[0] and item("Pf-New-1", 1)[0] == 201
             return ok and server.restart() and has(view("Pf-New-1"), {"quantity": 1}), {"started": started}
         finally:
             server.stop()
+
+
+def p_in_sqlite(server):
+    """The file is an SQLite database whose tables hold the item and the reservation."""
+    item("Pf-Db-1", 4)
+    reservation = rid(reserve("Pf-Db-1", 1))
+    server.stop()
+    try:
+        connection = sqlite3.connect(str(server.data_file))
+        tables = [row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")]
+        cells = [str(value) for table in tables for row in connection.execute(f'SELECT * FROM "{table}"') for value in row]
+        connection.close()
+    except sqlite3.Error as failure:
+        return False, {"error": repr(failure)}
+    ok = bool(tables) and any("Pf-Db-1" in cell for cell in cells) and any(str(reservation) in cell for cell in cells)
+    return ok and server.start() and has(view("Pf-Db-1"), {"available": 3}), {"tables": tables}
 
 
 def p_memory():
@@ -856,8 +883,9 @@ PERSISTENCE = [
     (5, "bundles survive", with_data(p_bundles)),
     (5, "created spelling survives", with_data(p_spelling)),
     (5, "concurrent holds are kept", with_data(p_concurrent)),
-    (5, "a file that does not exist yet starts empty", p_missing_file),
-    (5, "without the variable state stays in memory", p_memory),
+    (5, "the state is in the SQLite database", with_data(p_in_sqlite)),
+    (5, "a new database file starts empty", p_missing_file),
+    (5, "without the variable the database is in memory", p_memory),
 ]
 
 

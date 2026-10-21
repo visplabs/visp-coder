@@ -20,7 +20,7 @@ TASKS = (("spreadsheet-cli", "spreadsheet", 38),
          ("spreadsheet-extend", "spreadsheet-extend", 63),
          ("sheet-carryover", "sheet-carryover", 44),
          ("spreadsheet-audit", "spreadsheet-audit", 48),
-         ("sheet-chain", "sheet-chain/step5", 67))
+         ("sheet-chain", "sheet-chain/step5", 75))
 
 
 class SpreadsheetOracleTests(unittest.TestCase):
@@ -140,7 +140,7 @@ class ChainOracleTests(unittest.TestCase):
     step's behaviour fail that step's checks, which the chain runner counts as regressions."""
 
     # Checks in total after each step, the starting contract being step 0.
-    TOTALS = {"sheet-chain": (13, 22, 36, 48, 62, 67), "reservations-chain": (39, 48, 65, 75, 84, 94)}
+    TOTALS = {"sheet-chain": (16, 26, 41, 54, 69, 75), "reservations-chain": (39, 48, 65, 75, 84, 95)}
 
     def score(self, task, project, step):
         completed = subprocess.run(
@@ -184,18 +184,24 @@ class ChainOracleTests(unittest.TestCase):
                                  "        texts = [self.evaluate(side) for side in (node[2], node[3])]\n"
                                  "        if all(isinstance(value, Text) for value in texts):\n"
                                  "            return Bool(texts[0] == texts[1] if node[1] == '=' else texts[0] < texts[1])\n"),
-            # Step 5's value cache survives a row move.
-            "stale values after a row move": (5, "sheet/engine.py", "    def move_rows(self, move, deleted_row=None):\n"
-                                              "        self.current = None\n", "    def move_rows(self, move, deleted_row=None):\n"),
-            # Step 5 keeps the first cycles it found.
-            "stale cycles": (5, "sheet/engine.py", "        self.cycles = sheet.cycle_members()\n",
-                             "        if not hasattr(sheet, 'known_cycles'):\n"
-                             "            sheet.known_cycles = sheet.cycle_members()\n"
-                             "        self.cycles = sheet.known_cycles\n"),
+            # Step 5 keeps computed values across a row move.
+            "stale values after a row move": (5, "sheet/engine.py",
+                                              "        self.values, self.dependents, self.cycles_stale = {}, {}, True\n",
+                                              "        self.dependents, self.cycles_stale = {}, True\n"),
+            # Step 5 looks for cycles again only when a formula is set.
+            "stale cycles": (5, "sheet/engine.py",
+                             "self.cycles_stale or cell in self.cycles or content.startswith(\"=\")",
+                             "self.cycles_stale or content.startswith(\"=\")"),
+            # Step 5's invalidation stops at a cell with no value kept, such as a cycle member.
+            "invalidation stops early": (5, "sheet/engine.py",
+                                         "            self.values.pop(current, None)\n            for dependent",
+                                         "            if self.values.pop(current, None) is None and current != cell:\n"
+                                         "                continue\n            for dependent"),
         }
         expected = {"text comparisons": ({"s2: comparing text"}, True),
-                    "stale values after a row move": ({"s4: delete at range edges shrinks it"}, True),
-                    "stale cycles": ({"base: cycles and recovery"}, False)}
+                    "stale values after a row move": ({"s4: delete at range edges shrinks it", "s4: edits after row moves"}, True),
+                    "stale cycles": ({"base: cycles and recovery"}, False),
+                    "invalidation stops early": ({"base: breaking a cycle from inside"}, False)}
         for name, (step, path, old, new) in variants.items():
             with self.subTest(variant=name), tempfile.TemporaryDirectory() as directory:
                 project = self.project(directory, "sheet-chain", step)
@@ -211,9 +217,13 @@ class ChainOracleTests(unittest.TestCase):
             # Step 2 answers a single-SKU reservation in the bundle shape.
             "single answered as a bundle": (2, "inventory/store.py", "            if bundle:\n", "            if True:\n",
                                             "base: reserve shape and expiry"),
-            # Step 5 without the store lock, and a pause between the stock check and the hold.
-            "no lock": (5, "inventory/store.py", "        self.lock = threading.Lock()\n",
+            # Step 4 without the store lock, and a pause between the stock check and the hold.
+            "no lock": (4, "inventory/store.py", "        self.lock = threading.Lock()\n",
                         "        self.lock = contextlib.nullcontext()\n", "base: concurrent reservations never oversell"),
+            # Step 5's SQL confirm reduces only a bundle's first line.
+            "confirm reduces one line": (5, "inventory/store.py", "WHERE item IN (SELECT item FROM lines WHERE reservation = ?)",
+                                         "WHERE item IN (SELECT item FROM lines WHERE reservation = ? AND position = 0)",
+                                         "s2: confirm bundle"),
         }
         for name, (step, path, old, new, must_fail) in variants.items():
             with self.subTest(variant=name), tempfile.TemporaryDirectory() as directory:
@@ -226,7 +236,7 @@ class ChainOracleTests(unittest.TestCase):
                 failed = self.failed(self.score("reservations-chain", project, step))
                 self.assertIn(must_fail, failed)
                 if name == "single answered as a bundle":
-                    self.assertFalse({n for n in failed if n.startswith("s2: ")}, failed)
+                    self.assertFalse({n for n in failed if n.startswith(f"s{step}: ")}, failed)
 
     def test_summary_counts_checks_that_passed_before_and_fail_after(self):
         def evaluation(*outcomes):

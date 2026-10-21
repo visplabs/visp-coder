@@ -16,6 +16,8 @@ GRID = [f"{chr(column)}{row}" for column in range(ord("A"), ord("Z") + 1) for ro
 # A1 is a number and every later cell adds 1 to the one before it, down each column.
 CHAIN = [f"SET {GRID[0]} 1"] + [f"SET {cell} ={previous}+1" for previous, cell in zip(GRID, GRID[1:])]
 SECONDS = 10
+# Edits at the end of the chain: recomputing the whole chain after each one takes over a minute.
+EDITS = 2000
 
 # Each check is (step, name, commands, expected output lines).
 CHECKS = [
@@ -31,6 +33,9 @@ CHECKS = [
     (0, "cycle through a range", ["SET A1 =SUM(A1:A3)", "SET B1 =A1+1", "GET A1", "GET B1", "SET A1 5", "GET B1"], ["#CYCLE!", "#CYCLE!", "6"]),
     (0, "updates and clearing", ["set a1 3", "SET B1 =A1*2", "GET B1", "SET A1 5", "GET B1", "CLEAR A1", "GET B1", "SET A1 7", "SET A1 ", "GET A1"], ["6", "10", "0", ""]),
     (0, "dependents update transitively", ["SET A1 1", "SET A2 =A1*2", "SET A3 =A2+A1", "GET A3", "SET A1 4", "GET A3", "GET A2"], ["3", "12", "8"]),
+    (0, "ranges see cells set later", ["SET B1 =SUM(A1:A3)", "GET B1", "SET A2 4", "GET B1", "SET A3 =A2*2", "GET B1", "CLEAR A2", "GET B1"], ["0", "4", "12", "0"]),
+    (0, "a formula replaced by a number", ["SET B1 2", "SET A1 =B1", "GET A1", "SET A1 5", "SET B1 3", "GET A1", "SET A1 =B1*2", "GET A1"], ["2", "5", "6"]),
+    (0, "breaking a cycle from inside", ["SET A1 =B1+1", "SET B1 =C1+1", "SET C1 =A1+1", "SET D1 =C1", "GET D1", "SET B1 1", "GET D1", "GET A1"], ["#CYCLE!", "3", "2"]),
     (0, "invalid commands", ["HELLO", "GET AA1", "GET A1 extra", "CLEAR", "SET A100 2", "GET A1"], ["ERROR"] * 5 + [""]),
 
     (1, "average values", ["SET A1 =AVERAGE(2,4,9)", "SET A2 =average(-2,2,6)", "SET A3 =AVERAGE(1,2)", "SET A4 =AVERAGE(1,1,2)", "GET A1", "GET A2", "GET A3", "GET A4"], ["5", "2", "1.5", "1.333333"]),
@@ -41,6 +46,7 @@ CHECKS = [
     (1, "count in ranges", ["SET A1 1", "SET A2 text", "SET A4 =2*3", "SET B1 4", "SET C1 =COUNT(A1:B4)", "SET C2 =count(B4:A1)", "GET C1", "GET C2"], ["3", "3"]),
     (1, "count direct numbers", ["SET A1 =COUNT(1,2,3)", "SET A2 =COUNT(1+1,5)", "GET A1", "GET A2"], ["3", "2"]),
     (1, "count follows updates", ["SET A1 1", "SET B1 =COUNT(A1:A3)", "GET B1", "SET A2 5", "GET B1", "CLEAR A1", "GET B1"], ["1", "2", "1"]),
+    (1, "average and count follow range edits", ["SET C1 =AVERAGE(A1:B2)", "SET C2 =COUNT(A1:B2)", "SET B2 4", "GET C1", "GET C2", "SET A1 2", "GET C1", "GET C2", "CLEAR B2", "GET C1"], ["4", "1", "3", "2", "2"]),
     (1, "functions combine", ["SET A1 4", "SET A2 8", "SET B1 =AVERAGE(SUM(A1:A2),COUNT(A1:A2))", "SET B2 =COUNT(A1:A2)*AVERAGE(A1:A2)", "GET B1", "GET B2"], ["7", "12"]),
 
     (2, "comparisons", ["SET A1 =1<2", "SET A2 =2<=1", "SET A3 =3=3", "SET A4 =3<>3", "SET A5 =4>=4", "SET A6 =5>6", "GET A1", "GET A2", "GET A3", "GET A4", "GET A5", "GET A6"], ["TRUE", "FALSE", "TRUE", "FALSE", "TRUE", "FALSE"]),
@@ -57,6 +63,7 @@ CHECKS = [
     (2, "booleans are not numbers", ["SET A1 =1<2", "SET B1 =A1+1", "SET B2 =-A1", "SET B3 =SUM(A1,1)", "SET B4 =A1", "SET B5 =AVERAGE(A1)", "GET B1", "GET B2", "GET B3", "GET B4", "GET B5"], ["#VALUE!", "#VALUE!", "#VALUE!", "TRUE", "#VALUE!"]),
     (2, "functions skip booleans in ranges", ["SET A1 =1<2", "SET A2 3", "SET B1 =SUM(A1:A2)", "SET B2 =COUNT(A1:A2)", "SET B3 =AVERAGE(A1:A2)", "SET B4 =MAX(A1:A2)", "GET B1", "GET B2", "GET B3", "GET B4"], ["3", "1", "3", "3"]),
     (2, "comparisons follow updates", ["SET A1 =B1>2", "SET B1 3", "GET A1", "SET B1 1", "GET A1", "SET C1 =IF(A1,1,2)", "GET C1"], ["TRUE", "FALSE", "2"]),
+    (2, "if follows both branches", ["SET A1 =IF(B1,C1,D1)", "SET B1 1", "SET C1 5", "SET D1 6", "GET A1", "SET C1 7", "GET A1", "SET B1 0", "GET A1", "SET D1 8", "GET A1"], ["5", "7", "6", "8"]),
 
     (3, "text literals", ['SET A1 ="hello world"', 'SET A2 ="say ""hi"""', 'SET A3 =""', "GET A1", "GET A2", "GET A3"], ["hello world", 'say "hi"', ""]),
     (3, "joining text", ["SET A1 3", 'SET B1 =A1&" kg"', 'SET B2 ="a"&"b"&"c"', 'SET B3 =C9&"x"', "GET B1", "GET B2", "GET B3"], ["3 kg", "abc", "x"]),
@@ -71,6 +78,8 @@ CHECKS = [
     (3, "unterminated literal", ['SET A1 ="abc', 'SET A2 ="a"&', "GET A1", "GET A2"], ["#PARSE!", "#PARSE!"]),
     (3, "ranges skip text results", ['SET A1 ="5"', "SET A2 2", "SET B1 =SUM(A1:A2)", "SET B2 =COUNT(A1:A2)", "GET B1", "GET B2"], ["2", "1"]),
 
+    (3, "joined text follows updates", ["SET A1 x", 'SET B1 =A1&"!"', "SET C1 =LEN(B1)", "GET B1", "SET A1 abc", "GET B1", "GET C1"], ["x!", "abc!", "4"]),
+
     (4, "insert moves cells down", ["SET A1 1", "SET A2 2", "SET A3 3", "SET C2 x", "INSERTROW 2", "GET A1", "GET A2", "GET A3", "GET A4", "GET C3"], ["1", "", "2", "3", "x"]),
     (4, "insert keeps references", ["SET A1 5", "SET B1 =A1*2", "SET A3 =B1+1", "INSERTROW 1", "GET B2", "GET A4", "SET A2 7", "GET B2", "GET A4"], ["10", "11", "14", "15"]),
     (4, "delete moves cells up", ["SET A1 1", "SET A2 2", "SET A3 3", "DELETEROW 2", "GET A1", "GET A2", "GET A3"], ["1", "3", ""]),
@@ -84,6 +93,7 @@ CHECKS = [
     (4, "text literals stay as they are", ["SET A1 5", 'SET B2 ="A1"&A1', "INSERTROW 1", "GET B3", "DELETEROW 1", "GET B2"], ["A15", "A15"]),
     (4, "cycles survive moves", ["SET A1 =A2", "SET A2 =A1", "INSERTROW 1", "GET A2", "GET A3", "SET A3 4", "GET A2"], ["#CYCLE!", "#CYCLE!", "4"]),
     (4, "row commands are case-insensitive", ["SET A1 1", "insertrow 1", "GET A2", "DeleteRow 1", "GET A1"], ["1", "1"]),
+    (4, "edits after row moves", ["SET A1 1", "SET A2 2", "SET B3 =SUM(A1:A2)", "GET B3", "INSERTROW 2", "GET B4", "SET A2 5", "GET B4", "SET A3 4", "GET B4", "DELETEROW 1", "GET B3", "SET A1 10", "GET B3"], ["3", "3", "8", "10", "9", "14"]),
     (4, "last row", ["SET A98 1", "SET A99 2", "SET B1 =SUM(A98:A99)", "INSERTROW 99", "DELETEROW 99", "GET A99", "GET B1", "GET A98"], ["ERROR", "", "1", "1"]),
 ]
 
@@ -110,7 +120,7 @@ def chain_values(first=1):
 
 
 def performance():
-    """Step 5: the whole grid as one chain, read and updated within SECONDS each."""
+    """Step 5: the whole grid as one chain, read and edited within SECONDS each."""
     whole = CHAIN + [f"GET {cell}" for cell in GRID]
     updates, expected = [], []
     for first in range(101, 121):
@@ -119,6 +129,9 @@ def performance():
     middle = GRID.index("M50")
     cleared = chain_values()[:middle] + [""] + [str(index + 1) for index in range(len(GRID) - middle - 1)]
     cycle = ["SET A1 =Z99", "GET Z99", "GET A1", "GET M50", "SET A1 1", "GET Z99"]
+    tail = ["GET Z99"] + [command for value in range(EDITS) for command in (f"SET Z99 {value}", "GET Z98")]
+    tail += ["SET Z99 =Z98+1", "GET Z99"]
+    edits = [str(len(GRID))] + [str(len(GRID) - 1)] * EDITS + [str(len(GRID))]
     wide = [f"SET {cell} 2" for cell in GRID[:-99]] + ["SET Z1 =SUM(A1:Y99)", "SET Z2 =COUNT(A1:Y99)", "GET Z1", "GET Z2",
                                                        "SET A1 3", "GET Z1"]
     return [
@@ -126,6 +139,7 @@ def performance():
         (5, "whole-grid chain updates fast", CHAIN + updates, expected, SECONDS),
         (5, "clearing the middle of the chain", CHAIN + ["CLEAR M50"] + [f"GET {cell}" for cell in GRID], cleared, SECONDS),
         (5, "a cycle through the whole chain", CHAIN + cycle, ["#CYCLE!"] * 3 + [str(len(GRID))], SECONDS),
+        (5, "edits at the end of the chain stay fast", CHAIN + tail, edits, SECONDS),
         (5, "a range over most of the grid", wide, [str(2 * 2475), "2475", str(2 * 2475 + 1)], SECONDS),
     ]
 

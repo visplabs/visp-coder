@@ -1,8 +1,8 @@
 # Inventory reservations API
 
-Run: `./start.sh <port>` (Python 3.10, standard library only). With `INVENTORY_DATA_FILE=<path>` the state (items, reservations with their status and expiry, idempotency keys) is kept in that file and a restart with the same file resumes it; a file that does not exist yet starts an empty store. Without it, state is in memory only. Tests: `python3 -m unittest discover -s tests`.
+Run: `./start.sh <port>` (Python 3.10, standard library only). State is kept in SQLite (`sqlite3`): in the database file named by `INVENTORY_DB`, where a restart with the same file resumes it (a new file starts empty), or without it in an in-memory database. Tests: `python3 -m unittest discover -s tests`.
 
-Layout: `inventory/store.py` holds state and rules, `inventory/validation.py` request validation, `inventory/http.py` routing and the HTTP contract, `server.py` the entry point.
+Layout: `inventory/store.py` holds state (the SQLite schema: items, reservations, their lines, idempotency keys) and rules, `inventory/validation.py` request validation, `inventory/http.py` routing and the HTTP contract, `server.py` the entry point.
 
 ## Contract
 
