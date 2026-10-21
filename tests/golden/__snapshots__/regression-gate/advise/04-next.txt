@@ -1,0 +1,10 @@
+$ visp next
+--- stdout
+next: {"feature":"001-return-two-from-the-public","action":"accept","objective":"Run final checks against the assembled product and preserved expectations","command":"visp accept --feature 001-return-two-from-the-public","mayEdit":false,"evidence":{"entries":["Regression: test/label.test.mjs › label is one: Expected values to be strictly equal: 'two' !== 'one'. It passed before this change and fails now. Fix the code; if the request changes this behavior, update the test to the request."],"remaining":0}}
+Full result: add --json.
+
+Next: visp accept --feature 001-return-two-from-the-public
+
+--- stderr
+
+--- exit 0

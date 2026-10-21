@@ -50,6 +50,12 @@ const workflowSchema = z
      * other findings reach the worker as notes it is not asked to act on.
      */
     requestGaps: z.enum(["reviewer", "required"]).default("reviewer"),
+    /**
+     * At `done` and `accept`, run the existing tests the change reaches and earlier work's checks,
+     * and compare failures with the old code. `advise` reports; `gate` also blocks on a test that
+     * passed before and fails now. Off by default.
+     */
+    regressionGate: z.enum(["off", "advise", "gate"]).default("off"),
   })
   .strict()
   .default({});

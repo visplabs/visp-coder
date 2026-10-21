@@ -104,6 +104,7 @@ export async function nextFromRecord(
       record,
       await nextClosedProduct(workspace, record, subject.value),
       identity.value.sourceSnapshot,
+      subject.value,
     );
   if (!slice)
     return ok({
@@ -135,6 +136,7 @@ export async function nextFromRecord(
           withNotObservedAdvice(next.value, record, subject.value),
           slice,
           identity.value.sourceSnapshot,
+          subject.value,
         ),
       )
     : next;

@@ -621,6 +621,9 @@ function checksPassed(
       execution.status !== "passed" && !(disputes && disputedFailure(execution, disputes)),
   );
   if (blocking.length) return false;
+  // A regression the gate blocks on is fixed before anyone reviews the change.
+  if (result.regressionGate?.mode === "gate" && result.regressionGate.status === "regression")
+    return false;
   // A slice whose required review has no check to run still owes that review.
   return result.executions.length > 0 || result.passed || reviewOwed;
 }

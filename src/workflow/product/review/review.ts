@@ -26,6 +26,10 @@ import {
 } from "../model.js";
 import type { observationSequence } from "../observation-preview.js";
 import { rulesForRequest } from "../project-rules.js";
+import {
+  currentRegressionGate,
+  regressionGateLimitation,
+} from "../regression/regression-report.js";
 import { regressionScopeLimitations } from "../regression-scope-advice.js";
 import { picturesWithoutImage, pictureWithoutImageNote } from "../result-images.js";
 import { withProductMutation } from "../runtime.js";
@@ -268,7 +272,10 @@ async function review(
   });
 }
 
-/** Regression-scope advice, and each picture the product made that has no image here. */
+/**
+ * Regression-scope advice, the regression gate's executed results for this version, and each
+ * picture the product made that has no image here.
+ */
 async function reviewLimitations(
   workspace: WorkspaceState,
   record: ProductRecord,
@@ -277,8 +284,13 @@ async function reviewLimitations(
   subject: string,
 ): Promise<{ limitations?: readonly string[] }> {
   const regression = await regressionScopeLimitations(workspace, record, slice, snapshot);
+  const gate = await currentRegressionGate(workspace, record.brief.feature, subject);
   const pictures = await picturesWithoutImage(workspace, record, snapshot, subject);
-  const limitations = [...(regression.limitations ?? []), ...pictures.map(pictureWithoutImageNote)];
+  const limitations = [
+    ...(regression.limitations ?? []),
+    ...(gate ? [regressionGateLimitation(gate)] : []),
+    ...pictures.map(pictureWithoutImageNote),
+  ];
   return limitations.length ? { limitations } : {};
 }
 

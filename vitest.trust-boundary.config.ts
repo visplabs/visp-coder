@@ -145,6 +145,7 @@ const trustBoundaryTests = [
   "tests/unit/workflow/evidence/product-draft-first.test.ts",
   "tests/unit/workflow/evidence/product-review-cadence.test.ts",
   "tests/unit/workflow/evidence/product-request-gaps.test.ts",
+  "tests/unit/workflow/evidence/product-regression-gate.test.ts",
   "tests/unit/workflow/evidence/product-context-budget.test.ts",
   "tests/unit/workflow/evidence/product-graph-focus.test.ts",
   "tests/unit/workflow/evidence/product-runtime-boundary.test.ts",

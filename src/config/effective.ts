@@ -83,6 +83,8 @@ const operationNotes: Readonly<Record<string, string>> = {
     "Lean mode: feature reviews only the slice that completes the feature and stops after two reviews unless required findings remain.",
   "workflow.requestGaps":
     "Lean mode: required makes reviewer findings tagged as gaps against the request required and shows other findings as notes.",
+  "workflow.regressionGate":
+    "At done and accept, advise runs the existing tests the change reaches and earlier work's checks, comparing failures with the old code; gate also blocks on a test that passed before and fails now.",
   "graph.languages":
     "Selects languages for indexing; a configured language does not prove an index is current.",
   "graph.exclude": "Excludes matching repository paths from graph indexing.",

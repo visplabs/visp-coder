@@ -1,0 +1,19 @@
+{
+  "exitCode": 0,
+  "next": {
+    "action": "understand",
+    "command": "visp work --feature 001-return-two-from-the-public --check \"<command that runs your tests>\"",
+    "mayEdit": false,
+    "evidence": 0
+  },
+  "product": {
+    "status": "active",
+    "slices": {},
+    "executions": [],
+    "reviews": 0,
+    "openFindings": {
+      "required": 0,
+      "advisory": 0
+    }
+  }
+}

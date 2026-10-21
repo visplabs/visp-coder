@@ -172,7 +172,7 @@ export async function productFlipCheck(
 }
 
 /** Why a comparison must not run, or undefined when it may. Nothing here runs the check. */
-async function comparisonBlocker(
+export async function comparisonBlocker(
   workspace: WorkspaceState,
   auth: ProductAuthorization,
   baseline: ReadonlyMap<string, FlipEntry>,
@@ -501,7 +501,7 @@ function matchingAuthorization(
   return auth !== undefined && auth.task === task;
 }
 
-function flipRunEnvironmentFailure(
+export function flipRunEnvironmentFailure(
   output: Result<CommandOutput>,
   check: ProductCheck,
   raw: string,
