@@ -83,6 +83,11 @@ function pythonModuleRoots(
     if (!invocation.includes("-m") && !invocation.includes("-c") && runner?.endsWith(".py"))
       roots.add(dirname(resolve(directory, runner)));
   }
+  // Behind a wrapper script (`./swe-test ./tests/runtests.py label`), Django's runner still
+  // takes labels below its own directory. With an interpreter, only the rule above applies.
+  else
+    for (const token of args)
+      if (basename(token) === "runtests.py") roots.add(dirname(resolve(directory, token)));
   return roots;
 }
 

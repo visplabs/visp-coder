@@ -65,6 +65,38 @@ describe("import resolution", () => {
     );
   });
 
+  it("links `from package import submodule` to the submodule, so its tests reach it", async () => {
+    repo = await makeRepo({
+      "pkg/__init__.py": "",
+      "pkg/commands/__init__.py": "",
+      "pkg/commands/create.py": "def run():\n    return 1\n",
+      "pkg/commands/remove.py": "def run():\n    return 0\n",
+      "tests/auth_tests/test_management.py":
+        "from pkg.commands import (\n    create,\n    remove as gone,\n    VALUE,\n)\nfrom pkg import commands\n",
+      "pkg/commands/use.py": "from . import create\n",
+    });
+    const facts = await extractFixture(repo);
+
+    const tested = targetsFrom(facts.relations, "tests/auth_tests/test_management.py", "imports");
+    expect(tested).toEqual(
+      expect.arrayContaining([
+        "pkg/commands/__init__.py#file",
+        "pkg/commands/create.py#file",
+        "pkg/commands/remove.py#file",
+      ]),
+    );
+    expect(tested).not.toContain("pkg/commands/VALUE.py#file");
+    expect(targetsFrom(facts.relations, "pkg/commands/use.py", "imports")).toContain(
+      "pkg/commands/create.py#file",
+    );
+    expect(
+      facts.relations.filter(
+        (relation) =>
+          relation.kind === "tested_by" && relation.source === "pkg/commands/create.py#file",
+      ),
+    ).toHaveLength(1);
+  });
+
   it("resolves src-layout Python modules and qualified import calls", async () => {
     repo = await makeRepo({
       "src/mypkg/__init__.py": "",

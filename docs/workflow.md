@@ -165,11 +165,12 @@ Three experimental `workflow` switches, off by default, aim to cut ceremony wher
 `workflow.regressionGate` (experimental, default `off`) runs earlier tests at `visp done` and `visp accept`, after the call's own checks pass.
 
 - **What runs.** In order, up to 12 commands:
-  - existing test files the repository index links to a changed file: the tests that import it first, then tests of its importers, up to three steps away;
+  - existing tests linked to a changed file: by the repository index (the tests that import it first, then tests of its importers, up to three steps away; `from package import module` counts), or by convention (a test that names the module's import path or file name, as `call_command("createsuperuser")` does, is named after it, as `test_<module>.py`, or sits in its app's test directory, as `tests/auth_tests/test_management.py` for `django/contrib/auth/management/`);
   - this feature's pinned suite (on a slice that does not run it already) and the checks of its other closed slices;
-  - the pinned suites, then the declared checks, of up to ten earlier accepted features, newest first.
+  - the pinned suites, then the declared checks, of up to ten earlier accepted features, newest first;
+  - tests that import no application code (subprocess or HTTP suites), only when they make up at least half of a project's tests and number four or fewer.
 
-  A test file runs the way its project runs it: a unittest or pytest module with that runner, a `node:test` file with `node --test`, and with vitest, jest or mocha when the project has it in `node_modules/.bin`. Commands the call already ran, browser journeys and tests added by this work are left out. The reply lists what was left out and why, including a time budget of 180 s.
+  Only files named and written as tests count (`test_*.py`, `*_test.py`, `tests.py`, `*.test.*`, `*.spec.*`, `__tests__/`, with at least one test), and only in the language of the changed code. A test runs through the runner a declared check uses (`tests/runtests.py`, pytest, unittest, `node --test`, vitest, jest, mocha, behind a wrapper such as `./swe-test` too), else Django's `tests/runtests.py`, else the runner the file or project names. In a Python test file, only the classes that mention the changed module run (`label.Class`, `path::Class`). Tests the call's own checks ran, browser journeys and tests added by this work are left out. The reply counts the selection (`selected`: linked to the change, from earlier work, unlinked) and lists what was left out and why, including a time budget of 180 s.
 - **How a failure is judged.** A failing command runs once more. A test whose failure differs on that rerun is flaky. A consistent failure then runs on the old code: the baseline from the slice's `visp work` (at `accept`, the last slice's), rebuilt in a temporary copy with the current tests, as the flip check does. Failures are compared by test name and normalized message, not by exit code:
   - passed on the old code, fails now: **regression**;
   - failed on the old code too: **pre-existing**;
@@ -181,7 +182,7 @@ Three experimental `workflow` switches, off by default, aim to cut ceremony wher
   - The advice to run related tests by hand is not shown, since VISP runs them.
   - With `advise`, nothing blocks. With `gate`, a regression keeps the slice open, or the feature unaccepted, and no review is spent until it is fixed. If the request changes that behavior, update the test to the request; a test that fails on the old code does not block.
 - **Never a pass by default.** A missing index or baseline, or no test reaching the change, makes the result `unchecked`. Pre-existing and unchecked failures never block.
-- **Safety.** The gate never edits or discards work: the old code runs only in a temporary tree. With `workflow.flipCheck: off`, no command runs twice, so failures are reported but not compared. Results are cached per product version, so the `done` that follows a review does not run them again.
+- **Safety.** The gate never edits or discards work: the old code runs only in a temporary tree, without Python bytecode caches, which its interpreter rebuilds. With `workflow.flipCheck: off`, no command runs twice, so failures are reported but not compared. Results are cached per product version, so the `done` that follows a review does not run them again.
 
 ## Repairing a finding
 

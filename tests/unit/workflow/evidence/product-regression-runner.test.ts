@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  declaredRunner,
+  isRunnableTestFile,
+  pythonTestClasses,
   type TestRunnerFacts,
   testFileCommand,
+  testLanguage,
 } from "../../../../src/workflow/product/regression/regression-runner.js";
 
 const PYTHON = process.platform === "win32" ? "python" : "python3";
@@ -74,5 +78,175 @@ describe("testFileCommand", () => {
       testFileCommand("test/a.test.ts", "import { test } from 'node:test';", none),
     ).toBeUndefined();
     expect(testFileCommand("src/a_test.go", "package a", none)).toBeUndefined();
+  });
+});
+
+const MANAGEMENT = [
+  "from django.contrib.auth.management.commands import createsuperuser",
+  "from django.test import TestCase",
+  "",
+  "",
+  "class GetDefaultUsernameTestCase(TestCase):",
+  "    def test_simple(self):",
+  "        self.assertEqual(1, 1)",
+  "",
+  "",
+  "class CreatesuperuserManagementCommandTestCase(TestCase):",
+  "    def test_no_email(self):",
+  "        call_command('createsuperuser', interactive=False)",
+  "",
+  "",
+  "@override_settings(AUTH_USER_MODEL='auth_tests.CustomUser')",
+  "class MultiDBCreatesuperuserTestCase(TestCase):",
+  "    def test_createsuperuser_command_with_database_option(self):",
+  "        createsuperuser.Command()",
+  "",
+].join("\n");
+
+describe("isRunnableTestFile", () => {
+  it("counts a file named and written as a test, and nothing else under a tests directory", () => {
+    expect(isRunnableTestFile("tests/auth_tests/test_management.py", MANAGEMENT)).toBe(true);
+    expect(isRunnableTestFile("tests/app/tests.py", "def test_a():\n    assert 1\n")).toBe(true);
+    expect(isRunnableTestFile("tests/app/__init__.py", "")).toBe(false);
+    expect(isRunnableTestFile("tests/app/models.py", "class Thing(Model):\n    pass\n")).toBe(
+      false,
+    );
+    expect(isRunnableTestFile("tests/app/test_empty.py", "# nothing yet\n")).toBe(false);
+    expect(isRunnableTestFile("tests/app/templates/test_page.html", "<p>test()</p>")).toBe(false);
+    expect(isRunnableTestFile("js_tests/admin/core.test.js", "QUnit.test('x', (a) => {});")).toBe(
+      true,
+    );
+    expect(isRunnableTestFile("test/helpers.mjs", "export const it = 1;")).toBe(false);
+    expect(isRunnableTestFile("src/__tests__/a.ts", "it('works', () => {});")).toBe(true);
+  });
+
+  it("names a test file's language", () => {
+    expect(testLanguage("tests/test_a.py")).toBe("python");
+    expect(testLanguage("js_tests/a.test.js")).toBe("javascript");
+    expect(testLanguage("src/a.test.tsx")).toBe("javascript");
+    expect(testLanguage("tests/a.html")).toBeUndefined();
+  });
+});
+
+describe("declaredRunner", () => {
+  const exists = (path: string) =>
+    ["tests/auth_tests", "tests/migrations", "tests/test_a.py", "test/a.test.mjs"].includes(path);
+
+  it("takes Django's runner and its options from a declared check, without its test labels", () => {
+    expect(
+      declaredRunner(
+        [
+          "./swe-test",
+          "./tests/runtests.py",
+          "--parallel",
+          "1",
+          "auth_tests.test_management",
+          "migrations",
+        ],
+        exists,
+      ),
+    ).toEqual({
+      style: "django",
+      prefix: ["./swe-test", "./tests/runtests.py", "--parallel", "1"],
+      labelRoot: "tests",
+    });
+  });
+
+  it("takes pytest, unittest and node:test runners", () => {
+    expect(declaredRunner(["python3", "-m", "pytest", "-x", "tests/test_a.py::A"], exists)).toEqual(
+      {
+        style: "pytest",
+        prefix: ["python3", "-m", "pytest", "-x"],
+      },
+    );
+    expect(declaredRunner(["pytest", "-q", "tests/test_a.py"], exists)).toEqual({
+      style: "pytest",
+      prefix: ["pytest", "-q"],
+    });
+    expect(declaredRunner(["python3", "-m", "unittest", "tests/test_a.py"], exists)).toEqual({
+      style: "unittest",
+      prefix: ["python3", "-m", "unittest"],
+    });
+    expect(declaredRunner(["node", "--test", "test/a.test.mjs"], exists)).toEqual({
+      style: "node",
+      prefix: ["node", "--test"],
+    });
+  });
+
+  it("has no runner for a command that runs no test framework", () => {
+    expect(declaredRunner(["node", "checks/value.check.mjs"], exists)).toBeUndefined();
+    expect(declaredRunner(["./run.sh"], exists)).toBeUndefined();
+  });
+});
+
+describe("pythonTestClasses", () => {
+  it("names the classes whose bodies mention the changed module", () => {
+    expect(pythonTestClasses(MANAGEMENT, ["createsuperuser"])).toEqual([
+      "CreatesuperuserManagementCommandTestCase",
+      "MultiDBCreatesuperuserTestCase",
+    ]);
+  });
+
+  it("runs the whole module when every class or none mentions it", () => {
+    expect(pythonTestClasses(MANAGEMENT, ["TestCase"])).toBeUndefined();
+    expect(pythonTestClasses(MANAGEMENT, ["changepassword"])).toBeUndefined();
+  });
+});
+
+describe("testFileCommand with the project's runner", () => {
+  const django = declaredRunner(
+    ["./swe-test", "./tests/runtests.py", "--parallel", "1", "auth_tests.test_management"],
+    () => true,
+  );
+
+  it("runs the selected classes through a declared Django runner", () => {
+    expect(
+      testFileCommand("tests/auth_tests/test_management.py", MANAGEMENT, none, {
+        runners: django ? [django] : [],
+        classes: ["CreatesuperuserManagementCommandTestCase"],
+      }),
+    ).toEqual([
+      "./swe-test",
+      "./tests/runtests.py",
+      "--parallel",
+      "1",
+      "auth_tests.test_management.CreatesuperuserManagementCommandTestCase",
+    ]);
+  });
+
+  it("uses Django's tests/runtests.py when no check declares a runner", () => {
+    expect(
+      testFileCommand(
+        "tests/auth_tests/test_management.py",
+        MANAGEMENT,
+        { ...none, djangoRunner: "tests/runtests.py" },
+        {},
+      ),
+    ).toEqual([PYTHON, "tests/runtests.py", "auth_tests.test_management"]);
+  });
+
+  it("addresses pytest classes by node id and unittest classes by dotted name", () => {
+    const pytest = { style: "pytest" as const, prefix: ["python3", "-m", "pytest", "-q"] };
+    expect(
+      testFileCommand(
+        "tests/test_a.py",
+        "import pytest\nclass TestA:\n    def test_x(self): pass\n",
+        none,
+        {
+          runners: [pytest],
+          classes: ["TestA"],
+        },
+      ),
+    ).toEqual(["python3", "-m", "pytest", "-q", "tests/test_a.py::TestA"]);
+    expect(
+      testFileCommand("tests/test_a.py", "import unittest\n", none, { classes: ["A", "B"] }),
+    ).toEqual([PYTHON, "-m", "unittest", "tests.test_a.A", "tests.test_a.B"]);
+  });
+
+  it("keeps a Python runner for Python tests and a JavaScript runner for JavaScript tests", () => {
+    const node = { style: "node" as const, prefix: ["node", "--test"] };
+    expect(
+      testFileCommand("tests/test_a.py", "import unittest\n", none, { runners: [node] }),
+    ).toEqual([PYTHON, "-m", "unittest", "tests/test_a.py"]);
   });
 });

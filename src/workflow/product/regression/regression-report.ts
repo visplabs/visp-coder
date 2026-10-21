@@ -20,7 +20,15 @@ export interface RegressionGateReport {
   readonly status: "clear" | "regression" | "unchecked";
   readonly results: readonly RegressionGateResult[];
   readonly leftOut: readonly string[];
+  /** What the selected commands are: tests linked to the changed code, earlier work's checks, filler. */
+  readonly selection?: RegressionSelection;
   readonly durationMs: number;
+}
+
+export interface RegressionSelection {
+  readonly linked: number;
+  readonly earlierWork: number;
+  readonly unlinked: number;
 }
 
 /** The gate in a `done` or `accept` reply. */
@@ -28,6 +36,7 @@ export interface RegressionGateSummary {
   readonly mode: "off" | "advise" | "gate";
   readonly status: RegressionGateReport["status"];
   readonly ran: readonly string[];
+  readonly selected?: RegressionSelection;
   readonly regressions?: readonly string[];
   readonly preExisting?: readonly string[];
   readonly unchecked?: readonly string[];
@@ -63,6 +72,10 @@ const reportSchema = z
         .strict(),
     ),
     leftOut: z.array(z.string()),
+    selection: z
+      .object({ linked: z.number(), earlierWork: z.number(), unlinked: z.number() })
+      .strict()
+      .optional(),
     durationMs: z.number().nonnegative(),
   })
   .strict();
@@ -151,6 +164,7 @@ function regressionGateSummary(
     mode: workspace.config.workflow.regressionGate,
     status: report.status,
     ran: report.results.map((result) => result.label),
+    ...(report.selection ? { selected: report.selection } : {}),
     ...(regressions.length ? { regressions: bounded(regressions) } : {}),
     ...(preExisting.length ? { preExisting: bounded(preExisting, SHOWN_PRE_EXISTING) } : {}),
     ...(unchecked.length ? { unchecked: bounded(unchecked) } : {}),

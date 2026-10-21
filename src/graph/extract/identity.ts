@@ -7,7 +7,7 @@ import { GRAMMARS } from "../constants.js";
 import { type AliasSources, loadAliases } from "./tsconfig.js";
 
 /** Bump when resolution/extraction behavior changes without a grammar byte change. */
-const EXTRACTOR_REVISION = 3;
+const EXTRACTOR_REVISION = 4;
 const wasmDirectory = dirname(createRequire(import.meta.url).resolve("@vscode/tree-sitter-wasm"));
 
 export async function extractionInputs(

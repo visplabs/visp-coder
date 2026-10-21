@@ -214,6 +214,33 @@ it("copies regenerable git-ignored caches and build output into the comparison",
     await disposeFlipEnvironment(environment);
   }
 });
+// Python writes the source's absolute path into each .pyc, and the bytecode cannot be rebased,
+// so copying a cache refused every comparison in a project whose tests had run (Django, Sphinx).
+it("leaves Python bytecode caches out: the comparison's interpreter rebuilds them", async () => {
+  workspace = await TestWorkspace.create({
+    ".gitignore": "__pycache__\n*.py[co]\n",
+    "pkg/value.py": "VALUE = 1\n",
+  });
+  const compiled = Buffer.concat([
+    Buffer.from([0x6f, 0x0d, 0x0d, 0x0a, 0, 0]),
+    Buffer.from(join(workspace.root, "pkg/value.py")),
+  ]);
+  await workspace.write("pkg/__pycache__/value.cpython-310.pyc", compiled);
+  await workspace.write("pkg/stale.pyc", compiled);
+  expect((await unsnapshottedFlipState(workspace.root)) ?? "").not.toMatch(/pycache|\.pyc/);
+  const environment = await captureFlipEnvironment(workspace.root);
+  expect(environment.reason).toBeUndefined();
+  const comparison = await tree();
+  try {
+    await provideFlipEnvironment(workspace.root, comparison, environment);
+    await expect(
+      readFile(join(comparison, "pkg/__pycache__/value.cpython-310.pyc")),
+    ).rejects.toThrow();
+    await expect(readFile(join(comparison, "pkg/stale.pyc"))).rejects.toThrow();
+  } finally {
+    await disposeFlipEnvironment(environment);
+  }
+});
 it("blocks a comparison when the original run created ignored state the snapshot never held", async () => {
   workspace = await TestWorkspace.create({
     ".gitignore": "*.log\ndist/\n",
