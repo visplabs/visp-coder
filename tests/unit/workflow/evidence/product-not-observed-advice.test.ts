@@ -9,7 +9,7 @@ import { registerWorkflowTools } from "../../../../src/mcp/tools/workflow.js";
 import type { ProductExecution } from "../../../../src/workflow/product/model.js";
 import { withNotObservedAdvice } from "../../../../src/workflow/product/not-observed-advice.js";
 import { runProductReview } from "../../../../src/workflow/product/review/review.js";
-import type { ProductNext } from "../../../../src/workflow/product/status.js";
+import { type ProductNext, runProductReport } from "../../../../src/workflow/product/status.js";
 import { readProductRecord, saveProductState } from "../../../../src/workflow/product/store.js";
 import {
   productContractDigest,
@@ -26,7 +26,7 @@ const PREFIX = "VISP's tester never observed: ";
 const GOAL = "Observed wins expose the correct next-screen control";
 const SHOWN = `${GOAL}: 5000 attempts`;
 const advice = (names = GOAL) =>
-  `${PREFIX}${names}. If one is a goal the request defines (such as winning a level), it is unmet even when one precise input sequence reaches it: change the product so that a coarse search over the request's stated inputs reaches it.`;
+  `${PREFIX}${names}. If one is a goal the request defines (such as winning a level), it is unmet even when one precise input sequence reaches it: change the product so that a coarse search over the request's stated inputs reaches it. It gets one repair round.`;
 let workspace: TestWorkspace;
 let feature: string;
 let handlers: Map<string, Handler>;
@@ -293,5 +293,41 @@ it("keeps distinct colon-bearing names that share a prefix", async () => {
   const next = await reply("cli", "next");
   expect((next.evidence as string[])[0]).toBe(
     advice("Level: win: 4000 attempts, Level: next-screen"),
+  );
+});
+
+// kd1-slingshot-game-visp-kcand-5 kept retuning level 3 for 27 minutes after two reviews held its
+// outcome for it, and hit the 3600 s cap. One repair round, then the goal is reported unverified.
+it("stops asking for repairs once a goal's round is spent and lists it as unverified in visp pr", async () => {
+  await reply("cli", "work", "T001");
+  await recordExecution(`NOT OBSERVED: ${GOAL}: 5000 attempts`, {
+    subjectDigest: "earlier",
+    createdAt: "2026-10-21T06:20:00.000Z",
+  });
+  const state = await workspace.state();
+  const record = value(await readProductRecord(state, { feature }));
+  value(
+    await saveProductState(state, record, {
+      ...record.state,
+      reviews: [
+        ...record.state.reviews,
+        {
+          subjectDigest: "earlier",
+          contractDigest: productContractDigest(record.brief),
+          createdAt: "2026-10-21T06:27:00.000Z",
+          assessments: [],
+          captures: [],
+        },
+      ],
+    }),
+  );
+  await recordExecution(`NOT OBSERVED: ${GOAL}: 4000 attempts`);
+  const next = await reply("cli", "next");
+  expect((next.evidence as string[])[0]).toBe(
+    `${PREFIX}${GOAL}: 4000 attempts. Already had its one repair round: ${GOAL}. VISP lists these as unverified in visp pr; do not keep changing the product for them.`,
+  );
+  const report = value(await runProductReport(await workspace.state(), { feature }));
+  expect(report.markdown).toContain(
+    `## Unverified goals\n\nThe independent tester's bounded search never observed these on the latest pinned run.\n\n- ${GOAL}: NOT OBSERVED after its one repair round`,
   );
 });

@@ -1,5 +1,6 @@
 import type { ProductNext } from "./status.js";
 import type { ProductRecord } from "./store.js";
+import { unobservedGoalRounds } from "./unobserved-goals.js";
 
 const ADVICE_PREFIX = "VISP's tester never observed: ";
 
@@ -30,7 +31,20 @@ export function withNotObservedAdvice(
   if (!names.length) return next;
   const listed = names.slice(0, 4);
   if (names.length > 4) listed.push(`and ${names.length - 4} more`);
-  const advice = `${ADVICE_PREFIX}${listed.join(", ")}. If one is a goal the request defines (such as winning a level), it is unmet even when one precise input sequence reaches it: change the product so that a coarse search over the request's stated inputs reaches it.`;
+  const { goals, spent } = unobservedGoalRounds(record, subject);
+  const advice = [
+    `${ADVICE_PREFIX}${listed.join(", ")}.`,
+    ...(spent.length < goals.length
+      ? [
+          "If one is a goal the request defines (such as winning a level), it is unmet even when one precise input sequence reaches it: change the product so that a coarse search over the request's stated inputs reaches it. It gets one repair round.",
+        ]
+      : []),
+    ...(spent.length
+      ? [
+          `Already had its one repair round: ${spent.join(", ")}. VISP lists these as unverified in visp pr; do not keep changing the product for them.`,
+        ]
+      : []),
+  ].join(" ");
   const firstDone = next.evidence[0]?.startsWith("No visp done yet after ") ? 1 : 0;
   return {
     ...next,

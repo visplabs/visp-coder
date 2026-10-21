@@ -78,8 +78,10 @@ function wrappedRunner(executable: string, args: string[]): string[] | undefined
 export function reviewCheckResult(
   execution: ProductExecution,
   check?: ProductCheck,
-  options: { timing?: boolean } = {},
+  /** `spentGoals`: NOT OBSERVED goals whose one repair round is spent (see unobserved-goals). */
+  options: { timing?: boolean; spentGoals?: readonly string[] } = {},
 ) {
+  const spent = options.spentGoals ?? [];
   return [
     `Check ${execution.check}; execution ${execution.id}; ${execution.status}; exit ${execution.exitCode}`,
     `Command executed: ${execution.command}`,
@@ -98,7 +100,12 @@ export function reviewCheckResult(
     "Recorded assertion results/output (names are supplied only when the check emitted them):",
     ...(/^\s*NOT OBSERVED:/im.test(execution.output)
       ? [
-          "Coverage gap: NOT OBSERVED means zero qualifying events or a goal the tester's bounded search never reached; on its own it is neither a passing assertion nor a product failure. A NOT OBSERVED goal the request states (winning a level, completing a flow, or a screen that follows one) is unmet: do not rate its outcome satisfied; report a required finding naming it, even when the implementer's own tests or one precise input sequence reach it, because a goal that a bounded search over the stated inputs misses is one people will not reach either. Only when the test source shows its search cannot work (inputs outside the stated range, a wrong hook, a helper error), say so in limitations instead.",
+          "Coverage gap: NOT OBSERVED means zero qualifying events or a goal the tester's bounded search never reached; on its own it is neither a passing assertion nor a product failure. A NOT OBSERVED goal the request states (winning a level, completing a flow, or a screen that follows one) is unmet: do not rate its outcome satisfied; report a required finding naming it, even when the implementer's own tests or one precise input sequence reach it, because a goal that a bounded search over the stated inputs misses is one people will not reach either. Only when the test source shows its search cannot work (inputs outside the stated range, a wrong hook, a helper error), say so in limitations instead. It gets one repair round.",
+          ...(spent.length
+            ? [
+                `Repair round spent: ${spent.map((goal) => JSON.stringify(goal)).join(", ")} ${spent.length === 1 ? "was" : "were"} NOT OBSERVED at an earlier review and still ${spent.length === 1 ? "is" : "are"} after the product changed. Do not hold an outcome or report a finding for ${spent.length === 1 ? "it" : "them"}; list ${spent.length === 1 ? "it" : "each"} in limitations as unverified, and judge the rest of each outcome as usual.`,
+              ]
+            : []),
         ]
       : []),
     execution.output ||

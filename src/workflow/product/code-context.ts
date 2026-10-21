@@ -23,6 +23,7 @@ import { readProductAuthorizationBaseline } from "./scopes.js";
 import { BROAD_SCOPE_SOURCE_ID, type ProductSource } from "./sources.js";
 import type { ProductRecord } from "./store.js";
 import { productSourceChanges, productSourceDigest, productSourceSnapshot } from "./subject.js";
+import { unobservedGoalRounds } from "./unobserved-goals.js";
 
 /**
  * Paths added, modified or deleted since the retained authorization baseline (including
@@ -77,6 +78,7 @@ export async function reviewCodeSources(
     readSource,
   );
   const question = reviewQuestion(record);
+  const spentGoals = subject ? unobservedGoalRounds(record, subject).spent : [];
   const diff = await reviewDiffSource(workspace, record, changedPaths, slice);
   const sources: ProductSource[] = diff ? [diff] : [];
   if (broad) sources.push(broadScopeSource(broad, candidates));
@@ -95,6 +97,7 @@ export async function reviewCodeSources(
       declarations,
       question,
       limit,
+      spentGoals,
     );
     remaining -= source.excerpt.length;
     sources.push(source);
@@ -389,6 +392,7 @@ async function readReviewSource(
   declarations: ProductCheck[],
   question: string,
   limit: number,
+  spentGoals: readonly string[] = [],
 ): Promise<ProductSource> {
   if (!candidate.path && !candidate.execution)
     return {
@@ -403,9 +407,9 @@ async function readReviewSource(
   if (candidate.execution) {
     const execution = candidate.execution;
     const declaration = declarations.find((check) => check.id === execution.check);
-    const text = reviewCheckResult(execution, declaration);
+    const text = reviewCheckResult(execution, declaration, { spentGoals });
     // The identity excludes wall-clock timing, which changes on every run of the same execution.
-    const identity = reviewCheckResult(execution, declaration, { timing: false });
+    const identity = reviewCheckResult(execution, declaration, { timing: false, spentGoals });
     const gap = candidate.sourceUnresolved
       ? "Evidence gap: executed verifier/check source is unresolved or unavailable. Inspect the runner's selected assertion sources before judging coverage.\n"
       : "";

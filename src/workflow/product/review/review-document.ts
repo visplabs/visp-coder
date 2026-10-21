@@ -11,6 +11,7 @@ import type { ProductRecord } from "../store.js";
 import type { IndependentTestsRecord } from "../tester/independent-tests-model.js";
 import { readTestsRecord } from "../tester/independent-tests-record.js";
 import { TESTER_ACTIVITY_FILE, testerNetworkCommands } from "../tester/tester-activity.js";
+import { unobservedGoalRounds } from "../unobserved-goals.js";
 
 /**
  * One document a human reviewer can act on: the request, what was promised, what changed,
@@ -40,6 +41,7 @@ export async function productReviewDocument(
     ...decisionSection(record),
     ...(await changeSection(workspace, record)),
     ...checkSection(record),
+    ...unverifiedSection(record),
     ...acceptanceSection(tests.ok ? tests.value : undefined),
     ...intentSection(record),
     ...reviewSection(record),
@@ -150,6 +152,28 @@ function checkSection(record: ProductRecord) {
         : "not run";
       return `| ${check.id} | \`${cell(commandText(check.command))}\` | ${result} |`;
     }),
+    "",
+  ];
+}
+
+/** Goals the tester never observed stay unverified; one repair round is all VISP asks for. */
+function unverifiedSection(record: ProductRecord) {
+  const latest = record.state.executions
+    .filter((execution) => execution.check.startsWith("PINNED_"))
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+    .at(-1);
+  if (!latest) return [];
+  const { goals, spent } = unobservedGoalRounds(record, latest.subjectDigest);
+  if (!goals.length) return [];
+  return [
+    "## Unverified goals",
+    "",
+    "The independent tester's bounded search never observed these on the latest pinned run.",
+    "",
+    ...goals.map(
+      (goal) =>
+        `- ${cell(goal)}: NOT OBSERVED${spent.includes(goal) ? " after its one repair round" : ""}`,
+    ),
     "",
   ];
 }
