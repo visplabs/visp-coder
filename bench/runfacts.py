@@ -2,7 +2,8 @@
 
 A run is RUNS/runs/<name>. A one-session run has result.json and project/ there; a two-session
 run made by run_carryover.py has session1/result.json and <mode>/result.json with the finished
-project in <mode>/project. The worker's Claude Code transcripts are found under
+project in <mode>/project; a chain run made by run_chain.py has step<k>/result.json per step, the
+project in project/, and chain.json once finished. The worker's Claude Code transcripts are found under
 ~/.claude/projects by the path the project had while it ran (always <run>/project).
 
 Time categories, from consecutive transcript events (each gap is counted once, under the event
@@ -62,8 +63,15 @@ def _steps(command):
             yield words[0], command
 
 
+def is_chain_run(run):
+    return (run / "step1").is_dir() or (run / "chain.json").is_file()
+
+
 def sessions(run):
     """(label, result path) for each finished session of a run, in order."""
+    if is_chain_run(run):
+        found = sorted(run.glob("step*/result.json"), key=lambda path: int(re.sub(r"\D", "", path.parent.name)))
+        return [(path.parent.name, path) for path in found]
     if (run / "session1").is_dir():
         found = [("session1", run / "session1" / "result.json")]
         found += [(path.parent.name, path) for path in sorted(run.glob("*/result.json"))
@@ -74,11 +82,15 @@ def sessions(run):
 
 def final_project(run):
     """The finished project: <run>/project, or the second session's for a two-session run."""
+    if is_chain_run(run):
+        return run / "project"
     seconds = [path.parent for label, path in sessions(run) if label not in ("run", "session1")]
     return seconds[0] / "project" if seconds else run / "project"
 
 
 def is_finished(run, two_sessions=False):
+    if is_chain_run(run):
+        return (run / "chain.json").is_file()
     if two_sessions:
         return any(label != "session1" for label, _ in sessions(run))
     return (run / "result.json").is_file()

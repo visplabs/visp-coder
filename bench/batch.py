@@ -10,8 +10,9 @@ arm itself otherwise. Runs are named <batch>-<task>-<label>-<rep> under $VISP_BE
 The queue goes repetition by repetition, and within one through every task with the arms in an
 order that rotates per task, so machine load and a partial batch fall on every arm alike. A
 two-session task (session1.md) runs with run_carryover.py in fresh mode: the second session
-starts on the project the first left, notes kept. Timeouts per session: games 3600 s, every
-other task 2700 s. A visp-codex arm runs with run_codex.py; every other arm with run_claude.py.
+starts on the project the first left, notes kept. A chain task (steps/) runs with run_chain.py:
+each step is a fresh session on the project the previous step left. Timeouts per session: games
+3600 s, every other task 2700 s (per step for a chain). A visp-codex arm runs with run_codex.py; every other arm with run_claude.py.
 
 Restartable: a finished run is skipped; a run left unfinished by an interrupted batch is moved
 to $VISP_BENCH_RUNS/discarded and run again, after stopping any runner or worker the earlier
@@ -38,13 +39,14 @@ import sys
 import threading
 import time
 
+from chains import is_chain, step_files
 from common import RUNS, stop_recorded
 from judge import CHECKLISTS, GAMES
 from presets import preset, visp_build
 from runfacts import invalid, invalidity, is_finished, mark_if_invalid
 
 BENCH = pathlib.Path(__file__).resolve().parent
-TIMEOUTS = {"visual": 2700, "game": 3600, "carryover": 2700, "code": 2700}
+TIMEOUTS = {"visual": 2700, "game": 3600, "carryover": 2700, "chain": 2700, "code": 2700}
 log_lock = threading.Lock()
 stop = threading.Event()
 active, active_lock = set(), threading.Lock()
@@ -58,6 +60,8 @@ def kind(task):
         return "game"
     if (task_dir / "session1.md").is_file():
         return "carryover"
+    if is_chain(task):
+        return "chain"
     if task in CHECKLISTS:
         return "visual"
     return "code"
@@ -83,8 +87,8 @@ def plan(args):
     for rep in range(1, args.reps + 1):
         for index, task in enumerate(tasks):
             task_kind = kind(task)
-            if task_kind == "carryover" and any(arm.startswith("visp-codex:") for _, arm in arms):
-                raise SystemExit(f"{task} has two sessions, which run_carryover.py runs with Claude Code only")
+            if task_kind in ("carryover", "chain") and any(arm.startswith("visp-codex:") for _, arm in arms):
+                raise SystemExit(f"{task} has several sessions, which {task_kind} runs make with Claude Code only")
             shift = (rep - 1 + index) % len(arms)
             for name, arm in arms[shift:] + arms[:shift]:
                 runs.append({"name": f"{args.batch}-{task}-{name}-{rep}", "task": task, "kind": task_kind,
@@ -149,6 +153,8 @@ def execute(entry, args, directory):
     timeout = str(entry["timeout"])
     if entry["twoSessions"]:
         argv = [str(BENCH / "run_carryover.py"), name, "--modes", "fresh", "--timeout", timeout]
+    elif entry["kind"] == "chain":
+        argv = [str(BENCH / "run_chain.py"), name, "--timeout", timeout]
     elif entry["arm"].startswith("visp-codex:"):
         argv = [str(BENCH / "run_codex.py"), name, "--timeout", timeout]
     else:
@@ -243,8 +249,11 @@ def main():
         print(f"batch {args.batch}, preset {args.preset} (worker {settings['worker']['model']}"
               f" {settings['worker']['effort'] or 'default effort'}), {len(runs)} runs, {args.jobs} at a time")
         for entry in runs:
+            sessions = " x2 sessions" if entry["twoSessions"] else ""
+            if entry["kind"] == "chain":
+                sessions = f" x{len(step_files(entry['task']))} steps"
             print(f"{state(entry, args.rerun_invalid, record=False):13} {entry['name']:60} {entry['arm']:24} "
-                  f"{entry['kind']:9} {entry['timeout']} s{' x2 sessions' if entry['twoSessions'] else ''}")
+                  f"{entry['kind']:9} {entry['timeout']} s{sessions}")
         return
     directory.mkdir(parents=True, exist_ok=True)
     lock_path = lock(directory)
