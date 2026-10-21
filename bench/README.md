@@ -41,7 +41,7 @@ VISP's quality is measured on what a worker builds with it, against the same wor
 1. Accuracy: the hidden-check pass rate (`score.py`).
 2. Look and feel: the blind visual judge's overall score and checklist passes (`judge.py`), for the visual tasks and the games' first screen.
 3. Code quality: the blind code-quality judge's overall score (`code_judge.py`), for every task but the visual ones.
-4. Review quality: not measured yet.
+4. Review quality: whether VISP's evidence record helps a reviewer catch defects ([review study](#review-study)).
 
 ### Presets
 
@@ -171,6 +171,17 @@ The rubric is fixed: correctness risks, structure, readability, naming, tests (d
 - The references do not score high. They are minimal programs written to qualify the oracles, and the judge marks down what the requests ask for and they leave out: tests (none in the four new projects; none added for the changes in `bundles` and `spreadsheet-extend`) and README updates. It also found a crash the hidden checks miss: `=IF(B1:B2,1,2)` raises an uncaught `#PARSE!` in the `spreadsheet-extend` reference. For a high anchor, the Oct 13 VISP run `r-reservations-api-visp-053-1` (44/44, 63 tests) scored 8 overall and 9 for tests.
 - Repeat variance is small: over 91 paired scores the two repetitions differ by 0.15 on average and by at most 1.
 - Cost: 30 Opus 5.5 calls in all (26 counted here, 3 that ended with `error_max_structured_output_retries` and were redone, and the Oct 13 check), 397k cache-write, 978k cache-read and 90k output tokens, $5.18. `judge.py`'s `ask` now retries that error once.
+
+### Review study
+
+`review_study.py` asks whether a reviewer handed VISP's evidence record catches defects in agent work better than one handed only the diff. It needs no worker runs: the material is finished VISP runs of `reservations-bundles` and `spreadsheet-extend`, all passing every hidden check.
+
+- `review_cases.json` names 26 cases on 12 runs: each run's product as it is (12 clean cases), and 14 with one seeded defect, applied as exact text edits: missed requirement (5), broken earlier behaviour (2), out-of-scope edit (2), wrong edge case (3), weakened test (2). `build` copies each project, applies the edits, executes the run's own recorded check commands and the hidden checks on the copy, and writes `$VISP_BENCH_RUNS/review-study/cases/<id>/` (`request.md`, `diff.patch`, `record.md`, `truth.json`). Eight seeded defects fail a recorded check; six pass every one.
+- The record is `visp pr` printed in place by the run's own VISP build (it writes nothing). A clean case's record is that output byte for byte. A seeded case keeps it, as a defect that reaches a human is one VISP missed, with two corrections so it never contradicts the tree: a check that now fails is shown failed (and the status line says so), and the changed-file list is the seeded tree's.
+- `run --model <id> --reps N` shows each case to a `claude -p` reviewer with no tools, as (A) request and diff, or (B) request, record and diff, and asks for accept or reject with the defects found. The prompt never names a condition. `grade` has Haiku 5.5 decide whether a reject names the seeded defect. `report` gives, per reviewer and condition, the share of seeded cases whose defect was found (reject and match), seeded cases rejected, clean cases rejected, cost and seconds per review, and B − A paired per case; standard errors are over cases, after averaging each case's repetitions.
+- `build --record C=<build>` adds a record from another VISP build, reviewed as condition C, so a new record can be tried on the same cases. Evidence is bound to the build that ran it, so a newer build reads every old check as stale: in a second copy of the tree the build is installed (`visp install --replace-runtime`, its edit to `.mcp.json` undone), runs each slice's checks (`visp verify`), then prints `visp pr`. Only the elapsed-time line is replaced, by the build's reading of the original run. A slice that `verify` cannot authorize again (a closed slice in a run that never reached `accept`) keeps its old run, which the record shows as stale, as it would have for that run.
+
+Results and the write-up are in `proposals/review-study.md` outside the repository.
 
 ## Qualifying the oracles
 

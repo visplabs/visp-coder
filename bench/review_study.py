@@ -14,9 +14,13 @@ Each case is shown to a model reviewer, blind to the condition, with no tools:
 
 - A: the request and the change's diff;
 - B: the same, plus the evidence record (`visp pr`, printed by the run's own VISP build);
-- C, D, ...: the same with the record another VISP build prints from the run's state
-  (`build --record C=<build>`, a build under `$VISP_BENCH_RUNS/shims`), to try a new record on
-  the same cases.
+- C, D, ...: the same with the record another VISP build prints (`build --record C=<build>`, a
+  build under `$VISP_BENCH_RUNS/shims`), to try a new record on the same cases. Evidence is bound
+  to the build that ran it, so a newer build reads every old check as stale; in a second copy of
+  the case's tree the build is installed (`visp install --replace-runtime`, its edits to tracked
+  files undone) and runs every slice's checks (`visp verify`) before it prints `visp pr`. Its
+  record is printed as is, except the elapsed-time line, which is taken from the build's print
+  of the original run so it does not count the days since.
 
 A seeded case's record stays the one VISP produced, as a defect that reaches human review is one
 VISP's checks and reviewer missed, with two corrections so it never contradicts the tree shown:
@@ -122,6 +126,31 @@ def record_text(run, build):
     return done.stdout
 
 
+def tracked_changes(project):
+    return {line[3:] for line in git(project, "status", "--porcelain").splitlines() if line[:2] != "??"}
+
+
+def fresh_record(project, run, build):
+    """`visp pr` from `build` after it re-executes every slice's checks in this copy of the tree."""
+    shim = str(SHIMS / build / "visp")
+    env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
+    before = tracked_changes(project)
+    subprocess.run([shim, "install", "--harness", "claude-code", "--replace-runtime"], cwd=project,
+                   capture_output=True, text=True, timeout=300, env=env, check=True)
+    added = sorted(tracked_changes(project) - before)
+    if added:
+        git(project, "checkout", "--", *added)
+    original = record_text(run, build)
+    for task in sorted(set(re.findall(r"\(T\d{3}\)", original))):
+        subprocess.run([shim, "verify", "--task", task[1:-1]], cwd=project, capture_output=True,
+                       text=True, timeout=900, env=env)
+    done = subprocess.run([shim, "pr"], cwd=project, capture_output=True, text=True, timeout=120, env=env)
+    if done.returncode != 0:
+        raise RuntimeError(f"visp pr failed for {run} with {build}: {done.stderr[-400:]}")
+    elapsed = re.search(r"^- Time: .*$", original, re.M)
+    return re.sub(r"^- Time: .*$", lambda _: elapsed.group(0), done.stdout, flags=re.M) if elapsed else done.stdout
+
+
 def check_rows(record):
     return [match.groupdict() for match in map(CHECK_ROW.match, record.splitlines()) if match]
 
@@ -191,7 +220,6 @@ def build_case(case, out, records=()):
     arm = json.loads((run / "arm.json").read_text())
     task, build = arm["task"], arm["arm"].split(":", 1)[1]
     record = record_text(case["run"], build)
-    extra = {condition: record_text(case["run"], other) for condition, other in records}
     rows = check_rows(record)
     target = out / case["id"]
     shutil.rmtree(target, ignore_errors=True)
@@ -201,9 +229,12 @@ def build_case(case, out, records=()):
         shutil.copytree(run / "project", project, symlinks=True,
                         ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
         apply_edits(project, case.get("edits", []))
+        extra = {}
+        for condition, other in records:
+            fresh = pathlib.Path(temp) / f"fresh-{condition}"
+            shutil.copytree(project, fresh, symlinks=True)
+            extra[condition] = fresh_record(fresh, case["run"], other)
         codes = run_checks(project, rows)
-        codes.update(run_checks(project, [row for text in extra.values() for row in check_rows(text)
-                                          if row["id"] not in codes]))
         files = changed_files(project)
         diff = product_diff(project)
         hidden = hidden_result(task, project)
@@ -212,7 +243,7 @@ def build_case(case, out, records=()):
     (target / "diff.patch").write_text(diff)
     (target / "record.md").write_text(corrected_record(record, codes, files))
     for condition, text in extra.items():
-        (target / f"record-{condition}.md").write_text(corrected_record(text, codes, files))
+        (target / f"record-{condition}.md").write_text(text)
     truth = {
         "id": case["id"], "run": case["run"], "task": task, "build": build,
         "seeded": bool(case.get("edits")), "kind": case.get("kind"), "defect": case.get("defect"),
