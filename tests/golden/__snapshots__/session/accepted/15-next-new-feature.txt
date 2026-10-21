@@ -1,0 +1,10 @@
+$ visp next
+--- stdout
+next: {"feature":"002-export-three","action":"understand","objective":"Work the whole request as one slice with your test command, or, for several independently usable parts, describe outcomes and slices in the brief","command":"visp work --feature 002-export-three --check \"<command that runs your tests>\"","mayEdit":false}
+Full result: add --json.
+
+Next: visp work --feature 002-export-three --check "<command that runs your tests>"
+
+--- stderr
+
+--- exit 0

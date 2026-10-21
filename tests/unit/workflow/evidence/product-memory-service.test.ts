@@ -6,13 +6,17 @@ import { TestWorkspace } from "../../support/workspace.js";
 
 // The model calls are replaced: these tests cover which path `visp feature` takes.
 const gate = vi.fn();
+const gateModel = vi.fn();
 vi.mock("../../../../src/workflow/product/memory-gate.js", async (importOriginal) => ({
   ...(await importOriginal<object>()),
-  codexMemoryGate: () => gate,
+  reviewerMemoryGate: (reviewer: unknown) => {
+    gateModel(reviewer);
+    return gate;
+  },
 }));
 vi.mock("../../../../src/workflow/product/rule-extraction.js", async (importOriginal) => ({
   ...(await importOriginal<object>()),
-  codexRuleExtractor: () => async () => [],
+  reviewerRuleExtractor: () => async () => [],
 }));
 
 const { createProductFeature } = await import("../../../../src/workflow/product/feature-create.js");
@@ -26,6 +30,7 @@ let workspace: TestWorkspace | undefined;
 
 afterEach(() => {
   gate.mockReset();
+  gateModel.mockReset();
   workspace = undefined;
 });
 
@@ -192,6 +197,37 @@ describe("without Visp Memory", () => {
     await feature("Archive items", ARCHIVING);
     const second = await feature("Restock", "Add restocking.");
     expect(second.projectMemory).toBeUndefined();
+  });
+
+  // Bench batch co1 (claude-exec): no second session was given an earlier decision, and
+  // co1-archive-carryover-visp-dev-2 failed 4 of 7 memory checks without the restock cap.
+  it("recalls with a VISP-launched Claude reviewer, using its model", async () => {
+    await project(
+      {},
+      { enabled: true, harness: "claude-code", launch: "claude-exec", model: "claude-sonnet-5-5" },
+      false,
+    );
+    gate.mockResolvedValue(["1. An archived item cannot be reserved: 409 item_archived."]);
+    await feature("Archive items", ARCHIVING);
+    const second = await feature("Restock", "Add restocking.");
+    expect(gateModel).toHaveBeenLastCalledWith({
+      launch: "claude-exec",
+      model: "claude-sonnet-5-5",
+    });
+    expect(second.projectMemory).toEqual([
+      "1. An archived item cannot be reserved: 409 item_archived.",
+    ]);
+    await expect(
+      readFile(join(workspace?.root ?? "", ".visp/state/request-history.json"), "utf8"),
+    ).resolves.toContain("001-");
+  });
+
+  // VISP calls a model only when the project lets it launch the reviewer.
+  it("does not recall with a reviewer the host runs", async () => {
+    await project({}, { enabled: true, harness: "claude-code" }, false);
+    await feature("Archive items", ARCHIVING);
+    expect((await feature("Restock", "Add restocking.")).projectMemory).toBeUndefined();
+    expect(gate).not.toHaveBeenCalled();
   });
 
   it("does not recall without a reviewer model or when recall is off", async () => {

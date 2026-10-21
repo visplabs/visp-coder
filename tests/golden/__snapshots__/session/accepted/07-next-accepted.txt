@@ -1,0 +1,8 @@
+$ visp next
+--- stdout
+next: {"feature":"001-return-two-from-the-public","action":"complete","objective":"Required product outcomes have current acceptance evidence","mayEdit":false}
+Full result: add --json.
+
+--- stderr
+
+--- exit 0

@@ -21,7 +21,7 @@ export interface ProductFeatureOutcome {
   readonly branchWarning?: string;
   readonly redactionNotice?: string;
   readonly hostHooksWarning?: string;
-  /** Uncommitted files the feature started from because Git cannot be written here. */
+  /** Uncommitted files the feature started from: Git cannot be written, or they are an accepted feature's work. */
   readonly inheritedChanges?: readonly string[];
   readonly inheritedChangesNote?: string;
   /** The earlier feature that already records this request; no second feature was created. */

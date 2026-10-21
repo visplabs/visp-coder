@@ -1,4 +1,3 @@
-import { resolveCriticPolicy } from "../../config/critic-defaults.js";
 import type { FileMutation } from "../../core/file-transaction.js";
 import { ok, type Result } from "../../core/result.js";
 import { laterChanges } from "../../memory/later-changes.js";
@@ -11,15 +10,9 @@ import {
 } from "../../memory/memory-service.js";
 import { recordRequestHistory } from "../../memory/request-history.js";
 import type { WorkspaceState } from "../state.js";
-import { codexMemoryGate } from "./memory-gate.js";
+import { reviewerMemoryGate } from "./memory-gate.js";
+import { type ReviewerModel, reviewerModel } from "./reviewer-model.js";
 import { json } from "./store.js";
-
-/** The model of a VISP-launched Codex reviewer, which also reads rules and chooses memories. */
-export async function reviewerModel(workspace: WorkspaceState): Promise<string | undefined> {
-  if (workspace.config.critic?.launch !== "codex-exec") return undefined;
-  const critic = await resolveCriticPolicy(workspace.config.harness, workspace.config.critic);
-  return critic.ok ? critic.value.config?.model : undefined;
-}
 
 /** Candidates wide enough to hold every note of a store with about fifty. */
 const GATE_CANDIDATE_TOKENS = 6000;
@@ -42,7 +35,7 @@ async function selectMemories(
   if (!model) return memoryBriefFor(workspace, command, request);
   const candidates = await memoryBriefFor(workspace, command, request, GATE_CANDIDATE_TOKENS);
   try {
-    return await codexMemoryGate({ model })(request, candidates, rules, later);
+    return await reviewerMemoryGate(model)(request, candidates, rules, later);
   } catch {
     return memoryBriefFor(workspace, command, request);
   }
@@ -66,7 +59,7 @@ async function serviceMemories(
 /** VISP's own store: every recorded note goes to the reviewer's model, which passes on only what applies. */
 async function recallMemories(
   workspace: WorkspaceState,
-  model: string,
+  model: ReviewerModel,
   earlier: readonly EarlierFeature[],
   request: string,
   rules: readonly string[],
@@ -76,7 +69,7 @@ async function recallMemories(
   if (!history.ok) return history;
   let memories: string[] = [];
   try {
-    memories = await codexMemoryGate({ model })(
+    memories = await reviewerMemoryGate(model)(
       request,
       notInRequest(request, history.value.notes),
       rules,
@@ -139,7 +132,7 @@ export async function featureMemory(
   const later = await laterChanges(workspace, earlier.value);
   const chosen = command
     ? await serviceMemories(workspace, command, earlier.value, request, rules, later)
-    : await recallMemories(workspace, model as string, earlier.value, request, rules, later);
+    : await recallMemories(workspace, model as ReviewerModel, earlier.value, request, rules, later);
   if (!chosen.ok) return chosen;
   const { memories } = chosen.value;
   const mutations: FileMutation[] = chosen.value.mutation ? [chosen.value.mutation] : [];
