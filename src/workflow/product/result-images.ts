@@ -65,7 +65,12 @@ export async function prepareResultImages(
 ): Promise<PreparedResultImages> {
   if (!executions.length || executions.some((execution) => execution.status !== "passed"))
     return NONE;
-  const candidates = await resultImagePaths(workspace, record, source.snapshot, source.digest);
+  const candidates = await resultImagePaths(
+    workspace,
+    record,
+    source.snapshot,
+    capturedRoutes(record, source.digest),
+  );
   if (!candidates.length) return NONE;
   const memory = await renderMemory(workspace);
   const identity = JSON.stringify(await browserExecutableIdentity());
@@ -135,17 +140,38 @@ function capturedRoutes(record: ProductRecord, subjectDigest: string): Set<strin
   );
 }
 
-/** The newest uncaptured product images written since the feature started. */
-async function resultImagePaths(
+/**
+ * Pictures the product made that this version's review would show but VISP has no image of:
+ * an SVG that did not render or whose browser failed, a picture too large to deliver, or a
+ * version no passing check run captured. A CI render that timed out sent the reviewer
+ * `images: []` and no word of the picture, so the packet names each one instead.
+ */
+export async function picturesWithoutImage(
   workspace: WorkspaceState,
   record: ProductRecord,
   snapshot: Record<string, string>,
   subjectDigest: string,
 ): Promise<string[]> {
+  const captured = capturedRoutes(record, subjectDigest);
+  return (await resultImagePaths(workspace, record, snapshot, new Set())).filter(
+    (path) => !captured.has(`${ROUTE}${path}`),
+  );
+}
+
+export function pictureWithoutImageNote(path: string): string {
+  return `No image of the product's picture ${path} is supplied for this version (it did not render, is too large to deliver, or no check run passed on this version); say what you cannot assess without seeing it.`;
+}
+
+/** The newest product images written since the feature started, leaving out captured routes. */
+async function resultImagePaths(
+  workspace: WorkspaceState,
+  record: ProductRecord,
+  snapshot: Record<string, string>,
+  captured: ReadonlySet<string>,
+): Promise<string[]> {
   const started = Date.parse(record.state.createdAt);
   if (!Number.isFinite(started)) return [];
   const declared = declaredCheckImages(record.brief.checks);
-  const captured = capturedRoutes(record, subjectDigest);
   const candidates: { path: string; modified: number }[] = [];
   for (const path of Object.keys(snapshot)) {
     if (!PICTURE.test(path) || declared.has(path) || captured.has(`${ROUTE}${path}`)) continue;
@@ -170,7 +196,7 @@ async function resultImageBytes(workspace: WorkspaceState, path: string, svgs: S
  * One browser for a run's SVGs, started on the first one not already known not to render;
  * after the browser fails, the run's other SVGs are skipped, and so are the next hour's runs
  * on the same browser executable: a browser that hangs at startup cost every done, verify
- * and accept its 10 s startup timeout.
+ * and accept its startup timeout (then 10 s, now 30 s).
  */
 class SvgRendering {
   readonly unrendered: string[] = [];

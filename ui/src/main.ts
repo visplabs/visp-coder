@@ -2,7 +2,14 @@ import { openEvents, signIn } from "./api.js";
 import { onKey } from "./keyboard.js";
 import { liveHandlers, startLive } from "./live.js";
 import { render } from "./render.js";
-import { loadFeature, loadMeta, loadOverview, loadRequests, refreshVisible } from "./resources.js";
+import {
+  loadFeatureAndMap,
+  loadMeta,
+  loadOverview,
+  loadRequests,
+  refreshVisible,
+} from "./resources.js";
+import { readReviewed } from "./reviewed.js";
 import { applyRoute } from "./router.js";
 import { readSeen } from "./seen.js";
 import { parseRoute } from "./state.js";
@@ -31,6 +38,7 @@ async function start(): Promise<void> {
   }
   const seen = readSeen();
   state.seenBefore = { ...seen };
+  state.reviewed = readReviewed();
   state.route = parseRoute(location.hash);
   render();
   await Promise.all([loadMeta(), loadOverview()]);
@@ -57,7 +65,7 @@ async function start(): Promise<void> {
       },
       loadOverview: () => void loadOverview(),
       loadRequests: () => void loadRequests(),
-      loadFeature: (id) => void loadFeature(id),
+      loadFeature: loadFeatureAndMap,
       refreshVisible,
       schedule,
     }),

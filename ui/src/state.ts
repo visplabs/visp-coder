@@ -1,5 +1,6 @@
 import type {
   RequestKind,
+  UiChangeMap,
   UiError,
   UiExecution,
   UiFeature,
@@ -20,8 +21,9 @@ export interface Resource<T> {
 
 export const idle = <T>(): Resource<T> => ({ loading: false });
 
-export type Tab = "now" | "review" | "runs" | "activity" | "handoff";
-export const TABS: readonly Tab[] = ["now", "review", "runs", "activity", "handoff"];
+export type Tab = "now" | "review" | "runs" | "activity" | "handoff" | "map";
+/** Map is last so the shortcuts 1–5 keep the meaning they had before it. */
+export const TABS: readonly Tab[] = ["now", "review", "runs", "activity", "handoff", "map"];
 
 /** Which requests the Needs you page lists. */
 export type NeedsFilter = "all" | RequestKind;
@@ -41,6 +43,7 @@ export interface AppState {
   health: Resource<UiHealth>;
   features: Record<string, Resource<UiFeature>>;
   executions: Record<string, Resource<UiExecution>>;
+  maps: Record<string, Resource<UiChangeMap>>;
   route: Route;
   live: LiveState;
   signedOut: boolean;
@@ -57,6 +60,17 @@ export interface AppState {
   selectedFinding: Record<string, string>;
   needsFilter: NeedsFilter;
   runsFilter: RunsFilter;
+  /** The Map tab's view of each feature: selected node, slice filter and opened modules. */
+  map: Record<string, MapView>;
+  /** Reviewed ticks for this browser, by feature and node, holding the digest that was ticked. */
+  reviewed: Record<string, Record<string, string>>;
+}
+
+export interface MapView {
+  readonly selected?: string;
+  readonly slice?: string;
+  readonly openModules: readonly string[];
+  readonly allOpen: boolean;
 }
 
 export function initialState(): AppState {
@@ -67,6 +81,7 @@ export function initialState(): AppState {
     health: idle(),
     features: {},
     executions: {},
+    maps: {},
     route: { view: "home" },
     live: "connecting",
     signedOut: false,
@@ -79,6 +94,8 @@ export function initialState(): AppState {
     selectedFinding: {},
     needsFilter: "all",
     runsFilter: "all",
+    map: {},
+    reviewed: {},
   };
 }
 
@@ -116,6 +133,9 @@ export interface Actions {
   selectFinding(feature: string, id: string): void;
   filterNeeds(filter: NeedsFilter): void;
   filterRuns(filter: RunsFilter): void;
+  /** Changes the Map tab's view of a feature; opening a node opens its module. */
+  setMapView(feature: string, change: Partial<MapView>): void;
+  toggleReviewed(feature: string, node: string, digest: string): void;
 }
 
 export const executionKey = (feature: string, id: string) => `${feature}/${id}`;

@@ -9,11 +9,13 @@ const chrome = vi.hoisted(() => ({
   launch: "ok" as "ok" | "fail",
   loads: true,
   hang: false,
+  options: [] as unknown[],
 }));
 
 vi.mock("../../../src/testing/chrome-transport.js", () => ({
-  launchChrome: async () => {
+  launchChrome: async (options: unknown) => {
     chrome.launches += 1;
+    chrome.options.push(options);
     if (chrome.launch === "fail") throw new Error("no browser here");
     return {
       onEvent: () => () => undefined,
@@ -55,6 +57,7 @@ beforeEach(() => {
     launch: "ok",
     loads: true,
     hang: false,
+    options: [],
   });
 });
 
@@ -65,6 +68,23 @@ describe("rendering SVG pictures", () => {
     expect(await rasterizer.render(picture)).toEqual({ png: Buffer.from("png") });
     await rasterizer.close();
     expect(chrome).toMatchObject({ launches: 1, pages: 2, closedPages: 2, closed: 1 });
+  });
+
+  it("renders without the GPU, whose software fallback timed out on CI screenshots", async () => {
+    const rasterizer = svgRasterizer();
+    await rasterizer.render(picture);
+    await rasterizer.close();
+    expect(chrome.options).toEqual([expect.objectContaining({ gpu: false })]);
+  });
+
+  // On CI the render path ran at up to 8-10 s per step under load; 10 s left no margin.
+  it("gives a slow host 30 s per step before it calls the browser broken", async () => {
+    const rasterizer = svgRasterizer();
+    await rasterizer.render(picture);
+    await rasterizer.close();
+    expect(chrome.options).toEqual([
+      expect.objectContaining({ startupTimeoutMs: 30_000, operationTimeoutMs: 30_000 }),
+    ]);
   });
 
   it("starts no browser when nothing is rendered", async () => {

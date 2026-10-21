@@ -89,7 +89,7 @@ function signedOutPage(): HTMLElement {
 }
 
 const SHORTCUTS: readonly (readonly [string, string])[] = [
-  ["1 – 5", TABS.map((tab) => TAB_NAMES[tab]).join(", ")],
+  [`1 – ${TABS.length}`, TABS.map((tab) => TAB_NAMES[tab]).join(", ")],
   ["n", "Needs you"],
   ["r", "Refresh now"],
   ["Esc", "Back from a run, or close this help"],

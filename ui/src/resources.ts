@@ -1,4 +1,5 @@
 import type {
+  UiChangeMap,
   UiExecution,
   UiFeature,
   UiHealth,
@@ -99,10 +100,29 @@ function loadExecution(feature: string, id: string): void {
   );
 }
 
+/** The map reads git and the index, so it loads only while its tab is open. */
+export async function loadMap(id: string): Promise<void> {
+  await fetchInto<UiChangeMap>(
+    `/api/v1/features/${encodeURIComponent(id)}/map`,
+    state.maps[id],
+    (value) => {
+      state.maps[id] = value;
+    },
+  );
+}
+
+/** A feature, and its map when the Map tab shows it. */
+export function loadFeatureAndMap(id: string): void {
+  void loadFeature(id);
+  if (state.route.view === "feature" && state.route.feature === id && state.route.tab === "map")
+    void loadMap(id);
+}
+
 export function loadForRoute(route: Route): void {
   if (route.view === "feature") {
     void loadFeature(route.feature);
     if (route.run) loadExecution(route.feature, route.run);
+    if (route.tab === "map") void loadMap(route.feature);
   }
   if (route.view === "health") void loadHealth();
   if (route.view === "needs") void loadRequests();
@@ -111,5 +131,5 @@ export function loadForRoute(route: Route): void {
 export function refreshVisible(): void {
   void loadOverview();
   void loadRequests();
-  if (state.route.view === "feature") void loadFeature(state.route.feature);
+  if (state.route.view === "feature") loadFeatureAndMap(state.route.feature);
 }
