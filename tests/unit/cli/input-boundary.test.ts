@@ -97,23 +97,24 @@ describe("CLI input boundary", () => {
     expect(result.envelope.error?.code).toBe("ARTIFACT_INVALID");
   });
 
-  it.each([
-    ["usage", "import", "--source", "codex", "--file", "/tmp/rollout.jsonl"],
-  ])("rejects an external file argument before changing project bytes", async (...args) => {
-    expect((await runCli(root, "init", "--harness", "generic")).exitCode).toBe(0);
-    const outside = join(root, "..", `visp-input-sentinel-${Date.now()}.txt`);
-    await writeFile(outside, "unchanged\n", "utf8");
-    const before = await projectBytes(root);
-    try {
-      const result = await runJson(root, ...args);
+  it.each([["usage", "import", "--source", "codex", "--file", "/tmp/rollout.jsonl"]])(
+    "rejects an external file argument before changing project bytes",
+    async (...args) => {
+      expect((await runCli(root, "init", "--harness", "generic")).exitCode).toBe(0);
+      const outside = join(root, "..", `visp-input-sentinel-${Date.now()}.txt`);
+      await writeFile(outside, "unchanged\n", "utf8");
+      const before = await projectBytes(root);
+      try {
+        const result = await runJson(root, ...args);
 
-      expect(result.envelope.error?.code).toBe("ARTIFACT_INVALID");
-      expect(await projectBytes(root)).toEqual(before);
-      expect(await readFile(outside, "utf8")).toBe("unchanged\n");
-    } finally {
-      await rm(outside, { force: true });
-    }
-  });
+        expect(result.envelope.error?.code).toBe("ARTIFACT_INVALID");
+        expect(await projectBytes(root)).toEqual(before);
+        expect(await readFile(outside, "utf8")).toBe("unchanged\n");
+      } finally {
+        await rm(outside, { force: true });
+      }
+    },
+  );
 });
 
 async function projectBytes(directory: string, relative = ""): Promise<Record<string, string>> {

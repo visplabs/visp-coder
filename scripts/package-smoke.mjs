@@ -80,6 +80,7 @@ void publicApi.archiveEvidenceQuarantine;
 void publicApi.recordAttempt;
 void publicApi.runProductNext; void publicApi.runProductStatus;
 void publicApi.runProductReport; void publicApi.runProductContext;
+// @ts-expect-error Project skills were removed.
 void publicApi.createProposalFromContent;
 import { runnerSpecSchema, adapterFor, type RunnerSpec, type NormalizedUsage, prepareCriticComparison } from "@visporg/visp-coder/runner";
 import { activateControl, assertRecovery, assertUiState, assertTransitions, assertBehaviorSensitive, assertCheckpoint, measureCanvasRegion, type UiStateContract, type InteractionPage, type EvidenceReference, openBrowserSession, runSupervisedControl } from "@visporg/visp-coder/testing";
