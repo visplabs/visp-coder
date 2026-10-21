@@ -37,6 +37,12 @@ import {
   type ProductSlice,
   type ProductState,
 } from "./model.js";
+import { runRegressionGate } from "./regression/regression-gate.js";
+import {
+  type RegressionGateReport,
+  type RegressionGateSummary,
+  regressionGateCloseout,
+} from "./regression/regression-report.js";
 import {
   type PreparedResultImages,
   prepareResultImages,
@@ -78,6 +84,8 @@ export interface ProductVerification {
   readonly closed?: boolean;
   readonly executions: readonly ProductExecution[];
   readonly flipDurationMs?: number;
+  /** `workflow.regressionGate`: existing tests run on the new and the old code. */
+  readonly regressionGate?: RegressionGateSummary;
   readonly behaviorChanges?: ReturnType<typeof checkBehaviorChanges>;
   readonly outcomes: readonly ProductOutcomeStatus[];
   readonly gaps: readonly string[];
@@ -124,6 +132,20 @@ async function execute(
     snapshot,
   );
   if (!checked.ok) return checked;
+  // Runs commands, like the checks, outside the lock; its report is saved with the closeout.
+  const gate =
+    close || accept
+      ? await runRegressionGate(
+          workspace,
+          record,
+          slice,
+          source,
+          snapshot,
+          commands,
+          checked.value,
+          options.signal,
+        )
+      : undefined;
   // Rendering an SVG starts a browser; it happens before the lock, published only if current.
   const pictures = await prepareResultImages(
     workspace,
@@ -151,6 +173,7 @@ async function execute(
       accept,
       prepared.value.committedChanges,
       pictures,
+      gate,
       options.signal,
     );
     return finished.ok
@@ -181,6 +204,7 @@ async function finishExecution(
   accept: boolean,
   committedChanges: string[],
   prepared: PreparedResultImages,
+  gate: RegressionGateReport | undefined,
   signal?: AbortSignal,
 ): Promise<Result<ProductVerification>> {
   const afterSnapshot = await productSourceSnapshot(workspace, record.brief);
@@ -211,6 +235,8 @@ async function finishExecution(
     gaps.push(
       ...finalProductAssessmentGaps(current, after.value, undefined, reviewerRules(workspace)),
     );
+  const regression = regressionGateCloseout(workspace, gate);
+  gaps.push(...regression.gaps);
   const passed = gaps.length === 0;
   const completion = await completionState(workspace, record, next, {
     slice,
@@ -224,6 +250,7 @@ async function finishExecution(
   const saved = await saveProductState(workspace, record, completion.value.state, [
     ...pictures.mutations,
     ...completion.value.mutations,
+    ...regression.mutations,
   ]);
   if (!saved.ok) return saved;
   const checkpoint = await ensureProductCheckpoint(workspace, {
@@ -266,6 +293,7 @@ async function finishExecution(
     passed,
     ...(close ? { closed: passed } : {}),
     executions,
+    ...regression.reply,
     outcomes: outcomeStatuses(current, after.value, slice),
     gaps: [...new Set(gaps)],
     journeyFeedback: currentJourneyFeedback(

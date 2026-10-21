@@ -310,7 +310,7 @@ function pinnedFailureSummary(
   };
 }
 
-function waiverEnvironment(waivers: Waivers | undefined): Record<string, string> {
+export function waiverEnvironment(waivers: Waivers | undefined): Record<string, string> {
   return waivers?.names.length ? { [WAIVED_TESTS_ENV]: JSON.stringify(waivers.names) } : {};
 }
 
@@ -547,6 +547,26 @@ async function executeCommand(
   } catch (cause) {
     return err(fromUnknown(cause, "COMMAND_FAILED"));
   }
+}
+
+/**
+ * One run of a check's command that records nothing, in the project or in a comparison tree:
+ * the regression gate's runs. Evidence comes only from `executeProductCheck`.
+ */
+export function runProductCheckCommand(
+  workspace: WorkspaceState,
+  check: ProductCheck,
+  options: {
+    cwd?: string;
+    environment?: Record<string, string>;
+    extraEnvironment?: Record<string, string>;
+    signal?: AbortSignal;
+  } = {},
+) {
+  return executeCommand(workspace, check, false, options.signal, options.extraEnvironment, {
+    cwd: options.cwd,
+    environment: options.environment,
+  });
 }
 
 /** Short and specific: the worker's one next action, not a paragraph about environments. */

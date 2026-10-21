@@ -312,6 +312,7 @@ function compactVerificationText(
         ? boundedRows(data.committedChanges)
         : undefined,
     checks: rows(data.executions).map(executionSummary),
+    regressionGate: data.regressionGate,
     flipExtraMs: data.flipDurationMs,
     unresolved,
     gaps: closureGaps(data.gaps, unresolved),

@@ -6,6 +6,7 @@ import type { WorkspaceState } from "../state.js";
 import { describeProductCheck } from "./check/check-command.js";
 import { observedProductGraphCurrency } from "./context-graph.js";
 import type { ProductSlice } from "./model.js";
+import { currentRegressionGate, regressionGateGaps } from "./regression/regression-report.js";
 import { namesExistingTest } from "./regression-command-matching.js";
 import { type ProductAuthorization, readProductAuthorizationBaseline } from "./scopes.js";
 import { sourceEntryHash } from "./source-entry.js";
@@ -18,14 +19,18 @@ const MAX_TESTS = 8;
 const RELATED_TESTS = new Map<string, ReadonlySet<string>>();
 const MAX_CACHED_SCOPES = 32;
 
-/** Advisory only: missing graph or baseline context never becomes a product gate. */
+/**
+ * Advisory only: missing graph or baseline context never becomes a product gate. With
+ * `workflow.regressionGate` on, VISP runs these tests itself, so there is no advice to run them.
+ */
 export async function regressionScopeAdvice(
   workspace: WorkspaceState,
   record: ProductRecord,
   slice?: ProductSlice,
   sourceSnapshot?: Record<string, string>,
 ): Promise<string | undefined> {
-  if (record.state.status !== "active") return undefined;
+  if (record.state.status !== "active" || workspace.config.workflow.regressionGate !== "off")
+    return undefined;
   const authorization = await regressionBaseline(workspace, record);
   if (!authorization.ok || !authorization.value) return undefined;
   const auth = authorization.value;
@@ -74,7 +79,8 @@ export async function retainRegressionScopeBaseline(
   if (saved) await workspace.files.writeJson(regressionBaselinePath(workspace, auth.feature), auth);
 }
 
-async function regressionBaseline(workspace: WorkspaceState, record: ProductRecord) {
+/** The baseline the current slice started from, or the last one `work` retained. */
+export async function regressionBaseline(workspace: WorkspaceState, record: ProductRecord) {
   const current = await readProductAuthorizationBaseline(workspace, record);
   if (!current.ok || current.value) return current;
   return readProductAuthorizationBaseline(
@@ -170,19 +176,38 @@ export async function withRegressionScopeAdviceResult(
   record: ProductRecord,
   next: Result<ProductNext>,
   sourceSnapshot?: Record<string, string>,
+  subject?: string,
 ): Promise<Result<ProductNext>> {
   return next.ok
-    ? ok(await withRegressionScopeAdvice(workspace, record, next.value, undefined, sourceSnapshot))
+    ? ok(
+        await withRegressionScopeAdvice(
+          workspace,
+          record,
+          next.value,
+          undefined,
+          sourceSnapshot,
+          subject,
+        ),
+      )
     : next;
 }
 
+/** The scope advice, or with the regression gate on, the regressions it found in this version. */
 export async function withRegressionScopeAdvice(
   workspace: WorkspaceState,
   record: ProductRecord,
   next: ProductNext,
   slice?: ProductSlice,
   sourceSnapshot?: Record<string, string>,
+  subject?: string,
 ): Promise<ProductNext> {
+  if (workspace.config.workflow.regressionGate !== "off") {
+    const gate = subject && (await currentRegressionGate(workspace, record.brief.feature, subject));
+    const lines = gate ? regressionGateGaps(gate).slice(0, 3) : [];
+    return lines.length && !next.evidence.includes(lines[0] as string)
+      ? { ...next, evidence: [...lines, ...next.evidence] }
+      : next;
+  }
   if (next.evidence.some((line) => line.startsWith(ADVICE_PREFIX))) return next;
   const advice = await regressionScopeAdvice(workspace, record, slice, sourceSnapshot);
   if (!advice) return next;
