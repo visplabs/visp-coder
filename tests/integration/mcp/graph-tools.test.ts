@@ -48,7 +48,7 @@ describe("graph tools over MCP", () => {
 
   afterAll(async () => {
     await client.close();
-    await rm(root, { recursive: true, force: true });
+    await rm(root, { recursive: true, force: true, maxRetries: 4, retryDelay: 100 });
   });
 
   async function call(name: string, args: Record<string, unknown>) {

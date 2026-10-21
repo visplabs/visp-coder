@@ -6,6 +6,7 @@ import {
   codexHooksWarning,
   codexSessionPrompts,
   HOST_PROMPTS_FILE,
+  hasUntakenPrompts,
   hostRequest,
 } from "../../../../src/workflow/product/host-prompts.js";
 import { TestWorkspace } from "../../support/workspace.js";
@@ -137,4 +138,40 @@ it("falls back to the string user_message shape and never reads response_item me
   expect(await codexSessionPrompts({ CODEX_THREAD_ID: "other-thread", CODEX_HOME: home })).toEqual(
     [],
   );
+});
+
+// Claude Code delivers a background command's completion to the session as a prompt. In bench
+// run co1-conventions-carryover-prose-visp-dev-1 one was recorded as the user's request.
+it("never takes a host task notification as the user's request", async () => {
+  const workspace = await TestWorkspace.create();
+  const state = await workspace.state();
+  const notification = [
+    "<task-notification>",
+    "<task-id>bwvi3ofw5</task-id>",
+    "<tool-use-id>toolu_01FnqbrfCS92xFPPZxFp4dgL</tool-use-id>",
+    "<output-file>/tmp/claude/tasks/bwvi3ofw5.output</output-file>",
+    "<status>completed</status>",
+    '<summary>Background command "Create VISP feature from the request" completed (exit code 0)</summary>',
+    "</task-notification>",
+  ].join("\n");
+  const record = (prompts: string[]) =>
+    writeFile(
+      join(state.paths.sessionDir, HOST_PROMPTS_FILE),
+      prompts
+        .map((prompt) => `${JSON.stringify({ at: "2026-10-20T22:06:05.995Z", prompt })}\n`)
+        .join(""),
+    );
+  await mkdir(state.paths.sessionDir, { recursive: true });
+  await record([notification]);
+  expect(await hasUntakenPrompts(state)).toEqual({ ok: true, value: false });
+  expect(await hostRequest(state, undefined)).toEqual({ ok: true, value: undefined });
+  await record(["Add item prices.", `${notification}\n${notification}`]);
+  const host = await hostRequest(state, undefined);
+  expect(host.ok && host.value).toMatchObject({
+    request: "Add item prices.",
+    prompts: ["Add item prices."],
+  });
+  // A user who pastes a notification into a request of their own is still asking for something.
+  await record([`Why did this fail?\n${notification}`]);
+  expect(await hasUntakenPrompts(state)).toEqual({ ok: true, value: true });
 });

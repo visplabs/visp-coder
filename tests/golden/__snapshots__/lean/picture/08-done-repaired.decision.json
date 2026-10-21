@@ -1,0 +1,24 @@
+{
+  "exitCode": 0,
+  "next": {
+    "action": "accept",
+    "command": "visp accept --feature 001-draw-a-ps5-controller",
+    "mayEdit": false,
+    "evidence": 0
+  },
+  "product": {
+    "status": "active",
+    "slices": {
+      "T001": "closed"
+    },
+    "executions": [
+      "T001-C001/T001: passed",
+      "T001-C001/T001: passed"
+    ],
+    "reviews": 2,
+    "openFindings": {
+      "required": 0,
+      "advisory": 1
+    }
+  }
+}

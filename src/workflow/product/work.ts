@@ -15,6 +15,7 @@ import type { ProductWorkContext } from "./context-types.js";
 import { correctionReasons } from "./corrections.js";
 import { requireNoPendingCriticReview } from "./critic/critic-policy.js";
 import { criticUnderstanding } from "./critic/critic-understanding.js";
+import { DRAFT_SLICE_GOAL, draftFirstApplies, draftSlice } from "./draft-first.js";
 import { prepareWorkEnvironment } from "./environment.js";
 import { firstDoneAdvice, withFirstDoneAdvice } from "./first-done-advice.js";
 import { currentHostSession } from "./host-prompts.js";
@@ -103,7 +104,7 @@ export async function runProductWork(
       return next.value
         ? err(
             vispError("STAGE_BLOCKED", next.value.objective, {
-              recovery: next.value.evidence.join("\n"),
+              recovery: next.value.evidence.join("\n") || next.value.command,
             }),
           )
         : ok(undefined);
@@ -113,6 +114,9 @@ export async function runProductWork(
   if (options.check?.trim()) {
     const quick = await singleSliceBrief(workspace, options.feature, options.check.trim());
     if (!quick.ok) return quick;
+  } else {
+    const draft = await draftSliceBrief(workspace, options.feature);
+    if (!draft.ok) return draft;
   }
   const independent = await independentTestsBeforeWork(
     workspace,
@@ -201,6 +205,51 @@ async function singleSliceBrief(
           outcomes: linkedOutcomes,
           scope: { allowed: ["**"] },
           checks: [checkId],
+        },
+      ],
+    },
+  });
+  return created.ok ? ok(undefined) : created;
+}
+
+/** Lean mode: a picture request becomes one whole-request slice whose check comes after the draft. */
+async function draftSliceBrief(
+  workspace: WorkspaceState,
+  feature: string | undefined,
+): Promise<Result<void>> {
+  const record = await readProductRecord(workspace, feature ? { feature } : {});
+  if (
+    !record.ok ||
+    record.value.brief.incomplete ||
+    !draftFirstApplies(workspace, record.value.brief)
+  )
+    return ok(undefined);
+  const { brief } = record.value;
+  const outcome = brief.outcomes.find((entry) => entry.priority === "must")?.id ?? "O001";
+  const created = await updateProductBrief(workspace, {
+    feature: brief.feature,
+    reason: "Draft the whole picture request first",
+    patch: {
+      ...(!brief.outcomes.length
+        ? {
+            outcomes: [
+              {
+                id: outcome,
+                kind: "functional",
+                statement: `The original request is fulfilled: ${brief.goal}`,
+                priority: "must",
+                provenance: "user-stated",
+              },
+            ],
+          }
+        : {}),
+      slices: [
+        {
+          id: "T001",
+          goal: DRAFT_SLICE_GOAL,
+          outcomes: [outcome],
+          scope: { allowed: ["**"] },
+          checks: [],
         },
       ],
     },
@@ -448,7 +497,7 @@ function readyProductSlice(
         recovery: "visp brief",
       }),
     );
-  const ready = validateReadySlice(record, slice);
+  const ready = validateReadySlice(record, slice, draftSlice(workspace, record.brief, slice));
   if (!ready.ok) return ready;
   const missing = uninstalledInterpreter(record, slice);
   return missing ? err(missing) : ok(slice);
@@ -537,7 +586,11 @@ function missingCheck(slice: ProductSlice) {
   );
 }
 
-function validateReadySlice(record: ProductRecord, slice: ProductSlice): Result<void> {
+function validateReadySlice(
+  record: ProductRecord,
+  slice: ProductSlice,
+  draft: boolean,
+): Result<void> {
   if (!slice.scope.allowed.length || !slice.outcomes.length)
     return err(
       vispError("STAGE_BLOCKED", "A slice needs an observable outcome and bounded write scope", {
@@ -545,7 +598,7 @@ function validateReadySlice(record: ProductRecord, slice: ProductSlice): Result<
       }),
     );
   const checks = checksFor(record.brief, slice);
-  if (!checks.length && promisesBehavior(record, slice)) return err(missingCheck(slice));
+  if (!checks.length && !draft && promisesBehavior(record, slice)) return err(missingCheck(slice));
   for (const check of checks) {
     const valid = validateProductCheckCommand(check);
     if (!valid.ok) return valid;

@@ -1,0 +1,29 @@
+{
+  "exitCode": 0,
+  "next": {
+    "action": "complete",
+    "mayEdit": false,
+    "evidence": 0
+  },
+  "product": {
+    "status": "accepted",
+    "slices": {
+      "T001": "closed"
+    },
+    "executions": [
+      "C001/T001: passed",
+      "PINNED_1: passed",
+      "C001: passed",
+      "PINNED_1: passed"
+    ],
+    "reviews": 1,
+    "openFindings": {
+      "required": 0,
+      "advisory": 0
+    }
+  },
+  "independentTests": {
+    "status": "pinned",
+    "disputes": []
+  }
+}

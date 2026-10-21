@@ -1,6 +1,6 @@
 {
   "name": "@visporg/visp-coder",
-  "version": "0.5.0-beta.3",
+  "version": "0.5.0-beta.4",
   "publishConfig": {
     "access": "public"
   },
@@ -71,7 +71,7 @@
     "prepublishOnly": "pnpm release:check"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.23.0",
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "@vscode/tree-sitter-wasm": "^0.3.1",
     "commander": "^12.1.0",
     "ignore": "^7.0.6",

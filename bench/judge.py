@@ -28,6 +28,23 @@ from runfacts import final_project, invalid
 
 BENCH = pathlib.Path(__file__).resolve().parent
 CHECKLISTS = {
+    "xbox-controller-svg": {
+        "elements": ["a dark background behind the controller",
+                     "a symmetrical Xbox body shell with grips curving downwards",
+                     "gradient shading that gives the shell 3D curvature and an edge shadow",
+                     "two thumbsticks in the Xbox offset layout (left stick high, right stick low)",
+                     "each thumbstick drawn as a recessed socket, raised base and textured top with grip ridges",
+                     "a faceted dark metallic d-pad in a recessed dish at lower left",
+                     "A, B, X, Y face buttons in a diamond on the right, coloured green A (bottom), red B (right), blue X (left), yellow Y (top)",
+                     "glossy face buttons with centred, legible letter labels",
+                     "a circular Xbox guide button at top centre with a glowing X logo",
+                     "View, Menu and Share buttons placed correctly around the centre",
+                     "the top edges of the LB and RB bumpers visible above the shell"],
+        "styles": ["polished, glossy vector render with convincing depth",
+                   "clean layering with no messy overlapping or broken shapes",
+                   "reads as an Xbox Wireless Controller at a glance"],
+        "deliverable": "xbox-controller.svg",
+    },
     "ps5-controller-svg": {
         "elements": ["the DualSense body shape with its two grips", "a two-tone white shell with black centre and trim",
                      "a large touchpad", "a light bar", "a PS button", "face buttons with triangle, circle, cross and square",
@@ -108,14 +125,33 @@ def screenshot(url, target, size, wait_ms=0):
 
 
 def declared_image(project):
+    """The picture the last slice's checks declare, else the last image any check declares.
+
+    With a picture built in parts, earlier slices declare the parts and the last slice the
+    stitched picture; later repair checks may declare the parts again.
+    """
+    found = None
     for brief in project.glob(".visp/features/*/brief.yaml"):
-        for match in re.finditer(r"images:\s*\n((?:\s+-\s+.+\n)+)|images:\s*\[([^\]]+)\]", brief.read_text()):
-            paths = re.findall(r"-\s+(\S+)", match.group(1)) if match.group(1) else \
-                [p.strip().strip("'\"") for p in match.group(2).split(",")]
-            for path in paths:
+        text = brief.read_text()
+        images = {}
+        for block in re.split(r"\n  - id: ", text.split("\nslices:")[0]):
+            check = block.split("\n", 1)[0].strip()
+            listed = re.search(r"images:\s*\n((?:\s+-\s+.+\n?)+)|images:\s*\[([^\]]+)\]", block)
+            if listed:
+                images[check] = re.findall(r"-\s+(\S+)", listed.group(1)) if listed.group(1) else \
+                    [p.strip().strip("'\"") for p in listed.group(2).split(",")]
+        slices = text.split("\nslices:", 1)[1] if "\nslices:" in text else ""
+        last = re.split(r"\n  - id: ", slices)[-1] if slices else ""
+        owned = re.search(r"\n    checks:\s*\n((?:\s+-\s+.+\n?)+)", last)
+        for check in (re.findall(r"-\s+(\S+)", owned.group(1)) if owned else []):
+            for path in images.get(check, []):
                 if (project / path).is_file():
                     return project / path
-    return None
+        for paths in images.values():
+            for path in paths:
+                if (project / path).is_file():
+                    found = project / path
+    return found
 
 
 def newest_image(project):
@@ -206,7 +242,9 @@ def judge(name):
         image, source = game_screen(project, directory), "index.html"
         what = "the first screen of a browser game, as a player sees it before the first shot"
     else:
-        image = declared_image(project) or newest_image(project)
+        # A request that names its output file is judged on that file, not on a newer preview.
+        named = checklist.get("deliverable") and project / checklist["deliverable"]
+        image = named if named and named.is_file() else declared_image(project) or newest_image(project)
         source = str(image.relative_to(project)) if image else None
         image = raster(image, directory) if image else None
         what = "one image"

@@ -17,6 +17,8 @@ import { afterAll } from "vitest";
 export interface ModelPlan {
   /** Reviewer verdicts, one per review call in order; the last repeats. */
   readonly reviews?: readonly ("satisfied" | "failed")[];
+  /** Findings a failed review reports instead of the missing default export. */
+  readonly findings?: readonly { problem: string; required: boolean }[];
   /** Rulings for every dispute the reviewer receives. */
   readonly ruling?: "upheld" | "rejected";
   /** The tester's structured answer; `fail` makes the tester CLI exit with an error. */
@@ -94,14 +96,16 @@ function reviewer() {
       expectations: [],
     })),
     findings: failed
-      ? [{
-          problem: "The module has no default export",
-          consequence: "Callers that import the module's default value receive undefined, not two",
-          nextCheck: "Import the default export of src/value.mjs and compare it with two",
-          evidence: executions,
-          outcomes: (packet.current?.outcomes ?? []).map((outcome) => outcome.id),
-          required: true,
-        }]
+      ? (plan.findings ?? [{ problem: "The module has no default export", required: true }]).map(
+          (finding) => ({
+            problem: finding.problem,
+            consequence: "Callers that import the module's default value receive undefined, not two",
+            nextCheck: "Import the default export of src/value.mjs and compare it with two",
+            evidence: executions,
+            outcomes: (packet.current?.outcomes ?? []).map((outcome) => outcome.id),
+            required: finding.required,
+          }),
+        )
       : [],
     limitations: [],
     resolutions: failed ? [] : (packet.openFindings ?? []).map((finding) => ({

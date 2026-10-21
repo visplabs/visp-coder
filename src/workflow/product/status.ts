@@ -221,7 +221,9 @@ export async function featureStartingNext(
  * A later session's request goes to a feature of its own. Workers in a new session asked
  * `visp next`, were sent to the earlier session's open task, and built the new request there,
  * without its rules, recalled decisions or a review of its own. A prompt no feature has taken,
- * sent after the open task's authorization lapsed with its session, is that new request.
+ * sent after the open task's authorization lapsed with its session, is that new request. So
+ * is one sent after the feature was accepted: told the old feature was complete, a later
+ * session stopped with its request unbuilt (bench run co1-conventions-carryover-prose).
  */
 export async function newSessionRequestNext(
   workspace: WorkspaceState,
@@ -231,7 +233,8 @@ export async function newSessionRequestNext(
   // A worker that names the feature or task has already chosen to continue it.
   if (options.feature || options.task) return ok(undefined);
   const earlier = await earlierSessionGrant(workspace, record);
-  if (!earlier.ok || !earlier.value) return earlier.ok ? ok(undefined) : earlier;
+  if (!earlier.ok) return earlier;
+  if (!earlier.value) return acceptedFeatureRequestNext(workspace, record);
   const untaken = await hasUntakenPrompts(workspace);
   if (!untaken.ok || !untaken.value) return untaken.ok ? ok(undefined) : untaken;
   const { task } = earlier.value;
@@ -242,6 +245,23 @@ export async function newSessionRequestNext(
     evidence: [
       `Only if the user asked to continue "${record.brief.goal}": visp work --feature ${record.brief.feature} --task ${task}`,
     ],
+    mayEdit: false,
+  });
+}
+
+/** Acceptance is the feature's last state change: a prompt recorded after it is newer than the acceptance. */
+async function acceptedFeatureRequestNext(
+  workspace: WorkspaceState,
+  record: ProductRecord,
+): Promise<Result<ProductNext | undefined>> {
+  if (record.state.status !== "accepted") return ok(undefined);
+  const untaken = await hasUntakenPrompts(workspace, record.state.updatedAt);
+  if (!untaken.ok || !untaken.value) return untaken.ok ? ok(undefined) : untaken;
+  return ok({
+    action: "understand",
+    objective: `The user's latest message came after ${record.brief.feature} was accepted, and no feature has taken it. If it asks for a change, start it as its own feature`,
+    command: 'visp feature "<the user\'s request>"',
+    evidence: [],
     mayEdit: false,
   });
 }

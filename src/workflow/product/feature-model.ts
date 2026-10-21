@@ -21,7 +21,7 @@ export interface ProductFeatureOutcome {
   readonly branchWarning?: string;
   readonly redactionNotice?: string;
   readonly hostHooksWarning?: string;
-  /** Uncommitted files the feature started from because Git cannot be written here. */
+  /** Uncommitted files the feature started from: Git cannot be written, or they are an accepted feature's work. */
   readonly inheritedChanges?: readonly string[];
   readonly inheritedChangesNote?: string;
   /** The earlier feature that already records this request; no second feature was created. */
@@ -29,4 +29,7 @@ export interface ProductFeatureOutcome {
   readonly duplicateNote?: string;
   /** Set by `visp feature` when its tester is writing tests in the same process, or was refused. */
   readonly testsNote?: string;
+  /** Lean draft-first start: the command that authorizes the draft, and why. */
+  readonly draftCommand?: string;
+  readonly draftNote?: string;
 }

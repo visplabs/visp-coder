@@ -4,13 +4,11 @@
 
 Report vulnerabilities privately. Do not open a public issue or pull request for one.
 
-Contact: <CONTACT: owner to fill in>
+Use GitHub's private vulnerability reporting: open the [Security tab](https://github.com/visplabs/visp-coder/security) of this repository and choose **Report a vulnerability**. The report and the discussion that follows stay private until a fix is published.
 
 Include the VISP version (`visp --version`), your operating system and Node.js version, the host you use (Claude Code, Codex or another), and the steps to reproduce. A minimal repository or the output of `visp doctor --json` helps. Remove secrets from anything you send.
 
 What to expect:
-
-<!-- owner: confirm these response windows; they are a proposal -->
 
 - An acknowledgement within 5 working days.
 - A first assessment (accepted, needs more information, or not a vulnerability) within 14 days.

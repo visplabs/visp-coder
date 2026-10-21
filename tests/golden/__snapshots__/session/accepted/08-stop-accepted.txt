@@ -1,0 +1,6 @@
+> .visp/hooks/claude-pretooluse.mjs {"session_id":"session-1","hook_event_name":"Stop"}
+--- stdout
+
+--- stderr
+
+--- exit 0

@@ -1,0 +1,6 @@
+> .visp/hooks/codex-hooks.mjs {"session_id":"golden-session","cwd":"<PROJECT>","hook_event_name":"PreToolUse","tool_name":"apply_patch","tool_input":{"patch_text":"*** Begin Patch\n*** Add File: README.md\n+# Value\n*** End Patch\n"}}
+--- stdout
+
+--- stderr
+
+--- exit 0

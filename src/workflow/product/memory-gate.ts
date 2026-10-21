@@ -1,8 +1,9 @@
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { z } from "zod";
-import { reachesModel, runCodexStructured } from "./critic/critic-exec.js";
+import {
+  askReviewerModel,
+  type ReviewerModel,
+  type ReviewerModelOptions,
+} from "./reviewer-model.js";
 
 /** Chooses, from recorded notes, the ones a new request must stay consistent with. */
 export type MemoryGate = (
@@ -85,34 +86,22 @@ export function memoryGatePrompt(
     .join("\n\n");
 }
 
-export function codexMemoryGate(options: {
-  model: string;
-  executable?: string;
-  lookup?: (host: string) => Promise<unknown>;
-}): MemoryGate {
+/** The gate on the model of the reviewer VISP launches, Codex or Claude. */
+export function reviewerMemoryGate(
+  reviewer: ReviewerModel,
+  options: ReviewerModelOptions = {},
+): MemoryGate {
   return async (request, notes, rules = [], laterChanges = []) => {
     if (notes.length === 0) return [];
-    const { lookup: dnsLookup } = await import("node:dns/promises");
-    if (!(await reachesModel(options.lookup ?? ((host) => dnsLookup(host)))))
-      throw new Error("The memory gate cannot reach its model from this process");
-    const directory = await mkdtemp(join(tmpdir(), "visp-memory-gate-"));
-    try {
-      const response = await runCodexStructured({
-        ...(options.executable ? { executable: options.executable } : {}),
-        root: directory,
-        directory,
-        model: options.model,
-        reasoningEffort: "low",
-        schema: RESPONSE_SCHEMA,
-        prompt: memoryGatePrompt(request, notes, rules, laterChanges),
-        signal: AbortSignal.timeout(90_000),
-      });
-      return selectedNotes(
-        notes,
-        responseSchema.parse(response).selected.map((entry) => entry.note),
-      );
-    } finally {
-      await rm(directory, { recursive: true, force: true });
-    }
+    const response = await askReviewerModel(reviewer, options, {
+      name: "visp-memory-gate",
+      purpose: "memory gate",
+      schema: RESPONSE_SCHEMA,
+      prompt: memoryGatePrompt(request, notes, rules, laterChanges),
+    });
+    return selectedNotes(
+      notes,
+      responseSchema.parse(response).selected.map((entry) => entry.note),
+    );
   };
 }

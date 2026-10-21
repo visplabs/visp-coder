@@ -123,7 +123,7 @@ async function changeSection(workspace: WorkspaceState, record: ProductRecord) {
     ...(earlier.length
       ? [
           "",
-          "Uncommitted before this feature started, unchanged since (Git cannot be written here):",
+          "Uncommitted before this feature started, unchanged since:",
           "",
           ...earlier.map((file) => `- ${file.status}: ${file.path}`),
         ]

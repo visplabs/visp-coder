@@ -23,15 +23,24 @@ export async function requireImplementationFoundation(
 
 /**
  * A feature starts from a committed project baseline. When Git cannot be written, so the
- * earlier work can never be committed, the uncommitted files it starts from are returned
- * for the caller to record as the feature's inherited starting state.
+ * earlier work can never be committed, or when `acceptedOwner` names the accepted feature
+ * whose work every uncommitted change is, the uncommitted files it starts from are returned
+ * for the caller to record as the feature's inherited starting state. Nothing is committed
+ * or discarded for the worker.
  */
 export async function requireFeatureFoundation(
   state: WorkspaceState,
   recovery: string,
-): Promise<Result<{ readonly inherited: readonly string[] }>> {
+  acceptedOwner?: (changed: readonly string[]) => Promise<string | undefined>,
+): Promise<Result<{ readonly inherited: readonly string[]; readonly acceptedFeature?: string }>> {
   const context = await buildFoundationContext(state, { probeGit: true });
   if (!context.ok) return context;
+  const blockers = foundationBlockers(context.value, recovery, true);
+  const changed = context.value.changedFiles ?? [];
+  if (acceptedOwner && blockers.length === 1 && blockers[0]?.requirement === "clean-baseline") {
+    const acceptedFeature = await acceptedOwner(changed);
+    if (acceptedFeature) return ok({ inherited: changed, acceptedFeature });
+  }
   const blocked = featureFoundationError(context.value, recovery);
   return blocked ? err(blocked) : ok({ inherited: inheritedChangedFiles(context.value) });
 }

@@ -18,7 +18,7 @@ Next: visp next
 --- exit 0
 === .git/hooks/pre-commit (executable)
 #!/bin/sh
-# managed by visp; hook-version: 17
+# managed by visp; hook-version: 18
 # Refuses a commit whose staged files fall outside the active task's scope.
 
 

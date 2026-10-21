@@ -1,0 +1,6 @@
+> .visp/hooks/claude-pretooluse.mjs {"session_id":"session-2","hook_event_name":"PreToolUse","tool_name":"Write","tool_input":{"file_path":"<PROJECT>/src/value.mjs","content":"x"}}
+--- stdout
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"No task is authorized to write src/value.mjs. No task is authorized right now — run `visp next` to see what is next, then `visp work --task <id>`."}}
+--- stderr
+
+--- exit 0

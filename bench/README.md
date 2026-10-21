@@ -8,8 +8,10 @@ Fixed-contract tasks for comparing coding workflows (bare coding, Spec Kit, BMAD
 | --- | --- | --- |
 | `reservations-api` | New HTTP service: inventory reservations with expiry, idempotency and concurrency | 36 core + 8 extended |
 | `spreadsheet-cli` | New command-line spreadsheet engine: precedence, ranges, error order, cycles | 38 |
+| `recurrence-cli` | New command-line RRULE expander (standard library only): skipped dates, defaults from the start, ordinal weekdays, BYSETPOS, WKST, COUNT, UNTIL and EXDATE order, input errors | 1 library + 45 |
 | `reservations-bundles` | Change to an existing multi-module service (`start/`) | 60, including the prior contract |
 | `spreadsheet-extend` | Larger change to an existing multi-module engine (`start/`) | 37 regression + 26 new |
+| `spreadsheet-audit` | Audit of an existing engine (`start/`, the `spreadsheet-extend` engine plus row insertion and deletion, `COUNTIF` and `SUMIF`) against its README contract: 18 seeded deviations, two reported in the request | 12 regression + 36 (two per deviation) |
 | `conventions-carryover` | Two sessions on the existing reservations service: the first states team API conventions and adds a list and an audit log; a fresh second session adds prices, retirement and a reservations list under those conventions | 20 core + 20 new + 9 code + 8 memory |
 | `sheet-carryover` | Two sessions on the existing spreadsheet engine: AVERAGE and ROUND, then MEDIAN and directed rounding carrying the empty-statistic rule and digits restriction | 22 core + 14 new + 8 memory |
 | `archive-carryover` | Two sessions on the existing reservations service: item archiving and a quantity cap, then bundles and restocking that must preserve those feature decisions | 15 core + 17 new + 7 memory |
@@ -18,6 +20,7 @@ Fixed-contract tasks for comparing coding workflows (bare coding, Spec Kit, BMAD
 | `slingshot-game` | New browser game: drag-to-launch slingshot, physics, three levels, test hooks on `window.gameTest` | 22 core + 6 UI |
 | `catapult-game` | New browser game: catapult with four projectile kinds, three materials, per-level ammunition and three levels | request only; hidden checks not yet published |
 | `ps5-controller-svg` | Visual: an SVG of a PS5 controller | none; blind judge, 10 elements + 2 styles |
+| `xbox-controller-svg` | Visual: a detailed, constrained SVG of an Xbox controller saved as `xbox-controller.svg` | none; blind judge, 11 elements + 3 styles |
 | `voxel-pagoda` | Visual: an isometric voxel pagoda garden | none; blind judge, 3 elements + 4 styles |
 | `rainfall-chart` | Visual: a bar chart of Colombo's monthly rainfall from given values | none; blind judge, 7 elements + 2 styles |
 | `lighthouse-pixel` | Visual: 64 × 64 pixel art of a lighthouse at sunset | none; blind judge, 6 elements + 5 styles |
@@ -46,8 +49,15 @@ A preset (`presets.py`) fixes every model in a batch. `setup_arm.py --preset` re
 | `default` | `claude-haiku-4-5-20251001`, default effort | `harness: codex`, `launch: codex-exec`, `reasoningEffort: medium`, `webSearch: true` | Sonnet 5.5, high | Opus 5.5, high |
 | `quality-2026-10` | `claude -p --model claude-haiku-5-5 --effort high` | `harness: claude-code`, `launch: claude-exec`, `model: claude-sonnet-5-5`, `reasoningEffort: high` | Sonnet 5.5, high | Opus 5.5, high |
 | `quality-2026-10-sonnet` | `claude-sonnet-5-5`, high effort | as `quality-2026-10` | Sonnet 5.5, high | Opus 5.5, high |
+| `quality-2026-10-haiku-critic` | as `quality-2026-10` | as `quality-2026-10`, with `model: claude-haiku-5-5` | Sonnet 5.5, high | Opus 5.5, high |
+| `quality-2026-10-low` | `claude-haiku-5-5`, low effort | as `quality-2026-10` | Sonnet 5.5, high | Opus 5.5, high |
+| `quality-2026-10-low-haiku-critic` | `claude-haiku-5-5`, low effort | as `quality-2026-10-haiku-critic` | Sonnet 5.5, high | Opus 5.5, high |
 
 Without `--preset` a run uses `default`, the configuration of the published numbers. Every quality batch uses `quality-2026-10`.
+
+`quality-2026-10-haiku-critic` gives VISP's reviewer and tester the worker's own model, to tell how much of VISP's gain comes from its loop and how much from a stronger reviewer. A `bare` arm runs the same under it as under `quality-2026-10`.
+
+The two `-low` presets repeat the pair with Haiku 5.5 at low effort, a weaker worker: at high effort, bare Haiku 5.5 passed every hidden check in 14 of 16 calibration runs, so hidden checks left VISP no room.
 
 ### Batches
 
@@ -63,6 +73,12 @@ python3 bench/report.py --batch q1 --score --runs     # score what is missing, t
 - It can be restarted: finished runs are skipped, and a run an interrupted batch left unfinished is moved to `$VISP_BENCH_RUNS/discarded/` and redone. Each runner and worker runs in its own session with its pid in the run directory (`runner.pid`, `worker.pid`); before a redo the batch stops any it finds still running there, and on SIGTERM or SIGHUP it stops those of its running runs before exiting. A lock stops two drivers on one batch. It writes `batches/<batch>/manifest.json` and `batch.log`.
 - Invalid runs: after each run, `runfacts.py` looks for a usage limit and for a worker failure. A usage limit is one of the CLIs' limit messages ("You've hit your session limit", "… monthly spend limit", "… team's shared budget", "You're out of extra usage", "You're out of usage credits", "you have reached your weekly usage limit", "usage limit reached"), matched only where a failure is reported: a `result.json` whose session ended in error (or whose whole result is such a message), API-error events in the worker transcript, and VISP's records of a failed reviewer or tester call (the critic attempts' `message`, `acceptance-tests.json`'s `reason`). Ordinary tool output such as "Rate limit reached; resets in 30 s" never counts. A worker failure is a session the CLI ended in error (an API error, no response, a wrapper exit); a worker that gives up in its own words stays valid. Either way the run gets `invalid.json` and is never scored (`score.py`, `judge.py` and `code_judge.py` skip it); after a usage limit the batch starts no further runs. `--rerun-invalid` moves invalid runs to `discarded/` and runs them again. An empty `invalid.json` made by hand also excludes a run.
 - `report.py` prints Markdown tables for `docs/research-summary.md` and writes `batches/<batch>/report.json`: per task and arm, the mean hidden pass rate, judge score, checklist passes and code-quality score; median wall time and the worker's time split; reviews run and unavailable, pictures delivered to the reviewer, hook refusals and timeouts. Invalid and unfinished runs are listed and excluded. It refuses a batch whose runs or judge files name another preset, worker or judge model. `--score` scores what is missing and judges again where a judge call failed. `--runs` adds one row per run.
+
+### Pairwise judge and cost
+
+- `pairwise.py --batch <batch>` (or `report.py --pairwise`) shows the visual judge each picture task's base and candidate images of the same rep, twice in both orders; a pair is a win only when both orders agree, a split verdict is a tie. Verdicts are cached in `batches/<batch>/pairwise.json`. On five identical PS5 pairs two passes gave 1-3-1 and 1-2-2, so read small tallies as direction.
+- `report.py --compare BATCH:LABEL ...` compares arms across batches made under different presets or worker models, for example bare Sonnet 5.5 against VISP with a Haiku 5.5 worker: per task and over all tasks, the mean scores, median wall time, mean cost per run and cost per passed hidden check (the costed runs' summed cost over the hidden checks they passed). Each batch passes its own preset guard and all must use the same judges; it gives no quality-rule verdict, since the arms ran at different times.
+- Every `claude` a run starts (the worker, and VISP's reviewer and tester) goes through `claude_shim/claude`, which runs the real CLI unchanged and appends each print-mode JSON result's reported `total_cost_usd` and usage to `<run>/claude-calls.jsonl`. `report.py` shows the mean cost per run, with VISP's own calls in brackets. VISP itself does not keep its reviewer's usage.
 
 ### Time
 
@@ -120,16 +136,18 @@ The rubric is fixed: correctness risks, structure, readability, naming, tests (d
 - Repeat variance is small: over 91 paired scores the two repetitions differ by 0.15 on average and by at most 1.
 - Cost: 30 Opus 5.5 calls in all (26 counted here, 3 that ended with `error_max_structured_output_retries` and were redone, and the Oct 13 check), 397k cache-write, 978k cache-read and 90k output tokens, $5.18. `judge.py`'s `ask` now retries that error once.
 
-## Qualifying the spreadsheet oracles
+## Qualifying the oracles
 
 ```bash
 python3 -m unittest bench/test_hidden_oracles.py
 ```
 
-These local checks (spreadsheet-cli, spreadsheet-extend and sheet-carryover) verify that correct references pass, wrong division-error output fails,
-and a nonzero program exit fails even when its output matches. They use temporary copies
-and the standard library, without calling models. Oracle qualification is not a comparison
-of coding workflows.
+These local checks (spreadsheet-cli, spreadsheet-extend, sheet-carryover, spreadsheet-audit and recurrence-cli) verify
+that correct references pass, that faulty variants (wrong division-error output, clamped short
+months) fail some checks but not all, that a nonzero program exit fails even when its output
+matches, that the audit's start fails only its `fix:` checks, and that importing a third-party
+date library fails every recurrence check. They use temporary copies and the standard library,
+without calling models. Oracle qualification is not a comparison of coding workflows.
 
 ## Timing the dashboard
 
@@ -151,7 +169,7 @@ python3 bench/run_carryover.py c1 --modes wiped,fresh,oracle  # session 1 once, 
 python3 bench/score.py conventions-carryover c1/wiped c1/fresh c1/oracle
 ```
 
-- `setup_arm.py` creates a fresh Git project, installs the arm's workflow and writes the prompt. Spec Kit needs `specify` on `PATH`; BMAD is fetched with `npx`. VISP arms use the preset's VISP-launched reviewer and tester: with `default`, Codex (`critic.launch: codex-exec`, medium effort), so the Codex CLI must be signed in; with the quality presets, Sonnet 5.5 through `claude -p`. `--skill <id>` seeds and admits a bundled VISP skill, so two arms on the same build differ only by that skill.
+- `setup_arm.py` creates a fresh Git project, installs the arm's workflow and writes the prompt. Spec Kit needs `specify` on `PATH`; BMAD is fetched with `npx`. VISP arms use the preset's VISP-launched reviewer and tester: with `default`, Codex (`critic.launch: codex-exec`, medium effort), so the Codex CLI must be signed in; with the quality presets, Sonnet 5.5 through `claude -p`. `--skill <id>` seeds and admits a bundled VISP skill, so two arms on the same build differ only by that skill. `visp:<build>+lean` adds a workflow mode from `presets.py` (`VISP_MODES`) to visp.yml, so one build runs with and without [lean mode](../docs/workflow.md#lean-mode) on the same preset; `batch.py` labels the arm `<build>-lean`.
 - `run_claude.py` runs `claude -p` in the project with project settings only, so each workflow's own instructions, skills and hooks apply; Spec Kit's phases are sent as follow-up turns and BMAD's approval prompts are answered, as a user would.
 - `run_codex.py` runs `codex exec` with a clean home holding only the Codex sign-in and a workspace-write sandbox with network, with project hooks trusted.
 - Each writes `result.json` (duration, turns, tokens) beside the project.

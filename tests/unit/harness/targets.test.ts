@@ -110,6 +110,11 @@ describe("planFor", () => {
   it("tells Codex to restart after its project instructions are connected", () => {
     expect(planFor("codex").manualSteps.join(" ")).toMatch(/restart/i);
   });
+
+  // Codex skips a hook entry nobody trusted, so an upgrade that adds one must say so.
+  it("tells Codex users to trust the hooks again after install rewrites them", () => {
+    expect(planFor("codex").manualSteps.join(" ")).toMatch(/again whenever install rewrites/);
+  });
 });
 
 describe("the minimal profile", () => {

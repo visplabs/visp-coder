@@ -1,0 +1,6 @@
+> .visp/hooks/claude-pretooluse.mjs {"session_id":"session-2","hook_event_name":"Stop"}
+--- stdout
+{"decision":"block","reason":"The user's latest message came after 001-return-two-from-the-public was accepted, and no feature has taken it. If it asks for a change, start it as its own feature. Run: visp feature \"<the user's request>\""}
+--- stderr
+
+--- exit 0

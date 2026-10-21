@@ -1,4 +1,4 @@
-"""Qualify spreadsheet acceptance oracles against correct and faulty programs.
+"""Qualify spreadsheet and recurrence acceptance oracles against correct and faulty programs.
 
 Run from the repository root: python3 -m unittest bench/test_hidden_oracles.py
 The checks use local reference copies and the standard library; no models are called.
@@ -15,7 +15,8 @@ import unittest
 BENCH = Path(__file__).resolve().parent
 TASKS = (("spreadsheet-cli", "spreadsheet", 38),
          ("spreadsheet-extend", "spreadsheet-extend", 63),
-         ("sheet-carryover", "sheet-carryover", 44))
+         ("sheet-carryover", "sheet-carryover", 44),
+         ("spreadsheet-audit", "spreadsheet-audit", 48))
 
 
 class SpreadsheetOracleTests(unittest.TestCase):
@@ -69,6 +70,58 @@ class SpreadsheetOracleTests(unittest.TestCase):
                 self.assertEqual(score["total"], total)
                 self.assertGreater(score["passed"], 0)
                 self.assertLess(score["passed"], total)
+
+    def test_audit_start_fails_only_the_checks_of_its_deviations(self):
+        score = self.score("spreadsheet-audit", BENCH / "tasks" / "spreadsheet-audit" / "start")
+        failed = [result["name"] for result in score["results"] if not result["passed"]]
+        self.assertEqual(score["passed"], 12)
+        self.assertTrue(all(name.startswith("fix: ") for name in failed), failed)
+
+
+class RecurrenceOracleTests(unittest.TestCase):
+    TOTAL = 46
+
+    def score(self, project):
+        completed = subprocess.run(
+            [sys.executable, str(BENCH / "tasks" / "recurrence-cli" / "hidden_test.py"), str(project)],
+            capture_output=True, text=True, timeout=300,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        return json.loads(completed.stdout)
+
+    def copy_reference(self, destination):
+        shutil.copytree(BENCH / "reference" / "recurrence-cli", destination,
+                        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+
+    def test_correct_reference_passes_every_acceptance_case(self):
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory) / "project"
+            self.copy_reference(project)
+            score = self.score(project)
+            self.assertEqual((score["passed"], score["total"]), (self.TOTAL, self.TOTAL))
+
+    def test_third_party_date_library_fails_every_case(self):
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory) / "project"
+            self.copy_reference(project)
+            (project / "tests" / "test_oracle.py").write_text("from dateutil import rrule\n")
+            score = self.score(project)
+            self.assertEqual((score["passed"], score["total"]), (0, self.TOTAL))
+
+    def test_clamped_short_months_fail_without_rejecting_all_cases(self):
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory) / "project"
+            self.copy_reference(project)
+            expand = project / "recurrence" / "expand.py"
+            original = expand.read_text()
+            clamped = original.replace("if day.day not in rule.bymonthday",
+                                       "if min(day.day, 28) not in {min(v, 28) for v in rule.bymonthday}")
+            self.assertNotEqual(clamped, original)
+            expand.write_text(clamped)
+            score = self.score(project)
+            self.assertEqual(score["total"], self.TOTAL)
+            self.assertGreater(score["passed"], 0)
+            self.assertLess(score["passed"], self.TOTAL)
 
 
 if __name__ == "__main__":

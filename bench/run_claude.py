@@ -12,6 +12,7 @@ import argparse
 import json
 import os
 import pathlib
+import shutil
 import time
 
 from common import RUNS, isolate, run_worker
@@ -35,6 +36,19 @@ def worker_env(arm):
     return env
 
 
+def record_calls(env, log):
+    """Route every `claude` the run starts through claude_shim, which logs each call's cost.
+
+    VISP discards its reviewer's and tester's reported usage; the shim keeps it, and the
+    worker's own sessions, in claude-calls.jsonl beside the project.
+    """
+    real = shutil.which("claude", path=env["PATH"])
+    if not real:
+        return env
+    return {**env, "BENCH_REAL_CLAUDE": real, "BENCH_CALL_LOG": str(log),
+            "PATH": f"{pathlib.Path(__file__).resolve().parent / 'claude_shim'}:{env['PATH']}"}
+
+
 def worker(arm, model=None, effort=None):
     """The worker model and effort: explicit values, else the arm's preset, else the default."""
     settings = (arm.get("settings") or {}).get("worker") or {}
@@ -44,7 +58,7 @@ def worker(arm, model=None, effort=None):
 def run_session(project, arm, prompt, model=None, timeout=2700, resume=None, effort=None):
     """Run one user session (the prompt plus the arm's scripted follow-ups) and summarize it."""
     model, effort = worker(arm, model, effort)
-    env = worker_env(arm)
+    env = record_calls(worker_env(arm), pathlib.Path(project).parent / "claude-calls.jsonl")
     started = time.time()
 
     def turn(text, session=None):

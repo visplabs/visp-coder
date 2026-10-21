@@ -1,9 +1,10 @@
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { z } from "zod";
-import { reachesModel, runCodexStructured } from "./critic/critic-exec.js";
 import type { RuleExtractor } from "./project-rules.js";
+import {
+  askReviewerModel,
+  type ReviewerModel,
+  type ReviewerModelOptions,
+} from "./reviewer-model.js";
 
 /**
  * Users state lasting rules in many ways: "house style", "whenever you touch X", "for the
@@ -38,33 +39,20 @@ const responseSchema = z.object({
   rules: z.array(z.object({ rule: z.string(), quote: z.string() })),
 });
 
-/** The model sees only the prompt, in an empty directory, never the repository. */
-export function codexRuleExtractor(options: {
-  model: string;
-  executable?: string;
-  lookup?: (host: string) => Promise<unknown>;
-}): RuleExtractor {
+/** The reader on the model of the reviewer VISP launches, Codex or Claude. */
+export function reviewerRuleExtractor(
+  reviewer: ReviewerModel,
+  options: ReviewerModelOptions = {},
+): RuleExtractor {
   return async (prompts) => {
-    const { lookup: dnsLookup } = await import("node:dns/promises");
-    if (!(await reachesModel(options.lookup ?? ((host) => dnsLookup(host)))))
-      throw new Error("The rule reader cannot reach its model from this process");
-    const directory = await mkdtemp(join(tmpdir(), "visp-rules-"));
-    try {
-      const response = await runCodexStructured({
-        ...(options.executable ? { executable: options.executable } : {}),
-        root: directory,
-        directory,
-        model: options.model,
-        reasoningEffort: "low",
-        schema: RESPONSE_SCHEMA,
-        prompt: `${INSTRUCTIONS}\n${prompts
-          .map((prompt, index) => `Message ${index + 1}:\n${prompt}`)
-          .join("\n\n")}`,
-        signal: AbortSignal.timeout(90_000),
-      });
-      return responseSchema.parse(response).rules;
-    } finally {
-      await rm(directory, { recursive: true, force: true });
-    }
+    const response = await askReviewerModel(reviewer, options, {
+      name: "visp-rules",
+      purpose: "rule reader",
+      schema: RESPONSE_SCHEMA,
+      prompt: `${INSTRUCTIONS}\n${prompts
+        .map((prompt, index) => `Message ${index + 1}:\n${prompt}`)
+        .join("\n\n")}`,
+    });
+    return responseSchema.parse(response).rules;
   };
 }

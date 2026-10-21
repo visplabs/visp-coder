@@ -1,0 +1,6 @@
+> .visp/hooks/claude-pretooluse.mjs {"session_id":"session-2","hook_event_name":"UserPromptSubmit","prompt":"Also export the value three."}
+--- stdout
+
+--- stderr
+
+--- exit 0

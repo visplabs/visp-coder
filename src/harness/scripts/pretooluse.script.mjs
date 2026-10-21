@@ -45,17 +45,22 @@ function projectRoot() {
 
 // The user's own words are the contract the tester and reviewer judge against; workers
 // paraphrase them. Kept locally in the git-ignored session directory for `__HOOK_PRODUCT_NAME__ feature`.
+// Claude Code delivers a background command's completion as a prompt of its own, which
+// `__HOOK_PRODUCT_NAME__ feature` then took as the request; host notifications are not recorded.
 if (input?.hook_event_name === "UserPromptSubmit") {
   try {
-    const directory = join(projectRoot(), ".visp", "session");
-    const file = join(directory, "user-prompts.jsonl");
-    mkdirSync(directory, { recursive: true });
-    let lines = [];
-    try {
-      lines = readFileSync(file, "utf8").split("\n").filter(Boolean);
-    } catch {}
-    lines.push(JSON.stringify({ at: new Date().toISOString(), prompt: String(input.prompt ?? "") }));
-    writeFileSync(file, `${lines.slice(-20).join("\n")}\n`);
+    const prompt = String(input.prompt ?? "");
+    if (!hostNotification(prompt)) {
+      const directory = join(projectRoot(), ".visp", "session");
+      const file = join(directory, "user-prompts.jsonl");
+      mkdirSync(directory, { recursive: true });
+      let lines = [];
+      try {
+        lines = readFileSync(file, "utf8").split("\n").filter(Boolean);
+      } catch {}
+      lines.push(JSON.stringify({ at: new Date().toISOString(), prompt }));
+      writeFileSync(file, `${lines.slice(-20).join("\n")}\n`);
+    }
     recordSession();
   } catch {}
   process.exit(0);
@@ -91,9 +96,15 @@ if (input?.hook_event_name === "Stop") {
       }).toString(),
     );
     const next = envelope?.data;
+    // A step for no feature, such as starting one for an untaken request, is for a session
+    // that tried to change the project since the user's latest prompt; one that answered a
+    // question or committed is left alone.
     if (!next?.feature && typeof input.session_id === "string") {
       const edits = join(root, ".visp", "session", "edits", encodeURIComponent(input.session_id) + ".json");
-      try { readFileSync(edits); } catch { process.exit(0); }
+      let tried;
+      try { tried = Date.parse(JSON.parse(readFileSync(edits, "utf8")).at); } catch { process.exit(0); }
+      const prompted = latestPromptAt(root);
+      if (prompted !== undefined && !(tried >= prompted)) process.exit(0);
     }
     if (!envelope?.ok || !next?.action || next.action === "complete") process.exit(0);
     const day = 24 * 60 * 60 * 1000;
@@ -161,6 +172,26 @@ if (input?.hook_event_name === "Stop") {
     process.stdout.write(JSON.stringify({ decision: "block", reason }));
   } catch {}
   process.exit(0);
+}
+
+// When the latest recorded user prompt was sent, or undefined when none is recorded.
+function latestPromptAt(root) {
+  try {
+    const entries = readFileSync(join(root, ".visp", "session", "user-prompts.jsonl"), "utf8")
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+      .filter((entry) => !hostNotification(String(entry?.prompt ?? "")));
+    const at = Date.parse(entries[entries.length - 1]?.at);
+    return Number.isFinite(at) ? at : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// A prompt that is nothing but host notifications; the same test as host-prompts.ts.
+function hostNotification(prompt) {
+  return /^(\s*<task-notification>[\s\S]*?<\/task-notification>)+\s*$/.test(prompt);
 }
 
 // A worker deleted .visp and the pinned tests with shell commands to get past a scope
@@ -501,13 +532,62 @@ function discardedChanges(command) {
   );
 }
 
-const target = input?.tool_input?.file_path ?? input?.tool_input?.notebook_path;
+const root = projectRoot();
 
-if (!target) {
+// Whether a task is authorized, read without the CLI: "inactive", or anything else when one
+// is or the answer is unknown.
+function authorizationState() {
+  try {
+    return execFileSync(process.execPath, ["-e", __HOOK_AUTHORIZATION_CHECK__], {
+      cwd: root,
+      stdio: ["ignore", "pipe", "ignore"],
+    }).toString().trim();
+  } catch {
+    return "unknown";
+  }
+}
+
+// Codex edits through apply_patch, which names its files inside the patch text. A patch
+// whose files cannot be read is refused while a task is authorized, as a write that cannot
+// be checked is. Patch text is expected as tool_input or tool_input.command; no live payload
+// has been captured, so a call without patch text in either place is let through and
+// recorded for `__HOOK_PRODUCT_NAME__ doctor`, rather than refusing every edit of a slice. The Git
+// hook and `__HOOK_PRODUCT_NAME__ done` still check its files.
+const patchPaths = __HOOK_PATCH_PATHS__;
+const patching = input?.tool_name === "apply_patch";
+const patch = typeof input?.tool_input === "string" ? input.tool_input : input?.tool_input?.command;
+const patchText =
+  typeof patch === "string" ? patch : Array.isArray(patch) && patch.every((part) => typeof part === "string") ? patch.join("\n") : "";
+if (patching && !patchText.trim()) {
+  try {
+    const directory = join(root, ".visp", "session");
+    mkdirSync(directory, { recursive: true });
+    const fields = input?.tool_input && typeof input.tool_input === "object" ? Object.keys(input.tool_input).slice(0, 20) : [];
+    writeFileSync(
+      join(directory, "__HOOK_UNRECOGNIZED_PATCH_FILE__"),
+      JSON.stringify({ at: new Date().toISOString(), fields }),
+    );
+  } catch {}
+  process.exit(0);
+}
+const patched = patching ? patchPaths(patchText) : undefined;
+if (patching && patched === undefined) {
+  if (authorizationState() === "inactive") process.exit(0);
+  process.stdout.write(
+    JSON.stringify(
+      deny(
+        "__HOOK_PRODUCT_NAME__ could not read which files this patch changes, so it was refused rather than applied unchecked. Use apply_patch's own format: `*** Begin Patch`, then `*** Add File: <path>`, `*** Update File: <path>` or `*** Delete File: <path>` sections, then `*** End Patch`.",
+      ),
+    ),
+  );
+  process.exit(0);
+}
+const targets = patched ?? [input?.tool_input?.file_path ?? input?.tool_input?.notebook_path].filter(Boolean);
+
+if (targets.length === 0) {
   process.exit(0);
 }
 
-const root = projectRoot();
 function realPath(path, depth = 0) {
   if (depth > 40) throw new Error("Too many symlinks in " + path);
   try {
@@ -530,35 +610,46 @@ function outside(path) {
   return path === ".." || path.startsWith(".." + sep) || isAbsolute(path);
 }
 
-const absoluteTarget = isAbsolute(target) ? target : resolve(input?.cwd ?? root, target);
-const logical = relative(root, absoluteTarget);
-const physical = relative(realPath(root), realPath(absoluteTarget));
-if (isAbsolute(target) && outside(logical) && outside(physical)) process.exit(0);
-if (!outside(logical) && outside(physical)) {
-  process.stdout.write(JSON.stringify(deny(String(target) + " resolves outside the project root")));
-  process.exit(0);
-}
-const path = isAbsolute(target) ? (outside(logical) ? physical : logical) : target;
-const paths = physical !== path && !outside(physical) ? [path, physical] : [path];
+const named = [];
+const paths = [];
+for (const target of targets) {
+  const absoluteTarget = isAbsolute(target) ? target : resolve(input?.cwd ?? root, target);
+  const logical = relative(root, absoluteTarget);
+  const physical = relative(realPath(root), realPath(absoluteTarget));
+  if (isAbsolute(target) && outside(logical) && outside(physical)) continue;
+  if (!outside(logical) && outside(physical)) {
+    process.stdout.write(JSON.stringify(deny(String(target) + " resolves outside the project root")));
+    process.exit(0);
+  }
+  const path = isAbsolute(target) ? (outside(logical) ? physical : logical) : target;
 
-// VISP state changes only through visp commands, which validate and record it. A worker
-// that hand-edited the brief left it unreadable and abandoned the workflow. Drafts are
-// the one place the workflow asks agents to write.
-const statePath = path.replaceAll(String.fromCharCode(92), "/").toLowerCase();
-if (
-  (statePath === "__HOOK_STATE_DIR__" || statePath.startsWith("__HOOK_STATE_DIR__/")) &&
-  !statePath.startsWith("__HOOK_STATE_DIR__/drafts/") &&
-  !statePath.split("/").includes("..")
-) {
-  process.stdout.write(
-    JSON.stringify(
-      deny(
-        `${path} is VISP state; change it only through \`__HOOK_PRODUCT_NAME__\` commands. For the brief, pipe changed fields: \`__HOOK_PRODUCT_NAME__ brief --patch - --reason "<why>"\`.`,
+  // VISP state changes only through visp commands, which validate and record it. A worker
+  // that hand-edited the brief left it unreadable and abandoned the workflow. Drafts are
+  // the one place the workflow asks agents to write.
+  const statePath = path.replaceAll(String.fromCharCode(92), "/").toLowerCase();
+  if (
+    (statePath === "__HOOK_STATE_DIR__" || statePath.startsWith("__HOOK_STATE_DIR__/")) &&
+    !statePath.startsWith("__HOOK_STATE_DIR__/drafts/") &&
+    !statePath.split("/").includes("..")
+  ) {
+    process.stdout.write(
+      JSON.stringify(
+        deny(
+          `${path} is VISP state; change it only through \`__HOOK_PRODUCT_NAME__\` commands. For the brief, pipe changed fields: \`__HOOK_PRODUCT_NAME__ brief --patch - --reason "<why>"\`.`,
+        ),
       ),
-    ),
-  );
+    );
+    process.exit(0);
+  }
+  named.push(path);
+  paths.push(path);
+  if (physical !== path && !outside(physical)) paths.push(physical);
+}
+
+if (paths.length === 0) {
   process.exit(0);
 }
+const path = named.join(", ");
 
 /**
  * The guard envelope, or undefined when this output did not come from guard.
@@ -617,13 +708,7 @@ try {
 const envelope = guardEnvelope(stdout);
 
 if (envelope === undefined) {
-  let authorization = "unknown";
-  try {
-    authorization = execFileSync(process.execPath, ["-e", __HOOK_AUTHORIZATION_CHECK__], {
-      cwd: root,
-      stdio: ["ignore", "pipe", "ignore"],
-    }).toString().trim();
-  } catch {}
+  const authorization = authorizationState();
   // No task is active, so there is nothing to enforce: leave Claude's own permission decision in place.
   if (authorization === "inactive") process.exit(0);
   let guardError;
@@ -641,16 +726,18 @@ if (envelope === undefined) {
   process.exit(0);
 }
 
-if (status === 0 && envelope.ok) {
-  if (typeof input?.session_id === "string") {
-    try {
-      const directory = join(root, ".visp", "session", "edits");
-      mkdirSync(directory, { recursive: true });
-      writeFileSync(join(directory, encodeURIComponent(input.session_id) + ".json"), JSON.stringify({ at: new Date().toISOString() }));
-    } catch {}
-  }
-  process.exit(0);
+// The Stop hook reminds only a session that tried to change the project. A refused edit is
+// such a try: a later session refused under an accepted feature stopped with its request
+// unbuilt, because only allowed edits were recorded.
+if (typeof input?.session_id === "string") {
+  try {
+    const directory = join(root, ".visp", "session", "edits");
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(join(directory, encodeURIComponent(input.session_id) + ".json"), JSON.stringify({ at: new Date().toISOString() }));
+  } catch {}
 }
+
+if (status === 0 && envelope.ok) process.exit(0);
 
 let reason = `${path} is outside the scope authorized for the current task.`;
 const first = envelope?.data?.violations?.[0];
