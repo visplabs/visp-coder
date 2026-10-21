@@ -6,7 +6,7 @@ import {
   type QueryRow,
   refreshRepository,
 } from "../../graph/index.js";
-import { featureMemories } from "../../memory/memory-service.js";
+import { featureMemories } from "../../memory/project-memory.js";
 import { recordActivity } from "../../orchestrate/session.js";
 import { checkOutputNotes } from "../product-output-guidance.js";
 import type { WorkspaceState } from "../state.js";

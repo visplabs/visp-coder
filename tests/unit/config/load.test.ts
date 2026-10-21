@@ -96,6 +96,14 @@ it.each([
   expect(result.error.message).toContain("current product context");
 });
 
+it("rejects the removed Visp Memory service with removal guidance", () => {
+  const result = parseConfig("memory:\n  service:\n    command: visp-memory\n", "visp.yml");
+  expect(result.ok).toBe(false);
+  if (result.ok) return;
+  expect(result.error.message).toContain("memory.service");
+  expect(result.error.message).toContain("Remove this setting");
+});
+
 it.each(["queryDepth", "queryResults"])(
   "rejects ignored graph control %s with request-level recovery",
   (key) => {

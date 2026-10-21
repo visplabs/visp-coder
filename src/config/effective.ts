@@ -95,10 +95,7 @@ const operationNotes: Readonly<Record<string, string>> = {
     "Limits source excerpts in product context; does not limit all evidence or skill entries.",
   "memory.enabled": "Enables earlier-request recall; false turns every memory path off.",
   "memory.recall":
-    "With a reviewer VISP launches (codex-exec or claude-exec) and no memory service, its model selects relevant earlier requests for each new feature; a reviewer the host runs recalls nothing.",
-  "memory.service.command":
-    "Executable used to record earlier requests and retrieve relevant decisions from Visp Memory.",
-  "memory.service.select": "Chooses reviewer-model or keyword selection of Visp Memory candidates.",
+    "With a reviewer VISP launches (codex-exec or claude-exec), its model selects relevant earlier requests for each new feature; a reviewer the host runs recalls nothing.",
   "telemetry.enabled":
     "Enables local usage import; activity recording remains enabled independently.",
 };

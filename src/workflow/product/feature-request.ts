@@ -5,7 +5,7 @@ import {
   MEMORY_HEADING,
   MEMORY_HEADING_WITH_LATER_CHANGES,
   projectMemoryText,
-} from "../../memory/memory-service.js";
+} from "../../memory/project-memory.js";
 import type { Intent } from "../artifacts/feature.js";
 import type { WorkspaceState } from "../state.js";
 import { type FeatureMemory, featureMemory } from "./feature-memory.js";
@@ -38,7 +38,7 @@ export interface FeatureRequest {
   readonly originalRequest: string;
 }
 
-/** The user's recorded request, with the decisions Visp Memory selects for it; rules are captured on the way. */
+/** The user's recorded request, with the earlier decisions selected for it; rules are captured on the way. */
 export async function featureRequest(
   workspace: WorkspaceState,
   host: HostRequest | undefined,

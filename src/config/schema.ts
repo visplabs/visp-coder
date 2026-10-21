@@ -111,15 +111,6 @@ const memorySchema = z
      * feature the recorded decisions that constrain it, usually none. Off skips that call.
      */
     recall: z.boolean().default(true),
-    /** Visp Memory as the long-term store: earlier requests are recorded there and new features briefed from it. */
-    service: z
-      .object({
-        command: z.string().trim().min(1).default("visp-memory"),
-        /** model: a VISP-launched reviewer's model chooses among candidates; keyword: Visp Memory alone. */
-        select: z.enum(["model", "keyword"]).default("model"),
-      })
-      .strict()
-      .optional(),
   })
   .strict()
   .default({});

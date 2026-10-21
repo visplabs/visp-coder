@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { laterChanges } from "../../../src/memory/later-changes.js";
-import type { EarlierFeature } from "../../../src/memory/memory-service.js";
+import type { EarlierFeature } from "../../../src/memory/project-memory.js";
 import type { WorkspaceState } from "../../../src/workflow/state.js";
 import { TestWorkspace } from "../support/workspace.js";
 

@@ -3,60 +3,16 @@ import { ok, type Result } from "../../core/result.js";
 import { laterChanges } from "../../memory/later-changes.js";
 import {
   type EarlierFeature,
-  memoryBriefFor,
   notInRequest,
   PROJECT_MEMORY_FILE,
-  recordEarlierRequests,
-} from "../../memory/memory-service.js";
+} from "../../memory/project-memory.js";
 import { recordRequestHistory } from "../../memory/request-history.js";
 import type { WorkspaceState } from "../state.js";
 import { reviewerMemoryGate } from "./memory-gate.js";
 import { type ReviewerModel, reviewerModel } from "./reviewer-model.js";
 import { json } from "./store.js";
 
-/** Candidates wide enough to hold every note of a store with about fifty. */
-const GATE_CANDIDATE_TOKENS = 6000;
-
-/**
- * Visp Memory's keyword selection alone, or, with a reviewer model and `select: model`, that
- * model choosing from a wide candidate set; keyword selection is the fallback.
- */
-async function selectMemories(
-  workspace: WorkspaceState,
-  command: string,
-  request: string,
-  rules: readonly string[],
-  later: readonly string[],
-): Promise<string[]> {
-  const model =
-    workspace.config.memory.service?.select === "keyword"
-      ? undefined
-      : await reviewerModel(workspace);
-  if (!model) return memoryBriefFor(workspace, command, request);
-  const candidates = await memoryBriefFor(workspace, command, request, GATE_CANDIDATE_TOKENS);
-  try {
-    return await reviewerMemoryGate(model)(request, candidates, rules, later);
-  } catch {
-    return memoryBriefFor(workspace, command, request);
-  }
-}
-
-/** Visp Memory's store: earlier requests are recorded there first. */
-async function serviceMemories(
-  workspace: WorkspaceState,
-  command: string,
-  earlier: readonly EarlierFeature[],
-  request: string,
-  rules: readonly string[],
-  later: readonly string[],
-): Promise<Result<{ memories: string[]; mutation?: FileMutation }>> {
-  const recorded = await recordEarlierRequests(workspace, command, earlier);
-  if (!recorded.ok) return recorded;
-  const memories = await selectMemories(workspace, command, request, rules, later);
-  return ok({ memories, ...(recorded.value ? { mutation: recorded.value } : {}) });
-}
-
-/** VISP's own store: every recorded note goes to the reviewer's model, which passes on only what applies. */
+/** Every recorded note goes to the reviewer's model, which passes on only what applies. */
 async function recallMemories(
   workspace: WorkspaceState,
   model: ReviewerModel,
@@ -111,8 +67,7 @@ export function memoryFileMutations(
 
 /**
  * Earlier features' requests are recorded and the decisions that constrain this request join
- * it; the feature keeps them for `work` replies. With `memory.service` Visp Memory holds them;
- * otherwise VISP does, and only with a reviewer model to choose.
+ * it; the feature keeps them for `work` replies. Only a reviewer model VISP launches chooses.
  */
 export async function featureMemory(
   workspace: WorkspaceState,
@@ -122,17 +77,13 @@ export async function featureMemory(
   const none = ok({ memories: [], laterChanges: [], mutations: [], reported: {} });
   // memory.enabled switches off every memory path, the long-term store included.
   if (!workspace.config.memory.enabled) return none;
-  const command = workspace.config.memory.service?.command;
-  const model =
-    command || !workspace.config.memory.recall ? undefined : await reviewerModel(workspace);
-  if (!command && !model) return none;
+  const model = workspace.config.memory.recall ? await reviewerModel(workspace) : undefined;
+  if (!model) return none;
   const earlier = await earlierFeatures(workspace);
   if (!earlier.ok) return earlier;
   // Code can change after a decision was recorded; the gate, the worker and the reviewer are told.
   const later = await laterChanges(workspace, earlier.value);
-  const chosen = command
-    ? await serviceMemories(workspace, command, earlier.value, request, rules, later)
-    : await recallMemories(workspace, model as ReviewerModel, earlier.value, request, rules, later);
+  const chosen = await recallMemories(workspace, model, earlier.value, request, rules, later);
   if (!chosen.ok) return chosen;
   const { memories } = chosen.value;
   const mutations: FileMutation[] = chosen.value.mutation ? [chosen.value.mutation] : [];
