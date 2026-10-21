@@ -72,6 +72,8 @@ export const criticDefaultsSchema = criticConfigSchema
     existingCodeTests: z.boolean().optional(),
     /** The reviewer model of a lean feature; `model` reviews full ones. */
     leanModel: z.string().trim().min(1).max(200).optional(),
+    /** The lean reviewer's reasoning effort; `low` unless set. */
+    leanReasoningEffort: reasoningEffortSchema.optional(),
   })
   .strict();
 export type CriticDefaults = z.infer<typeof criticDefaultsSchema>;

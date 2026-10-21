@@ -2,6 +2,6 @@ $ visp critic --prepare --capabilities .visp/drafts/capabilities.json
 --- stdout
 
 --- stderr
-Error: The requested critic model is unavailable; no automatic model substitution.
+Error: The requested critic model is unavailable; no automatic model substitution. The requested reasoning effort is unavailable or unconfirmed.
 
 --- exit 2

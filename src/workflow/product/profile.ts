@@ -27,6 +27,12 @@ const LARGE_CHANGE_FILES = 15;
 const SPREAD_CHANGE_AREAS = 4;
 /** Claude Code's Haiku-class reviewer: the October critic ablation scored it level with Sonnet. */
 const CLAUDE_LEAN_REVIEWER = "claude-haiku-5-5";
+/**
+ * At high effort the Haiku reviewer thought for about 32k tokens and took 150–176 s per review
+ * in batch leandef1 (Sonnet high: 22–75 s), near the 180 s call timeout: 9 of 14 reviews timed
+ * out or outlived the worker's wait, and lean runs spent 3–5 times develop's time in VISP commands.
+ */
+const LEAN_REVIEW_EFFORT = "low";
 
 interface ProfileSubject {
   readonly brief: Pick<ProductBrief, "originalRequest">;
@@ -104,8 +110,12 @@ export function changeEscalation(
  * the worker's tokens, VISP cannot bound it, and weak workers skipped the handoff in September.
  */
 export function leanCriticConfig(workspace: WorkspaceState, config: CriticConfig): CriticConfig {
+  const critic = workspace.config.critic;
   const model =
-    workspace.config.critic?.leanModel ??
-    (config.harness === "claude-code" ? CLAUDE_LEAN_REVIEWER : undefined);
-  return model ? { ...config, model } : config;
+    critic?.leanModel ?? (config.harness === "claude-code" ? CLAUDE_LEAN_REVIEWER : config.model);
+  return {
+    ...config,
+    model,
+    reasoningEffort: critic?.leanReasoningEffort ?? LEAN_REVIEW_EFFORT,
+  };
 }

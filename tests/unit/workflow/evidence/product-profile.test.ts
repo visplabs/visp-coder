@@ -115,8 +115,15 @@ describe("leanCriticConfig", () => {
     timeoutMs: 180_000,
     maxImageBytes: 4_194_304,
   };
-  it("reviews a lean feature with a Haiku-class model under Claude Code", () => {
-    expect(leanCriticConfig(workspace(), config).model).toBe("claude-haiku-5-5");
+  it("reviews a lean feature with a Haiku-class model at low effort under Claude Code", () => {
+    expect(leanCriticConfig(workspace(), { ...config, reasoningEffort: "high" })).toMatchObject({
+      model: "claude-haiku-5-5",
+      reasoningEffort: "low",
+    });
+    expect(
+      leanCriticConfig(workspace({ critic: { leanReasoningEffort: "medium" } }), config)
+        .reasoningEffort,
+    ).toBe("medium");
   });
   it("uses critic.leanModel when set, and the configured model on other hosts", () => {
     expect(
