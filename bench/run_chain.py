@@ -40,11 +40,11 @@ def score(project, task, step):
 
 
 def snapshot(project, path):
+    """The project as a step left it, without version control or caches."""
     with tarfile.open(path, "w") as archive:
         for child in project.iterdir():
-            if child.name not in SKIP:
-                archive.add(child, arcname=child.name,
-                            filter=lambda info: None if SKIP.intersection(info.name.split("/")) else info)
+            archive.add(child, arcname=child.name,
+                        filter=lambda info: None if SKIP.intersection(info.name.split("/")) else info)
 
 
 def main():

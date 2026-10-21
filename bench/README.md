@@ -88,6 +88,24 @@ A chain run (`run_chain.py`) scores the start with `--step 0`, then after each s
 
 `--runs` adds one row per step: hidden, new checks, carried checks, the regressions by name, lines changed against the reference and unneeded edits. Each step is a fresh session on the project exactly as the previous one left it: the runner commits nothing between steps. A session that ends in a CLI error stops the chain, and the run is invalid.
 
+#### Calibration (Oct 21 2026)
+
+Bare Claude Haiku 5.5 at high effort (`quality-2026-10`), the worker the chains were meant to separate from VISP. Target: earlier checks broken in at least 20% of chains, or at least 5% of carried checks.
+
+| Batch | Task | Chains | Every step at 100% | With a regression | Earlier checks broken | Regressions per carried check | Code | Wall s per chain | Cost $ per chain |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| chain1 (first version) | `reservations-chain` | 2 | 2 | 0 | 0/168 | 0/622 | 8, 8 | 730 | 0.15 |
+| chain1 (first version) | `sheet-chain` | 2 | 2 | 0 | 0/124 | 0/362 | 8, 8 | 921 | 0.18 |
+| chain2 (hardened) | `reservations-chain` | 1 | 1 | 0 | 0/84 | 0/311 | 8 | 603 | 0.14 |
+| chain2 (hardened) | `sheet-chain` | 1 | 1 | 0 | 0/69 | 0/206 | 8 | 1145 | 0.33 |
+
+- The target was not met: in 6 chains (30 sessions) bare passed every check of every step and broke none of 445 carried checks (1,501 carried check evaluations). Hidden checks on these chains leave no headroom for this worker either.
+- In chain1, bare met step 5 without rewriting what earlier steps rely on: a whole-cache clear on every change (sheet) and the whole state written as JSON after each change (reservations). The hardening made step 5 rewrite that code: the sheet step now needs dependency-tracked invalidation (the full clear took 37 to 72 s on its new check, limit 10 s), and the reservations step moves the state into SQLite, in memory by default, so every carried check runs through the new store. Bare did both and kept every check. Writing the incremental reference, I made two of the bugs the step is meant to provoke (a walk that stopped at a cycle member with no value kept, and a loop on a self-referencing range); the oracle caught both.
+- Bare wrote tests at every step (code judge: tests 8 to 9) and never committed: every step after the first started from uncommitted changes on the scaffold commit.
+- Diff scope: lines changed outside tests were 1.0 to 1.7 times the reference's (median per task), with about one unneeded edit per chain (`inventory/__init__.py`, `start.sh` or `sheet/cells.py`).
+- Cost at list price: workers $1.12 for all six chains, code judge $3.09 (six Opus 5.5 calls).
+- What could give headroom, untested: a weaker worker (Haiku 4.5, `default`, or Haiku 5.5 at low effort, `quality-2026-10-low`), longer chains, or requests that leave a preserved rule unstated in the README as well as in the request.
+
 ### Diff scope
 
 `diffscope.py` compares a change with the reference change for the same request, over the product's own files as the code judge sees them: lines added plus removed outside tests against the reference's (tests are counted apart, since the references have few), and unneeded edits, files that existed before which the worker changed or deleted and the reference left alone. Chains are measured per step against `reference/<task>/step<k>`; `reservations-bundles`, `spreadsheet-extend`, `spreadsheet-audit` and the carryover tasks from `start/` to the final project. The report shows the median ratio and mean unneeded edits per task and arm; neither is a required score.
