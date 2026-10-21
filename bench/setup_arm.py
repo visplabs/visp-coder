@@ -11,7 +11,8 @@ works only inside the project. Every arm receives the same task and constraints.
 
 A two-session task (session1.md, session2.md, conventions.md) also gets prompt2.txt and
 prompt2-oracle.txt, the second request without and with the first session's conventions;
-run_carryover.py runs both sessions.
+run_carryover.py runs both sessions. A chain task (steps/step1.md ... stepN.md) gets
+prompt-step<k>.txt for every step, prompt.txt being the first; run_chain.py runs them in order.
 """
 import argparse
 import json
@@ -20,6 +21,7 @@ import pathlib
 import shutil
 import subprocess
 
+from chains import step_files
 from common import RUNS
 from presets import critic_yaml, preset, visp_build, workflow_yaml
 
@@ -39,9 +41,12 @@ root = RUNS / "runs" / name / "project"
 root.mkdir(parents=True, exist_ok=False)
 task_dir = BENCH / "tasks" / task_name
 sessions = (task_dir / "session1.md").is_file()
+steps = step_files(task_name)
 if sessions:
     conventions = (task_dir / "conventions.md").read_text().strip()
     task = (task_dir / "session1.md").read_text().replace("{conventions}", conventions)
+elif steps:
+    task = steps[0].read_text()
 else:
     task = (task_dir / "task.md").read_text()
 env = dict(os.environ)
@@ -128,6 +133,8 @@ if sessions:
     (root.parent / "prompt2.txt").write_text(f"{workflow}\n\n{COMMON}\n\nTask:\n\n{second}")
     (root.parent / "prompt2-oracle.txt").write_text(
         f"{workflow}\n\n{COMMON}\n\nTask:\n\n{second}\n{conventions}\n")
+for number, step in enumerate(steps, start=1):
+    (root.parent / f"prompt-step{number}.txt").write_text(f"{workflow}\n\n{COMMON}\n\nTask:\n\n{step.read_text()}")
 # The headless runner puts the arm's VISP build on PATH so installed hooks find it.
 (root.parent / "arm.json").write_text(json.dumps({"task": task_name, "arm": arm, "shim": shim_dir, "skills": args.skill,
                                                  "preset": args.preset, "settings": settings}))

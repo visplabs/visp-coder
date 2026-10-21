@@ -16,6 +16,8 @@ Fixed-contract tasks for comparing coding workflows (bare coding, Spec Kit, BMAD
 | `sheet-carryover` | Two sessions on the existing spreadsheet engine: AVERAGE and ROUND, then MEDIAN and directed rounding carrying the empty-statistic rule and digits restriction | 22 core + 14 new + 8 memory |
 | `archive-carryover` | Two sessions on the existing reservations service: item archiving and a quantity cap, then bundles and restocking that must preserve those feature decisions | 15 core + 17 new + 7 memory |
 | `conventions-carryover-prose` | `conventions-carryover` with the first request stating the conventions in conversational prose instead of a labelled list | as `conventions-carryover` |
+| `reservations-chain` | Five requests in turn on the existing reservations service, each in a fresh session: restocking and a stock list, bundle reservations and reservation lookup, error bodies with `status`, `detail` (`message` kept) and `field`, case-insensitive SKUs, then the state moved into SQLite (in memory by default, a file that survives restarts) | 39 start + 9, 17, 10, 9 and 11 per step |
+| `sheet-chain` | Five requests in turn on the existing spreadsheet engine: `AVERAGE` and `COUNT`, comparisons and `IF`, text literals with `&` and `LEN`, row insertion and deletion, then a whole-grid chain that must read fast without crashing and stay fast to edit, so a change recomputes only its dependents | 16 start + 10, 15, 13, 15 and 6 per step |
 | `archive-carryover-raised` | `archive-carryover` after an intermediate feature (`intermediate.md`) raised the quantity cap to 50,000, with ten unrelated earlier requests (`noise.md`) in the store; checks use the raised cap | as `archive-carryover` |
 | `slingshot-game` | New browser game: drag-to-launch slingshot, physics, three levels, test hooks on `window.gameTest` | 22 core + 6 UI |
 | `catapult-game` | New browser game: catapult with four projectile kinds, three materials, per-level ammunition and three levels | request only; hidden checks not yet published |
@@ -28,6 +30,7 @@ Fixed-contract tasks for comparing coding workflows (bare coding, Spec Kit, BMAD
 - `tasks/<task>/task.md` is the request every arm receives; `start/`, when present, is the existing codebase the project starts from.
 - `tasks/<task>/hidden_test.py <project>` runs the project and prints JSON results.
 - A two-session task has `session1.md`, `session2.md` and `conventions.md` instead of `task.md`. For `conventions-carryover`, its `code` checks apply conventions that the first session's code already shows; its `memory` checks apply conventions stated only in the first conversation (money in integer `*Cents` fields, soft deletion answering 410 `gone`), so they pass only if the knowledge survived between sessions. `archive-carryover` instead tests feature decisions already expressed in session 1 code: its `memory` checks apply the archived-item restriction to bundles and the quantity cap to restocking. Each memory check includes a forbidden operation, so omitting both carried decisions fails every one.
+- A chain task has `start/`, `steps/step1.md` … `step5.md` and a `hidden_test.py` whose `--step k` runs the checks of steps 0 to k (0 is the starting contract), each result tagged with its `step`. Later steps only add to the contract, so every check stays valid after every later step: bodies are compared on the fields the check's own step defines, and SKUs differ in more than case. The requests do not restate what must be preserved. `reference/<task>/step<k>` passes `--step k` in full.
 - `reference/` holds correct implementations used only to validate the oracles; deliberately broken variants (a racy store, injected bugs) were checked to fail.
 - A visual task has only `task.md`; `judge.py` scores its final image. The two games are also judged on their first screen.
 
@@ -69,10 +72,43 @@ python3 bench/batch.py --batch q1 --preset quality-2026-10 --reps 3 --jobs 4 \
 python3 bench/report.py --batch q1 --score --runs     # score what is missing, then report
 ```
 
-- `batch.py` names runs `<batch>-<task>-<label>-<rep>` (the label is the build name for a VISP arm, or `label=arm`) and queues them repetition by repetition, every task in turn, with the arm order rotating per task, so load and an early stop fall on every arm alike. Session timeouts: games 3600 s, every other task 2700 s. Two-session tasks run with `run_carryover.py --modes fresh` (the second session starts on the first session's project, notes kept); both sessions are recorded and the second is scored.
+- `batch.py` names runs `<batch>-<task>-<label>-<rep>` (the label is the build name for a VISP arm, or `label=arm`) and queues them repetition by repetition, every task in turn, with the arm order rotating per task, so load and an early stop fall on every arm alike. Session timeouts: games 3600 s, every other task 2700 s. Two-session tasks run with `run_carryover.py --modes fresh` (the second session starts on the first session's project, notes kept); both sessions are recorded and the second is scored. Chain tasks run with `run_chain.py`, 2700 s per step.
 - It can be restarted: finished runs are skipped, and a run an interrupted batch left unfinished is moved to `$VISP_BENCH_RUNS/discarded/` and redone. Each runner and worker runs in its own session with its pid in the run directory (`runner.pid`, `worker.pid`); before a redo the batch stops any it finds still running there, and on SIGTERM or SIGHUP it stops those of its running runs before exiting. A lock stops two drivers on one batch. It writes `batches/<batch>/manifest.json` and `batch.log`.
 - Invalid runs: after each run, `runfacts.py` looks for a usage limit and for a worker failure. A usage limit is one of the CLIs' limit messages ("You've hit your session limit", "… monthly spend limit", "… team's shared budget", "You're out of extra usage", "You're out of usage credits", "you have reached your weekly usage limit", "usage limit reached"), matched only where a failure is reported: a `result.json` whose session ended in error (or whose whole result is such a message), API-error events in the worker transcript, and VISP's records of a failed reviewer or tester call (the critic attempts' `message`, `acceptance-tests.json`'s `reason`). Ordinary tool output such as "Rate limit reached; resets in 30 s" never counts. A worker failure is a session the CLI ended in error (an API error, no response, a wrapper exit); a worker that gives up in its own words stays valid. Either way the run gets `invalid.json` and is never scored (`score.py`, `judge.py` and `code_judge.py` skip it); after a usage limit the batch starts no further runs. `--rerun-invalid` moves invalid runs to `discarded/` and runs them again. An empty `invalid.json` made by hand also excludes a run.
-- `report.py` prints Markdown tables for `docs/research-summary.md` and writes `batches/<batch>/report.json`: per task and arm, the mean hidden pass rate, judge score, checklist passes and code-quality score; median wall time and the worker's time split; reviews run and unavailable, pictures delivered to the reviewer, hook refusals and timeouts. Invalid and unfinished runs are listed and excluded. It refuses a batch whose runs or judge files name another preset, worker or judge model. `--score` scores what is missing and judges again where a judge call failed. `--runs` adds one row per run.
+- `report.py` prints Markdown tables for `docs/research-summary.md` and writes `batches/<batch>/report.json`: per task and arm, the mean hidden pass rate, judge score, checklist passes and code-quality score; median wall time and the worker's time split; reviews run and unavailable, pictures delivered to the reviewer, hook refusals and timeouts. Chain tasks get [their own table](#chains), and brownfield tasks with a reference [the diff scope](#diff-scope). Invalid and unfinished runs are listed and excluded. It refuses a batch whose runs or judge files name another preset, worker or judge model. `--score` scores what is missing and judges again where a judge call failed. `--runs` adds one row per run.
+
+### Chains
+
+A chain run (`run_chain.py`) scores the start with `--step 0`, then after each step k scores the project with `--step k` and keeps a snapshot of it (`step<k>/hidden.json`, `snapshot.tar`, `result.json`; `chain.json` once finished). A check is carried into step k when it belongs to an earlier step and passed before step k; it regresses when it then fails. The report gives per task and arm:
+
+- chains with a regression, and earlier checks broken at any later step (each check counted once, pooled over the chains);
+- regressions per carried check (every step's carried checks);
+- `kept`, the mean share of carried checks no later step broke, a required score of the quality rule;
+- the final hidden pass rate (every step's checks on the final project), the code score on the cumulative change from `start/` with every request, wall time over all sessions and cost per chain.
+
+`--runs` adds one row per step: hidden, new checks, carried checks, the regressions by name, lines changed against the reference and unneeded edits. Each step is a fresh session on the project exactly as the previous one left it: the runner commits nothing between steps. A session that ends in a CLI error stops the chain, and the run is invalid.
+
+#### Calibration (Oct 21 2026)
+
+Bare Claude Haiku 5.5 at high effort (`quality-2026-10`), the worker the chains were meant to separate from VISP. Target: earlier checks broken in at least 20% of chains, or at least 5% of carried checks.
+
+| Batch | Task | Chains | Every step at 100% | With a regression | Earlier checks broken | Regressions per carried check | Code | Wall s per chain | Cost $ per chain |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| chain1 (first version) | `reservations-chain` | 2 | 2 | 0 | 0/168 | 0/622 | 8, 8 | 730 | 0.15 |
+| chain1 (first version) | `sheet-chain` | 2 | 2 | 0 | 0/124 | 0/362 | 8, 8 | 921 | 0.18 |
+| chain2 (hardened) | `reservations-chain` | 1 | 1 | 0 | 0/84 | 0/311 | 8 | 603 | 0.14 |
+| chain2 (hardened) | `sheet-chain` | 1 | 1 | 0 | 0/69 | 0/206 | 8 | 1145 | 0.33 |
+
+- The target was not met: in 6 chains (30 sessions) bare passed every check of every step and broke none of 445 carried checks (1,501 carried check evaluations). Hidden checks on these chains leave no headroom for this worker either.
+- In chain1, bare met step 5 without rewriting what earlier steps rely on: a whole-cache clear on every change (sheet) and the whole state written as JSON after each change (reservations). The hardening made step 5 rewrite that code: the sheet step now needs dependency-tracked invalidation (the full clear took 37 to 72 s on its new check, limit 10 s), and the reservations step moves the state into SQLite, in memory by default, so every carried check runs through the new store. Bare did both and kept every check. Writing the incremental reference, I made two of the bugs the step is meant to provoke (a walk that stopped at a cycle member with no value kept, and a loop on a self-referencing range); the oracle caught both.
+- Bare wrote tests at every step (code judge: tests 8 to 9) and never committed: every step after the first started from uncommitted changes on the scaffold commit.
+- Diff scope: lines changed outside tests were 1.0 to 1.7 times the reference's (median per task), with about one unneeded edit per chain (`inventory/__init__.py`, `start.sh` or `sheet/cells.py`).
+- Cost at list price: workers $1.12 for all six chains, code judge $3.09 (six Opus 5.5 calls).
+- What could give headroom, untested: a weaker worker (Haiku 4.5, `default`, or Haiku 5.5 at low effort, `quality-2026-10-low`), longer chains, or requests that leave a preserved rule unstated in the README as well as in the request.
+
+### Diff scope
+
+`diffscope.py` compares a change with the reference change for the same request, over the product's own files as the code judge sees them: lines added plus removed outside tests against the reference's (tests are counted apart, since the references have few), and unneeded edits, files that existed before which the worker changed or deleted and the reference left alone. Chains are measured per step against `reference/<task>/step<k>`; `reservations-bundles`, `spreadsheet-extend`, `spreadsheet-audit` and the carryover tasks from `start/` to the final project. The report shows the median ratio and mean unneeded edits per task and arm; neither is a required score.
 
 ### Pairwise judge and cost
 
@@ -94,7 +130,7 @@ Wall time is the runner's measure over every session. The worker's own transcrip
 
 `report.py` compares the first arm (the base, or `--base`) with each other arm, task by task.
 
-Each task kind has required scores: the hidden pass rate where the task has hidden checks, the judge's overall score and checklist passes for the visual tasks and games, and the code-quality score for every task but the visual ones. Missing output scores the minimum: hidden checks with no result pass nothing, a visual task with no image file is judged on the `index.html` it delivered, as served, and with neither (or a game with no `index.html`) it is judged 1 with no checklist item. A score file that is missing or holds a failed judge call (including the judge's own CLI hitting a limit) gives no score; the run is listed and `--score` judges it again.
+Each task kind has required scores: the hidden pass rate where the task has hidden checks, the judge's overall score and checklist passes for the visual tasks and games, the code-quality score for every task but the visual ones, and `kept` for a chain task. Missing output scores the minimum: hidden checks with no result pass nothing, a visual task with no image file is judged on the `index.html` it delivered, as served, and with neither (or a game with no `index.html`) it is judged 1 with no checklist item. A score file that is missing or holds a failed judge call (including the judge's own CLI hitting a limit) gives no score; the run is listed and `--score` judges it again.
 
 A task is incomplete, and fails, unless both arms have the same number of valid runs, at least one, and every required score for each. A candidate passes a complete task when:
 
@@ -142,11 +178,17 @@ The rubric is fixed: correctness risks, structure, readability, naming, tests (d
 python3 -m unittest bench/test_hidden_oracles.py
 ```
 
-These local checks (spreadsheet-cli, spreadsheet-extend, sheet-carryover, spreadsheet-audit and recurrence-cli) verify
+These local checks (spreadsheet-cli, spreadsheet-extend, sheet-carryover, spreadsheet-audit, sheet-chain, reservations-chain and recurrence-cli) verify
 that correct references pass, that faulty variants (wrong division-error output, clamped short
 months) fail some checks but not all, that a nonzero program exit fails even when its output
 matches, that the audit's start fails only its `fix:` checks, and that importing a third-party
-date library fails every recurrence check. They use temporary copies and the standard library,
+date library fails every recurrence check. For the chains they verify that each step's reference
+passes every check up to its step, that the previous step's reference fails only the new step's
+checks, that variants breaking an earlier step (text comparisons added with text literals, values kept
+across a row move, cycles not looked for again after a cycle member is replaced, invalidation that
+stops at a cell with no value kept, a single reservation answered as a bundle, a store without its
+lock, an SQL confirm that reduces only a bundle's first line) fail that earlier step's checks, and
+how the chain summary counts regressions. They use temporary copies and the standard library,
 without calling models. Oracle qualification is not a comparison of coding workflows.
 
 ## Timing the dashboard
@@ -163,6 +205,9 @@ python3 bench/setup_arm.py spreadsheet-cli bare r1          # or speckit | bmad 
 python3 bench/run_claude.py r1                              # headless Claude Code worker (the preset's; Haiku 4.5 by default)
 python3 bench/run_codex.py r1                               # or a headless Codex worker (gpt-5.6-luna, low effort)
 python3 bench/score.py spreadsheet-cli r1                   # hidden checks; writes runs/r1/hidden.json
+
+python3 bench/setup_arm.py sheet-chain bare ch1                 # a chain task: prompt-step<k>.txt per step
+python3 bench/run_chain.py ch1                                  # each step in a fresh session, scored as it ends
 
 python3 bench/setup_arm.py conventions-carryover visp:visp-head c1
 python3 bench/run_carryover.py c1 --modes wiped,fresh,oracle  # session 1 once, then session 2 per mode

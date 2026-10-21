@@ -14,7 +14,8 @@ change, shows only the edits the worker made.
 
 A task with a starting codebase (start/) is judged on the change: the judge gets before/ (the
 starting tree, filtered the same way), after/ (the product) and change.diff, and is told to judge
-what was added or modified, not the provided code. A new project is copied to product/.
+what was added or modified, not the provided code. A chain task is judged on the cumulative
+change of all its steps, with every step's request. A new project is copied to product/.
 
 The judge (Opus 5.5 at high effort, or the run's preset code judge) reads the code with Read, Grep
 and Glob only and scores six criteria and an overall score from 1 to 10, each with a one-line
@@ -30,6 +31,7 @@ import shutil
 import sys
 import tempfile
 
+from chains import step_files
 from common import RUNS
 from judge import ask
 from presets import CODE_JUDGE
@@ -106,6 +108,10 @@ def request_text(task):
         first = (task_dir / "session1.md").read_text().replace("{conventions}", conventions).strip()
         second = (task_dir / "session2.md").read_text().strip()
         return f"First request:\n\n{first}\n\nSecond request, in a later session:\n\n{second}"
+    steps = step_files(task)
+    if steps:
+        return "\n\n".join(f"Request {number}{'' if number == 1 else ', in a later session'}:\n\n{path.read_text().strip()}"
+                             for number, path in enumerate(steps, start=1))
     return (task_dir / "task.md").read_text().strip()
 
 

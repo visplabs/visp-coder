@@ -3,7 +3,8 @@
 Usage: score.py <task> [--stage 1] <run_name> [<run_name> ...]
 Writes hidden.json (hidden-stage1.json with --stage 1) beside each project and prints one line
 per run. A two-session run's modes are scored as <run>/<mode>; run_carryover.py scores the first
-session itself. Runs marked invalid (invalid.json, a usage limit stopped them) are skipped.
+session itself. A chain run is scored on its final project with every step's checks, grouped by
+step; run_chain.py scores each step itself. Runs marked invalid (invalid.json, a usage limit stopped them) are skipped.
 """
 import json
 import pathlib
@@ -34,6 +35,8 @@ for name in names:
     groups = {}
     for r in result["results"]:
         prefix = r["name"].split(":", 1)[0] if r["name"].startswith(tuple(f"{g}:" for g in GROUPS)) else "core"
+        if "step" in r:
+            prefix = "base" if r["step"] == 0 else f"s{r['step']}"
         groups.setdefault(prefix, []).append(r)
     failed = [r["name"] for r in result["results"] if not r["passed"]]
     score = " ".join(

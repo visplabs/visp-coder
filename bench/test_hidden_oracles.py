@@ -1,4 +1,4 @@
-"""Qualify spreadsheet and recurrence acceptance oracles against correct and faulty programs.
+"""Qualify spreadsheet, recurrence and chain acceptance oracles against correct and faulty programs.
 
 Run from the repository root: python3 -m unittest bench/test_hidden_oracles.py
 The checks use local reference copies and the standard library; no models are called.
@@ -13,10 +13,14 @@ import unittest
 
 
 BENCH = Path(__file__).resolve().parent
+sys.path.insert(0, str(BENCH))
+from chains import summarize  # noqa: E402
+
 TASKS = (("spreadsheet-cli", "spreadsheet", 38),
          ("spreadsheet-extend", "spreadsheet-extend", 63),
          ("sheet-carryover", "sheet-carryover", 44),
-         ("spreadsheet-audit", "spreadsheet-audit", 48))
+         ("spreadsheet-audit", "spreadsheet-audit", 48),
+         ("sheet-chain", "sheet-chain/step5", 75))
 
 
 class SpreadsheetOracleTests(unittest.TestCase):
@@ -122,6 +126,134 @@ class RecurrenceOracleTests(unittest.TestCase):
             self.assertEqual(score["total"], self.TOTAL)
             self.assertGreater(score["passed"], 0)
             self.assertLess(score["passed"], self.TOTAL)
+
+
+def replace(path, old, new):
+    text = path.read_text()
+    if old not in text:
+        raise AssertionError(f"variant source changed: {old!r} not in {path}")
+    path.write_text(text.replace(old, new))
+
+
+class ChainOracleTests(unittest.TestCase):
+    """Each step's reference passes every check up to its step; variants that break an earlier
+    step's behaviour fail that step's checks, which the chain runner counts as regressions."""
+
+    # Checks in total after each step, the starting contract being step 0.
+    TOTALS = {"sheet-chain": (16, 26, 41, 54, 69, 75), "reservations-chain": (39, 48, 65, 75, 84, 95)}
+
+    def score(self, task, project, step):
+        completed = subprocess.run(
+            [sys.executable, str(BENCH / "tasks" / task / "hidden_test.py"), str(project), "--step", str(step)],
+            capture_output=True, text=True, timeout=600,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        return json.loads(completed.stdout)
+
+    def project(self, directory, task, step):
+        source = BENCH / "tasks" / task / "start" if step == 0 else BENCH / "reference" / task / f"step{step}"
+        project = Path(directory) / "project"
+        shutil.copytree(source, project, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+        return project
+
+    def failed(self, score):
+        return {result["name"] for result in score["results"] if not result["passed"]}
+
+    def test_each_step_reference_passes_every_check_up_to_its_step(self):
+        for task, totals in self.TOTALS.items():
+            for step, total in enumerate(totals):
+                with self.subTest(task=task, step=step), tempfile.TemporaryDirectory() as directory:
+                    score = self.score(task, self.project(directory, task, step), step)
+                    self.assertEqual((score["passed"], score["total"]), (total, total), self.failed(score))
+                    self.assertEqual({result["step"] for result in score["results"]}, set(range(step + 1)))
+
+    def test_each_step_needs_its_own_change(self):
+        for task in self.TOTALS:
+            for step in range(1, 6):
+                with self.subTest(task=task, step=step), tempfile.TemporaryDirectory() as directory:
+                    score = self.score(task, self.project(directory, task, step - 1), step)
+                    failed = {r["name"] for r in score["results"] if not r["passed"]}
+                    self.assertTrue(failed)
+                    self.assertTrue(all(r["step"] == step for r in score["results"] if not r["passed"]), failed)
+
+    def test_sheet_variants_fail_earlier_steps_checks(self):
+        variants = {
+            # Step 3 also compares text: step 2 made comparing text #VALUE!.
+            "text comparisons": (3, "sheet/engine.py", "    def compare(self, node):\n",
+                                 "    def compare(self, node):\n"
+                                 "        texts = [self.evaluate(side) for side in (node[2], node[3])]\n"
+                                 "        if all(isinstance(value, Text) for value in texts):\n"
+                                 "            return Bool(texts[0] == texts[1] if node[1] == '=' else texts[0] < texts[1])\n"),
+            # Step 5 keeps computed values across a row move.
+            "stale values after a row move": (5, "sheet/engine.py",
+                                              "        self.values, self.dependents, self.cycles_stale = {}, {}, True\n",
+                                              "        self.dependents, self.cycles_stale = {}, True\n"),
+            # Step 5 looks for cycles again only when a formula is set.
+            "stale cycles": (5, "sheet/engine.py",
+                             "self.cycles_stale or cell in self.cycles or content.startswith(\"=\")",
+                             "self.cycles_stale or content.startswith(\"=\")"),
+            # Step 5's invalidation stops at a cell with no value kept, such as a cycle member.
+            "invalidation stops early": (5, "sheet/engine.py",
+                                         "            self.values.pop(current, None)\n            for dependent",
+                                         "            if self.values.pop(current, None) is None and current != cell:\n"
+                                         "                continue\n            for dependent"),
+        }
+        expected = {"text comparisons": ({"s2: comparing text"}, True),
+                    "stale values after a row move": ({"s4: delete at range edges shrinks it", "s4: edits after row moves"}, True),
+                    "stale cycles": ({"base: cycles and recovery"}, False),
+                    "invalidation stops early": ({"base: breaking a cycle from inside"}, False)}
+        for name, (step, path, old, new) in variants.items():
+            with self.subTest(variant=name), tempfile.TemporaryDirectory() as directory:
+                project = self.project(directory, "sheet-chain", step)
+                replace(project / path, old, new)
+                failed = self.failed(self.score("sheet-chain", project, step))
+                must_fail, own_step_passes = expected[name]
+                self.assertTrue(must_fail <= failed, failed)
+                if own_step_passes:
+                    self.assertFalse({n for n in failed if n.startswith(f"s{step}: ")}, failed)
+
+    def test_reservation_variants_fail_earlier_steps_checks(self):
+        variants = {
+            # Step 2 answers a single-SKU reservation in the bundle shape.
+            "single answered as a bundle": (2, "inventory/store.py", "            if bundle:\n", "            if True:\n",
+                                            "base: reserve shape and expiry"),
+            # Step 4 without the store lock, and a pause between the stock check and the hold.
+            "no lock": (4, "inventory/store.py", "        self.lock = threading.Lock()\n",
+                        "        self.lock = contextlib.nullcontext()\n", "base: concurrent reservations never oversell"),
+            # Step 5's SQL confirm reduces only a bundle's first line.
+            "confirm reduces one line": (5, "inventory/store.py", "WHERE item IN (SELECT item FROM lines WHERE reservation = ?)",
+                                         "WHERE item IN (SELECT item FROM lines WHERE reservation = ? AND position = 0)",
+                                         "s2: confirm bundle"),
+        }
+        for name, (step, path, old, new, must_fail) in variants.items():
+            with self.subTest(variant=name), tempfile.TemporaryDirectory() as directory:
+                project = self.project(directory, "reservations-chain", step)
+                replace(project / path, old, new)
+                if name == "no lock":
+                    replace(project / path, "import json\n", "import contextlib\nimport json\nimport time\n")
+                    replace(project / path, "            reservation_id = uuid.uuid4().hex\n",
+                            "            time.sleep(0.05)\n            reservation_id = uuid.uuid4().hex\n")
+                failed = self.failed(self.score("reservations-chain", project, step))
+                self.assertIn(must_fail, failed)
+                if name == "single answered as a bundle":
+                    self.assertFalse({n for n in failed if n.startswith(f"s{step}: ")}, failed)
+
+    def test_summary_counts_checks_that_passed_before_and_fail_after(self):
+        def evaluation(*outcomes):
+            return {"results": [{"name": name, "step": step, "passed": passed} for name, step, passed in outcomes]}
+
+        baseline = evaluation(("base: a", 0, True), ("base: b", 0, False))
+        steps = [(1, evaluation(("base: a", 0, False), ("base: b", 0, True), ("s1: c", 1, True))),
+                 (2, evaluation(("base: a", 0, True), ("base: b", 0, False), ("s1: c", 1, False), ("s2: d", 2, False))),
+                 (3, {"results": []})]
+        summary = summarize(baseline, steps)
+        self.assertEqual([step["regressions"] for step in summary["steps"]],
+                         [["base: a"], ["base: b", "s1: c"], ["base: a"]])
+        self.assertEqual([step["carried"] for step in summary["steps"]], [1, 2, 1])
+        self.assertEqual((summary["carriedChecks"], summary["brokenChecks"], summary["kept"]),
+                         (3, ["base: a", "base: b", "s1: c"], 0.0))
+        self.assertEqual((summary["regressionEvents"], summary["carriedEvaluations"]), (4, 4))
+        self.assertTrue(summary["steps"][2]["noResult"])
 
 
 if __name__ == "__main__":
