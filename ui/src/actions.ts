@@ -1,5 +1,6 @@
 import { announce } from "./announce.js";
 import { refreshVisible } from "./resources.js";
+import { writeReviewed } from "./reviewed.js";
 import { navigate } from "./router.js";
 import type { Actions } from "./state.js";
 import { schedule, state } from "./store.js";
@@ -61,6 +62,19 @@ export const actions: Actions = {
   },
   filterRuns(filter) {
     state.runsFilter = filter;
+    schedule();
+  },
+  setMapView(feature, change) {
+    const current = state.map[feature] ?? { openModules: [], allOpen: false };
+    state.map[feature] = { ...current, ...change };
+    schedule();
+  },
+  toggleReviewed(feature, node, digest) {
+    const ticks = { ...(state.reviewed[feature] ?? {}) };
+    if (ticks[node] === digest) delete ticks[node];
+    else ticks[node] = digest;
+    state.reviewed = { ...state.reviewed, [feature]: ticks };
+    writeReviewed(state.reviewed);
     schedule();
   },
 };

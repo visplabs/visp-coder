@@ -16,7 +16,7 @@ The command prints a link and opens it. Keep the link private: it signs you in. 
 
 ## What you see
 
-A bar across the top names the repository, switches between features, and shows whether updates are live. Each feature has five tabs; `Needs you` is always one click away at the right.
+A bar across the top names the repository, switches between features, and shows whether updates are live. Each feature has six tabs; `Needs you` is always one click away at the right.
 
 - **Now.** What the agent is doing in plain words ("Fixing what failed", "Independent review running", "Ready for acceptance"), the objective VISP gave it, the command it runs next, and where the feature stands from request to handoff. Below it:
   - **What is proven**: each outcome with every independent source of evidence for it: the agent's checks (counted by their latest run, with out-of-date runs counted apart, never as passes), the independent reviewer's judgment, and a verdict. The independent tester's pinned suite covers the whole request, so it stands above the rows.
@@ -27,6 +27,7 @@ A bar across the top names the repository, switches between features, and shows 
 - **Runs.** Every run, newest first, filtered to problems or to the independent tests if you like. Selecting a run opens its output: command, exit code, duration, who ran it, whether its assertions were written by the agent, observed by VISP's runner or written by the independent tester, and the full output with failure lines highlighted. Beside it are this check's other runs and the findings and outcomes it is linked to.
 - **Activity.** Everything recorded, newest first, marking what is new since you last looked.
 - **Handoff.** The document `visp pr` prints.
+- **Map.** Where the agent changed code, and why. The feature's diff, from the commit before its brief was first committed to the working tree, drawn as the changed functions and classes with what calls them, what they call and their tests (at most 40 boxes; directories stay collapsed until you open one). Solid lines are relations VISP's index resolved; dashed lines are unresolved calls that only match a changed name. Beside it, a reading order: the changed declarations grouped by the slice that explains them. Selecting one shows its hunk, the slice and outcome whose scope names the file, the checks that cover it with their latest run (out-of-date runs say so), open findings whose text names it, and what the map cannot see: changed but untested, possible callers the index could not resolve, run-time imports, an index older than the file. Tick a declaration once you have reviewed it; ticks stay in this browser and clear when its code changes. The map needs the graph index (`visp index`); without one it lists the changed files only.
 - **Needs you.** Questions your agent asked (`visp critic feedback --ask`), work ready for acceptance, review budgets spent with findings open, and checks the environment blocked, filtered by kind. The browser tab title shows the count, and you can turn on browser notifications.
 
 The dashboard follows your system's light or dark setting; the button beside `Needs you` switches between system, light and dark.
@@ -37,7 +38,7 @@ The dashboard follows your system's light or dark setting; the button beside `Ne
 - **Out of date means out of date.** A run recorded against an earlier version of the product, slice or check is marked out of date and doesn't count, exactly as in `visp status`.
 - **It doesn't act.** The dashboard runs no commands and records no decisions. Commands are shown for you to copy. To answer a question, reply in your agent's chat, or type your answer and paste the command the page builds; the answer is single-quoted so nothing in it expands in your shell.
 
-Keyboard: `1`–`5` switch tabs, `n` opens Needs you, `r` refreshes, `Esc` goes back from a run to the list, `?` lists shortcuts.
+Keyboard: `1`–`6` switch tabs, `n` opens Needs you, `r` refreshes, `Esc` goes back from a run to the list, `?` lists shortcuts.
 
 ## Live updates
 

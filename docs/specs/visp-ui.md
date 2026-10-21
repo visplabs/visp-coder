@@ -21,6 +21,8 @@ What landed differs from the plan below in these places. The plan is kept as wri
 | `visp feedback --reply` | `visp critic feedback --reply`, supplied by the server as `replyCommand` and tested against the CLI's registered options | The subcommand lives under `critic` |
 | Requests service in `src/workflow/product/` | `src/ui/requests.ts` | Only the dashboard uses it so far; move it when `status` or MCP needs it |
 
+Added later: a Map tab (`/features/:id/map`), specified in [change-map.md](change-map.md).
+
 Also added from use: a pasted fresh link recovers an open tab; unchanged data never re-renders, so focus, typing and scroll survive live updates; passing runs headline their pass count rather than a `fail 0` line; long recorded text is previewed with "Show all".
 
 ## 2. Problem

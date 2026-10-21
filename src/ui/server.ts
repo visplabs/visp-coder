@@ -10,6 +10,7 @@ import type { Result } from "../core/result.js";
 import { BUILD_ID } from "../core/version.js";
 import { loadWorkspace, type WorkspaceState } from "../workflow/state.js";
 import { readCapture } from "./captures.js";
+import { changeMapView } from "./change-map/index.js";
 import type { UiChange } from "./contract.js";
 import { requestsView } from "./requests.js";
 import {
@@ -176,7 +177,7 @@ async function handle(
       );
     return path.startsWith("/captures/")
       ? serveCapture(context, path, response)
-      : routeApi(context, path, request, response);
+      : routeApi(context, url, request, response);
   }
   return serveAsset(context, path, response);
 }
@@ -221,7 +222,11 @@ function readBody(request: IncomingMessage): Promise<string | undefined> {
   });
 }
 
-type Route = (state: WorkspaceState, match: RegExpExecArray) => Promise<Result<unknown>>;
+type Route = (
+  state: WorkspaceState,
+  match: RegExpExecArray,
+  query: URLSearchParams,
+) => Promise<Result<unknown>>;
 
 const ROUTES: readonly (readonly [RegExp, string, Route])[] = [
   [/^\/api\/v1\/overview$/, "overview", (state) => overviewView(state)],
@@ -235,6 +240,14 @@ const ROUTES: readonly (readonly [RegExp, string, Route])[] = [
     /^\/api\/v1\/features\/([^/]+)$/,
     "feature",
     (state, match) => withFeature(match[1], (feature) => featureView(state, feature)),
+  ],
+  [
+    /^\/api\/v1\/features\/([^/]+)\/map$/,
+    "map",
+    (state, match, query) =>
+      withFeature(match[1], (feature) =>
+        changeMapView(state, feature, query.get("base") ?? undefined),
+      ),
   ],
   [
     /^\/api\/v1\/features\/([^/]+)\/executions\/([^/]+)$/,
@@ -256,10 +269,11 @@ async function withFeature<T>(
 
 async function routeApi(
   context: HandlerContext,
-  path: string,
+  url: URL,
   request: IncomingMessage,
   response: ServerResponse,
 ): Promise<void> {
+  const path = url.pathname;
   if (path === "/api/v1/events") return openStream(context, request, response);
   const state = await loadWorkspace(context.root);
   if (!state.ok) return sendError(response, state.error, statusFor(state.error));
@@ -272,7 +286,7 @@ async function routeApi(
   for (const [pattern, command, route] of ROUTES) {
     const match = pattern.exec(path);
     if (!match) continue;
-    const result = await route(state.value, match);
+    const result = await route(state.value, match, url.searchParams);
     return result.ok
       ? sendJson(response, 200, { command, ok: true, data: result.value })
       : sendError(response, result.error, statusFor(result.error), command);
