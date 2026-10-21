@@ -197,7 +197,11 @@ describe("the minimal profile", () => {
     // brief is rejected without one) and keeps the requested format beside the PNG.
     // 453 -> 452: "never rerun feature" replaced "Poll; never duplicate", which invited shell
     // loops around visp status.
-    expect(guide.length / 4).toBeLessThanOrEqual(452);
+    // 452 -> 475: a one-line scope declaration. In OverEager-Bench declaring scope took Claude
+    // Code's out-of-scope actions from 17.1% to 0.0% of runs; the longer scope and requirement
+    // rules live in the standard guide, and the feature and done replies carry the accounting.
+    expect(guide.length / 4).toBeLessThanOrEqual(475);
+    expect(guide).toContain("Edit only what the request needs");
     expect(guide).toContain("At its id, run visp work");
     expect(guide).toContain("Leave feature running; background it on blocking hosts");
     expect(guide).toContain(

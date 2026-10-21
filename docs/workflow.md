@@ -180,7 +180,7 @@ Both profiles keep the verbatim request capture, project rules, earlier-request 
 
 The first three are known at `visp feature`, so such a feature also gets the tester and `critic.model`. The last two arise mid-feature: from then on the feature is reviewed per slice, with the full budget and the reviewer's own labels, by the reviewer pinned at the start. A tester started after the work is written would keep no test that fails against it, so none is started then.
 
-**Scope.** The resident instructions declare the scope: change only what the request needs, inside the scope `visp work` authorized, and do not push, install packages, or delete or rewrite files the request does not need. The edit hooks enforce the authorized scope and `workflow.blockedPaths`. In OverEager-Bench, declaring scope took Claude Code's out-of-scope actions from 17.1% of runs to 0.0%.
+**Scope.** The resident instructions declare the scope: edit only what the request needs, and never push, install packages or delete unrelated files; the standard guide adds that hooks refuse edits outside the scope `visp work` authorized. The edit hooks enforce the authorized scope and `workflow.blockedPaths`. In OverEager-Bench, declaring scope took Claude Code's out-of-scope actions from 17.1% of runs to 0.0%.
 
 ### Requirement listing
 
