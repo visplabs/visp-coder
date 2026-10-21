@@ -1,7 +1,11 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { runProductVerify, updateProductBrief } from "../../../../src/workflow/product/index.js";
+import {
+  runProductReview,
+  runProductVerify,
+  updateProductBrief,
+} from "../../../../src/workflow/product/index.js";
 import { readProductRecord } from "../../../../src/workflow/product/store.js";
 import { runProductWork } from "../../../../src/workflow/product/work.js";
 import { productWorkspace } from "../../support/product-workspace.js";
@@ -164,5 +168,32 @@ describe("SVG pictures the product makes", () => {
     expect((await runProductVerify(await workspace.state())).ok).toBe(true);
     expect(raster.renders).toHaveLength(2);
     expect(await routes(workspace)).toEqual(["result image: art/a.svg"]);
+  });
+
+  // A CI render that timed out sent the reviewer a packet with images: [] and no word of a picture.
+  it.each(["browser", "picture"] as const)(
+    "are named in the review packet when the %s fails, so a missing image is not read as none",
+    async (answer) => {
+      const workspace = await working();
+      await workspace.write("art/a.svg", svg("red"));
+      raster.answer = answer;
+      expect((await runProductVerify(await workspace.state())).ok).toBe(true);
+      const bundle = await runProductReview(await workspace.state(), {});
+      if (!bundle.ok) throw new Error(bundle.error.message);
+      expect(bundle.value.images).toEqual([]);
+      expect(bundle.value.limitations).toEqual([
+        expect.stringContaining("No image of the product's picture art/a.svg"),
+      ]);
+    },
+  );
+
+  it("add no note when every picture reaches the reviewer", async () => {
+    const workspace = await working();
+    await workspace.write("art/a.svg", svg("red"));
+    expect((await runProductVerify(await workspace.state())).ok).toBe(true);
+    const bundle = await runProductReview(await workspace.state(), {});
+    if (!bundle.ok) throw new Error(bundle.error.message);
+    expect(bundle.value.images).toHaveLength(1);
+    expect(bundle.value.limitations).toBeUndefined();
   });
 });

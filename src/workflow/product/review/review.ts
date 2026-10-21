@@ -21,15 +21,17 @@ import {
   type ProductExecution,
   type ProductOutcome,
   type ProductReviewerContext,
+  type ProductSlice,
   reviewerContextSchema,
 } from "../model.js";
 import type { observationSequence } from "../observation-preview.js";
 import { rulesForRequest } from "../project-rules.js";
 import { regressionScopeLimitations } from "../regression-scope-advice.js";
+import { picturesWithoutImage, pictureWithoutImageNote } from "../result-images.js";
 import { withProductMutation } from "../runtime.js";
 import { selectProductSlice } from "../scopes.js";
 import type { ProductSource, sourceClaims } from "../sources.js";
-import { type ProductSelection, readProductRecord } from "../store.js";
+import { type ProductRecord, type ProductSelection, readProductRecord } from "../store.js";
 import {
   productContractDigest,
   productImplementationDigest,
@@ -235,14 +237,15 @@ async function review(
   const rules = await rulesForRequest(workspace, record.brief.feature);
   const tests = await readTestsRecord(workspace, record.brief.feature);
   if (!tests.ok) return tests;
-  const regressionContext = await regressionScopeLimitations(
+  const limitations = await reviewLimitations(
     workspace,
     record,
     slice,
     snapshot.value,
+    subject.value,
   );
   return ok({
-    ...regressionContext,
+    ...limitations,
     ...assembleReviewBundle({
       workspace,
       rules,
@@ -263,6 +266,20 @@ async function review(
     }),
     ...(tests.value?.ambiguities?.length ? { ambiguities: tests.value.ambiguities } : {}),
   });
+}
+
+/** Regression-scope advice, and each picture the product made that has no image here. */
+async function reviewLimitations(
+  workspace: WorkspaceState,
+  record: ProductRecord,
+  slice: ProductSlice | undefined,
+  snapshot: Record<string, string>,
+  subject: string,
+): Promise<{ limitations?: readonly string[] }> {
+  const regression = await regressionScopeLimitations(workspace, record, slice, snapshot);
+  const pictures = await picturesWithoutImage(workspace, record, snapshot, subject);
+  const limitations = [...(regression.limitations ?? []), ...pictures.map(pictureWithoutImageNote)];
+  return limitations.length ? { limitations } : {};
 }
 
 function reviewerInput(options: ProductReviewOptions, previous?: ProductReviewerContext) {

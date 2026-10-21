@@ -43,9 +43,19 @@ export interface ChromeTransport {
   close(): Promise<void>;
 }
 
-/** New process and profile only. No browser download, user session, or sandbox-disabling flag. */
+/**
+ * New process and profile only. No browser download, user session, or sandbox-disabling flag.
+ * `gpu: false` renders in software: without a GPU, Chrome otherwise composites through
+ * SwiftShader, whose first screenshot took 8-10 s on a loaded 2-core host. Pages that need
+ * WebGL (a game a journey captures) keep the default.
+ */
 export async function launchChrome(
-  options: { binary?: string; startupTimeoutMs?: number; operationTimeoutMs?: number } = {},
+  options: {
+    binary?: string;
+    startupTimeoutMs?: number;
+    operationTimeoutMs?: number;
+    gpu?: boolean;
+  } = {},
 ): Promise<ChromeTransport> {
   const profile = await mkdtemp(join(tmpdir(), "visp-browser-"));
   const binary = options.binary ?? process.env.CHROME_BIN ?? "google-chrome";
@@ -59,6 +69,7 @@ export async function launchChrome(
       "--remote-debugging-port=0",
       "--remote-debugging-address=127.0.0.1",
       `--user-data-dir=${profile}`,
+      ...(options.gpu === false ? ["--disable-gpu"] : []),
       "about:blank",
     ],
     {
