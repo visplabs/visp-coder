@@ -158,6 +158,7 @@ class ImportState {
       const moduleNode = field(node, "module_name");
       const resolution = this.pythonModule(node, moduleNode?.text);
       this.bindPython(node, resolution);
+      if (moduleNode) this.pythonSubmodules(node, moduleNode);
       return false;
     }
     return true;
@@ -174,6 +175,32 @@ class ImportState {
       if (target && specifier && !alias) this.bindings.set(specifier, target);
     }
     return false;
+  }
+
+  /**
+   * `from package import name` imports the submodule `package/name.py` when one exists, as
+   * Python does: the importer depends on it, and a test written this way tests it. A name that
+   * is not a module file adds nothing.
+   */
+  private pythonSubmodules(node: SyntaxNode, moduleNode: SyntaxNode): void {
+    const base = moduleNode.text;
+    for (const child of named(node)) {
+      // Tree-sitter returns a fresh wrapper per access: the module name is told apart by position.
+      if (
+        child.startPosition.row === moduleNode.startPosition.row &&
+        child.startPosition.column === moduleNode.startPosition.column
+      )
+        continue;
+      const imported = child.type === "aliased_import" ? field(child, "name") : child;
+      if (imported?.type !== "dotted_name") continue;
+      const specifier = /^\.+$/.test(base) ? `${base}${imported.text}` : `${base}.${imported.text}`;
+      const resolution = resolvePythonImport(this.context, this.path, specifier);
+      if (resolution.kind !== "file" || this.importedFiles.has(resolution.path)) continue;
+      this.importedFiles.add(resolution.path);
+      this.push(fileEntityId(resolution.path), "imports", lineOf(node));
+      const name = child.type === "aliased_import" ? field(child, "alias")?.text : imported.text;
+      if (name) this.bindings.set(name, resolution.path);
+    }
   }
 
   private pythonModule(node: SyntaxNode, specifier: string | undefined): Resolution | undefined {
