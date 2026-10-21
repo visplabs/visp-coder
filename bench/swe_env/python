@@ -1,0 +1,60 @@
+#!__REAL_PYTHON__ -I
+"""`python`, `python3` and `pytest` for a ChainSWE worker: test runs go to the test environment.
+
+The host Python lacks the project's dependencies, which live in the chain's SWE-bench image.
+A test run (`python -m pytest|unittest ...`, `python tests/runtests.py ...`, `pytest ...`)
+started inside a checkout of the project (the project itself, or a git worktree of it such as
+VISP's old-code copy) runs there through that checkout's ./swe-test, from the same directory,
+with host paths under the checkout mapped to /testbed. Every other call runs the host Python.
+"""
+import os
+import shlex
+import subprocess
+import sys
+
+REAL = "__REAL_PYTHON__"
+TEST_MODULES = {"pytest", "py.test", "unittest"}
+# Interpreter options that take a value, and the runner scripts that are test runs.
+VALUED = {"-W", "-X", "--check-hash-based-pycs"}
+RUNNERS = {"runtests.py"}
+
+
+def is_test_run(name, args):
+    if name in ("pytest", "py.test"):
+        return True
+    items = iter(args)
+    for arg in items:
+        if arg == "-m":
+            return next(items, "") in TEST_MODULES
+        if arg in VALUED:
+            next(items, None)
+        elif arg == "-c" or arg == "-":
+            return False
+        elif not arg.startswith("-"):
+            return os.path.basename(arg) in RUNNERS
+    return False
+
+
+def checkout():
+    """The git top level of the working directory when it holds this project's ./swe-test."""
+    found = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True)
+    top = found.stdout.strip()
+    return top if found.returncode == 0 and top and os.path.isfile(os.path.join(top, "swe-test")) else None
+
+
+def main():
+    name = os.path.basename(sys.argv[0])
+    args = sys.argv[1:]
+    top = checkout() if is_test_run(name, args) else None
+    if not top:
+        os.execv(REAL, [REAL, *args])
+    mapped = ["/testbed" + arg[len(top):] if arg == top or arg.startswith(top + "/") else arg for arg in args]
+    program = "pytest" if name in ("pytest", "py.test") else "python"
+    where = os.path.relpath(os.getcwd(), top)
+    command = shlex.join([program, *mapped])
+    if where != ".":
+        command = f"cd {shlex.quote(where)} && {command}"
+    os.execv(REAL, [REAL, "-I", os.path.join(top, "swe-test"), command])
+
+
+main()
