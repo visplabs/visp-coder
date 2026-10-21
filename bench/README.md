@@ -117,7 +117,7 @@ Bare Claude Haiku 5.5 at high effort (`quality-2026-10`), the worker the chains 
 - `./swe-test` sends the change since `swe-base` to `swe_env/testsvc.py`, which applies it in a fresh networkless container of the chain image and runs the command there. The worker's `python`, `python3` and `pytest` (`swe_env/python`) send test runs (`-m pytest`, `-m unittest`, `runtests.py`, `pytest`) the same way, from any Git worktree of the project, VISP's old-code copy included. Everything else runs on the host Python.
 - After issue k, a fresh container gets the worker's whole change, without the scaffold, the files test patches 1..k touch, and the environment files ChainSWE also drops (`setup.py`, `tox.ini`, `pyproject.toml`, `uv.lock`). It then gets test patches 1..k and runs each distinct test command of issues 1..k with no network. The dataset's `pip install -e .` prefix is dropped: pip needs the network, and the image already has the project installed in place. Results are parsed as ChainSWE parses them (`swe_tests.py`, adapted from its `evaluate.py`).
 - The report's regression measures:
-  - *Steps that broke a passing test*, the primary one. A test that passes before step k and fails after it. Both sides are scored with test patches 1..k: before is the change as step k-1 left it (`before.json`), after is the change after step k (`hidden.json`). This is the gate's question, old code against new.
+  - *Steps that broke a passing test*, the primary one. A test that passes before step k and fails after it. Both sides are scored with test patches 1..k: before is the change as step k-1 left it (`before.json`), after is the change after step k (`hidden.json`). This is the gate's question, old code against new. A break is *visible* when no test patch up to k adds the test function, so the worker's repository has it and a gate could run it.
   - *Earlier tests broken*. A test listed by an earlier issue that passed after step k-1 and fails after step k (`chains.py`). A test that issue k lists in `FAIL_TO_PASS` is not carried into step k: its test patch rewrote that test.
   - *Steps breaking an existing test*. A test listed only as `PASS_TO_PASS` that passes in the `none` run of the chain and fails after the worker's changes.
 - Issue k is *resolved* when all its `FAIL_TO_PASS` and `PASS_TO_PASS` tests pass after step k. It is *strict* (ChainSWE's sequential score) when, in addition, every earlier issue is still resolved and issue k-1 was strict. ChainSWE's validator also fails an issue when any other test of its command fails, or when the bug is already fixed before its step. Neither rule is applied here.
@@ -135,6 +135,27 @@ python3 bench/chainswe.py report --batch cs1 --runs
 ```
 
 Docker is reached through `DOCKER_HOST` (default the system engine, `unix:///var/run/docker.sock`). Images are 3 to 4 GB each before layers are shared. `chainswe.py` removes each run's working copy at the end and keeps `step<k>/{result,hidden}.json`, `step.patch`, `model.patch` and `visp-state.tgz`.
+
+#### Calibration (Oct 21 2026)
+
+Seven chains (`dj16208-5`, `dj13111-5`, `dj14954-3`, `sp9828-5`, `sp8075-5`, `sp8595-5`, `pl6358-4`; 32 issues, 7 images, 18.2 GB), bare, 1 run each.
+
+| Batch | Worker | Resolved at its step | Strict | Steps that broke a passing test (visible) | Earlier tests broken | Worker min per chain (median) | $ per chain |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| csg2 | gold patches | 32/32 | 32/32 | 0/32 | 0/995 | – | – |
+| csg2 | no change | 0/32 | 0/32 | 0/32 | 0/942 | – | – |
+| csc1 | Haiku 5.5 high (`quality-2026-10`) | 21/32 (66%) | 10/32 (31%) | 0/32 (0) | 0/973 | 15.8 | 0.11 |
+| csc2 | Haiku 5.5 low (`quality-2026-10-low`) | 14/32 (44%) | 2/32 (6%) | 0/32 (0) | 0/960 | 6.2 | 0.04 |
+| csc3 | Haiku 4.5 (`default`) | 14/32 (44%) | 4/32 (12%) | 1/32 (0) | 0/964 | 28.6 | 2.89 |
+
+- The strict score falls (66% to 31%, 44% to 6%) because an unresolved issue fails every later strict score, as in ChainSWE. Resolved issues stayed resolved: workers missed by undershooting, with FAIL_TO_PASS tests still failing.
+- The one break was hidden. Haiku 4.5's logging change in `dj16208-5` step 1 broke `test_no_logs_without_debug`, which that issue's hidden test patch adds. No step broke a test the worker's repository had: 0 of 96 bare sessions, and 0 of 8 in two VISP `+gate` smoke runs.
+- Four PASS_TO_PASS tests fail in every arm, already before their step, and with no change too. They encode an earlier issue's gold behaviour that the worker's own fix does not match: these are ChainSWE's chain errors, not regressions.
+- So on these chains the gate has nothing to stop.
+- The smoke runs also show what the gate (develop 9f618a92) selects on these repositories. Earlier accepted features' declared checks rerun as intended. The graph route does little:
+  - the impact walk stops at 25 rows per changed file;
+  - most test files count as black-box (243 of 248 in Sphinx, 721 of 733 in Django) and fill the 12-command cap alphabetically: `js_tests/*.test.js` run with `node`, and empty `__init__.py` files;
+  - Django test files run with `python3 -m unittest` fail on old and new code alike without `tests/runtests.py`.
 
 ### Diff scope
 
