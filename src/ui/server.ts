@@ -23,7 +23,14 @@ import {
   sessionCookie,
   tokensMatch,
 } from "./security.js";
-import { executionView, featureView, healthView, metaView, overviewView } from "./views.js";
+import {
+  evidenceView,
+  executionView,
+  featureView,
+  healthView,
+  metaView,
+  overviewView,
+} from "./views.js";
 import { watchState } from "./watcher.js";
 
 export interface UiServerOptions {
@@ -248,6 +255,11 @@ const ROUTES: readonly (readonly [RegExp, string, Route])[] = [
       withFeature(match[1], (feature) =>
         changeMapView(state, feature, query.get("base") ?? undefined),
       ),
+  ],
+  [
+    /^\/api\/v1\/features\/([^/]+)\/evidence$/,
+    "evidence",
+    (state, match) => withFeature(match[1], (feature) => evidenceView(state, feature)),
   ],
   [
     /^\/api\/v1\/features\/([^/]+)\/executions\/([^/]+)$/,

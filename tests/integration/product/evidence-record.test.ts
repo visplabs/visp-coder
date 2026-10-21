@@ -1,4 +1,10 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import type { UiEnvelope, UiEvidence } from "../../../src/ui/contract.js";
+import { cookieName } from "../../../src/ui/security.js";
+import { startUiServer } from "../../../src/ui/server.js";
 import type { EvidenceRecord } from "../../../src/workflow/product/evidence-record/record-types.js";
 import { runProductReport } from "../../../src/workflow/product/index.js";
 import { changeMapScenario } from "../../unit/support/change-map-scenario.js";
@@ -109,5 +115,28 @@ describe("visp pr evidence record for a feature mid-flight", () => {
     const full = value(await runProductReport(state, { feature: dashboard.active, full: true }));
     expect(full.markdown).toContain("## Not verified");
     expect(full.markdown).toContain("## Independent review");
+  });
+});
+
+describe("the dashboard's Evidence tab", () => {
+  it("is served at /api/v1/features/:id/evidence with the record visp pr prints", async () => {
+    const assets = await mkdtemp(join(tmpdir(), "visp-evidence-assets-"));
+    await writeFile(join(assets, "index.html"), "<!doctype html><title>visp</title>");
+    const server = await startUiServer({ root: mapped.workspace.root, assetsDir: assets });
+    try {
+      const answer = await fetch(
+        `http://127.0.0.1:${server.port}/api/v1/features/${mapped.feature}/evidence`,
+        { headers: { cookie: `${cookieName(server.port)}=${server.token}` } },
+      );
+      const body = (await answer.json()) as UiEnvelope<UiEvidence>;
+      expect(answer.status).toBe(200);
+      expect(body.command).toBe("evidence");
+      const printed = await report(mapped.workspace, mapped.feature);
+      expect(body.data?.record.notVerified).toEqual(printed.record.notVerified);
+      expect(body.data?.markdown.split("\n")[0]).toBe(printed.markdown.split("\n")[0]);
+    } finally {
+      await server.close();
+      await rm(assets, { recursive: true, force: true });
+    }
   });
 });

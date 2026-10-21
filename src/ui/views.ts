@@ -12,7 +12,12 @@ import {
   type ProductExecution,
   type ProductSlice,
 } from "../workflow/product/model.js";
-import { type ProductNext, runProductNext, runProductStatus } from "../workflow/product/status.js";
+import {
+  type ProductNext,
+  runProductNext,
+  runProductReport,
+  runProductStatus,
+} from "../workflow/product/status.js";
 import { type ProductRecord, readProductRecord } from "../workflow/product/store.js";
 import { readTestsRecord } from "../workflow/product/tester/independent-tests-record.js";
 import type { WorkspaceState } from "../workflow/state.js";
@@ -22,6 +27,7 @@ import {
   type FeatureSummary,
   UI_CONTRACT_VERSION,
   type UiCheck,
+  type UiEvidence,
   type UiEvidenceCount,
   type UiExecution,
   type UiExecutionSummary,
@@ -406,6 +412,19 @@ export async function executionView(
       : execution.output,
     truncated,
   });
+}
+
+/** The same record `visp pr` prints, so the tab and the pull request never disagree. */
+export async function evidenceView(
+  state: WorkspaceState,
+  feature: string,
+): Promise<Result<UiEvidence>> {
+  const report = await runProductReport(state, { feature });
+  if (!report.ok) return report;
+  const { record, markdown } = report.value;
+  return record
+    ? ok({ record, markdown })
+    : err(vispError("ARTIFACT_MISSING", `No evidence record for ${feature}: ${markdown.trim()}`));
 }
 
 export async function nextForFeature(

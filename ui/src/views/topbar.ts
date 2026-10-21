@@ -1,6 +1,6 @@
 import type { FeatureSummary, UiFeature } from "../../../src/ui/contract.js";
 import { h, icon } from "../dom.js";
-import type { Actions, AppState, Tab } from "../state.js";
+import { type Actions, type AppState, TABS, type Tab } from "../state.js";
 import { currentTheme } from "../theme.js";
 import { newActivityCount } from "./activity.js";
 
@@ -11,6 +11,7 @@ export const TAB_NAMES: Record<Tab, string> = {
   activity: "Activity",
   handoff: "Handoff",
   map: "Map",
+  evidence: "Evidence",
 };
 
 export function topbar(state: AppState, actions: Actions): HTMLElement {
@@ -97,11 +98,10 @@ function tabs(
         activity: newActivityCount(feature, state.seenBefore[feature.id]),
       }
     : {};
-  const order: Tab[] = ["now", "review", "runs", "activity", "handoff", "map"];
   return h(
     "nav",
     { class: "tabs", "aria-label": "Feature sections" },
-    order.map((tab, index) => {
+    TABS.map((tab, index) => {
       const count = counts[tab] ?? 0;
       return h(
         "a",

@@ -4,6 +4,7 @@ import { currentStage, describeNext, relativeTime, STAGES } from "../format.js";
 import { renderMarkdown } from "../markdown.js";
 import type { Actions, AppState, Tab } from "../state.js";
 import { activityPanel } from "./activity.js";
+import { evidencePanel } from "./evidence.js";
 import { mapPanel } from "./map.js";
 import { nowPanel } from "./now.js";
 import { command, disclosure, resource } from "./parts.js";
@@ -163,6 +164,7 @@ function panel(
   if (tab === "activity") return activityPanel(feature, state, actions);
   if (tab === "handoff") return handoffPanel(feature, actions);
   if (tab === "map") return mapPanel(feature, state, actions);
+  if (tab === "evidence") return evidencePanel(feature, state, actions);
   return nowPanel(feature, state, actions);
 }
 
@@ -178,9 +180,9 @@ function handoffPanel(feature: UiFeature, actions: Actions): HTMLElement {
       h(
         "p",
         null,
-        "The reviewer document, built from recorded evidence. It's what ",
-        h("code", null, "visp pr"),
-        " prints for the pull request.",
+        "The full handoff document, built from recorded evidence. ",
+        h("code", null, "visp pr --full"),
+        " prints it after the evidence record.",
       ),
       copy,
     ),
