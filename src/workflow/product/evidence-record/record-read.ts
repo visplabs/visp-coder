@@ -42,7 +42,11 @@ export async function productEvidenceRecord(
       ...(report ? { report } : {}),
     },
     changes: evidenceChanges(record, diff, earlierWork, workspace.overrides, readAt),
-    activity: { reviewerLaunched: reviewer.length, testerSessions: tester.length },
+    activity: {
+      reviewerLaunched: reviewer.length,
+      // A tester launched by the host, or by a build before the log, leaves only its record.
+      testerSessions: Math.max(tester.length, tests.ok && tests.value ? 1 : 0),
+    },
     outsideAccess: {
       webSearches: reviewer.flatMap((entry) =>
         (entry.webSearches ?? []).map((query) => ({ at: entry.at ?? "", query })),

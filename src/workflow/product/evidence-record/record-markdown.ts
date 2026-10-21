@@ -11,6 +11,7 @@ import type {
 
 const GAPS_SHOWN = 15;
 const FILES_SHOWN = 12;
+const REQUEST_LINES_SHOWN = 12;
 
 /**
  * The record as one page a reviewer can paste into a pull request: what is not verified
@@ -80,7 +81,7 @@ function askedSection(record: EvidenceRecord): string[] {
   return [
     "## Asked",
     "",
-    ...asked.request.split("\n").map((line) => `> ${line}`.trimEnd()),
+    ...requestLines(asked.request),
     "",
     ...asked.requirements.map(
       (requirement) =>
@@ -96,6 +97,19 @@ function askedSection(record: EvidenceRecord): string[] {
         ]
       : []),
     "",
+  ];
+}
+
+/** A long request is folded so the page stays about one screen; it is still verbatim. */
+function requestLines(request: string): string[] {
+  const quoted = request.split("\n").map((line) => `> ${line}`.trimEnd());
+  if (quoted.length <= REQUEST_LINES_SHOWN) return quoted;
+  return [
+    `<details><summary>The request (${quoted.length} lines)</summary>`,
+    "",
+    ...quoted,
+    "",
+    "</details>",
   ];
 }
 

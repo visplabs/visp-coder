@@ -189,6 +189,15 @@ describe("renderEvidenceRecord", () => {
     expect(renderEvidenceRecord(record())).toContain("> Sum the amounts.\n> Not the rows.");
   });
 
+  it("folds a long request into a details block, still verbatim", () => {
+    const request = Array.from({ length: 20 }, (_, index) => `Line ${index}`).join("\n");
+    const base = record();
+    const text = renderEvidenceRecord(record({ asked: { ...base.asked, request } }));
+    expect(text).toContain("<details><summary>The request (20 lines)</summary>");
+    expect(text).toContain("> Line 0\n> Line 1");
+    expect(text).toContain("> Line 19");
+  });
+
   it("shows a stale run as stale, with when it last ran, never as passed", () => {
     const row = renderEvidenceRecord(record())
       .split("\n")
