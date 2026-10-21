@@ -13,14 +13,20 @@ runs whose score file is missing or holds a failed judge call.
 
 Every task kind has required scores: the hidden pass rate where the task has hidden checks, the
 judge's overall score and checklist passes for the visual tasks and games, and the code-quality
-score for every task but the visual ones. A run with no output scores the minimum (no hidden
+score for every task but the visual ones. A chain task (chains.py) also requires `kept`, the share
+of carried checks (earlier steps' checks that had passed) that no later step broke; its hidden
+rate is the final project's on every step's checks, and its code score is on the cumulative change. A run with no output scores the minimum (no hidden
 result: 0; no image or no index.html: judge 1, no checklist item). A run whose score is missing
 or whose judge call failed has no score: its task is incomplete until --score scores it.
 
 Per run: those scores, wall time, the worker's time split (runfacts.py: model, visp, own
 commands, idle, and the Oct 13 legacy idle), VISP reviews run and unavailable, pictures delivered
 to the reviewer, hook refusals and timeouts. Per task x arm: means of the scores, medians of the
-times, sums of the counts.
+times, sums of the counts. Chain tasks get their own table: chains with a regression, earlier
+checks broken at any later step (unique, pooled over the arm's chains), regressions per carried
+check evaluation, final hidden rate, code score, wall time and cost per chain; --runs adds one
+row per step. Brownfield tasks with a reference (diffscope.py) get the diff scope: lines changed
+against the reference change, and edits to existing files the reference left unchanged.
 
 Paired comparison: the first arm in the manifest (or --base) against each other arm, per task.
 A task is incomplete (and fails) unless both arms have the same number of valid runs, at least
@@ -45,14 +51,17 @@ import statistics
 import subprocess
 import sys
 
+from chains import is_chain, run_summary
 from common import RUNS
+from diffscope import run_scope
 from judge import CHECKLISTS, GAMES
 from runfacts import final_project, invalid, is_finished, mark_if_invalid, sessions, timing, transcripts
 
 BENCH = pathlib.Path(__file__).resolve().parent
 SLOWER = 0.15
 IDLE_FLOOR = 60
-SCORES = ("hidden", "judge", "checklist", "code")
+SCORES = ("hidden", "kept", "judge", "checklist", "code")
+SHARES = ("hidden", "kept")
 
 
 def load(path):
@@ -67,6 +76,8 @@ def required(task):
     needed = []
     if (BENCH / "tasks" / task / "hidden_test.py").exists():
         needed.append("hidden")
+    if is_chain(task):
+        needed.append("kept")
     if task in CHECKLISTS:
         needed += ["judge", "checklist"]
     if task not in CHECKLISTS or task in GAMES:
@@ -144,7 +155,7 @@ def facts(entry):
     project = final_project(run)
     needed = required(entry["task"])
     row = {"run": entry["name"], "task": entry["task"], "arm": entry["label"], "rep": entry["rep"],
-           "hidden": None, "hiddenText": None, "judge": None, "checklist": None, "checklistText": None,
+           "hidden": None, "hiddenText": None, "kept": None, "judge": None, "checklist": None, "checklistText": None,
            "code": None, "codeCriteria": None, "problems": []}
     if "hidden" in needed:
         row["hidden"], row["hiddenText"], problem = hidden_score(project)
@@ -155,12 +166,18 @@ def facts(entry):
     if "code" in needed:
         row["code"], row["codeCriteria"], problem = code_score(project)
         row["problems"] += [problem] if problem else []
+    chain = run_summary(run) if is_chain(entry["task"]) else None
+    if "kept" in needed:
+        row["kept"] = chain["kept"] if chain else None
+        row["problems"] += [] if chain else ["no chain step results"]
     reviewed, unavailable, pictures = reviews(project)
     cost, critic_cost = call_costs(run)
     split = timing(transcripts(run))
     stage1 = load(run / "session1" / "hidden-stage1.json") if entry["twoSessions"] else None
+    scope = run_scope(run, entry["task"], project)
     return {
         **row,
+        "chain": chain, "diffScope": scope,
         "stage1": f"{stage1['passed']}/{stage1['total']}" if stage1 and "passed" in stage1 else None,
         "wall": sum(r.get("seconds") or 0 for r in results),
         "timedOut": any(r.get("timedOut") for r in results),
@@ -234,9 +251,35 @@ def median(values):
     return round(statistics.median(values), 1) if values else None
 
 
+def chain_totals(rows):
+    """Regression facts pooled over a task x arm's chains, or {} for other tasks."""
+    chains = [r["chain"] for r in rows if r.get("chain")]
+    if not chains:
+        return {}
+    carried = sum(chain["carriedChecks"] for chain in chains)
+    evaluations = sum(chain["carriedEvaluations"] for chain in chains)
+    return {
+        "chains": len(chains), "regressedChains": sum(chain["regressed"] for chain in chains),
+        "brokenChecks": sum(len(chain["brokenChecks"]) for chain in chains), "carriedChecks": carried,
+        "brokenShare": round(sum(len(chain["brokenChecks"]) for chain in chains) / carried, 4) if carried else None,
+        "regressionEvents": sum(chain["regressionEvents"] for chain in chains), "carriedEvaluations": evaluations,
+        "eventShare": round(sum(chain["regressionEvents"] for chain in chains) / evaluations, 4) if evaluations else None,
+    }
+
+
+def scope_totals(rows):
+    """Median lines-changed ratio and mean unneeded edits over the runs with a diff scope."""
+    scoped = [r["diffScope"]["total"] for r in rows if r.get("diffScope")]
+    if not scoped:
+        return {}
+    return {"scopeRatio": median(s["ratio"] for s in scoped), "unneededEdits": mean(s["unneededEdits"] for s in scoped),
+            "scoped": len(scoped)}
+
+
 def summarize(rows, needed):
     """Means and medians over a task x arm's valid runs; `missing` lists runs without a required score."""
     return {
+        **chain_totals(rows), **scope_totals(rows), "kept": mean(r["kept"] for r in rows),
         "n": len(rows), "required": needed,
         "missing": [f"{r['run']}: {problem}" for r in rows for problem in r["problems"]],
         "hidden": mean(r["hidden"] for r in rows), "judge": mean(r["judge"] for r in rows),
@@ -284,7 +327,7 @@ def compare(base, cand, base_label, cand_label):
 def fmt(value, metric=None):
     if value is None:
         return "–"
-    if metric == "hidden":
+    if metric in SHARES:
         return f"{value * 100:.1f}%"
     return f"{value:g}" if isinstance(value, (int, float)) else str(value)
 
@@ -315,10 +358,11 @@ def markdown(manifest, rows, groups, comparisons, excluded, unfinished, show_run
             for reason in verdict["reasons"]:
                 out.append(f"| {task} | – | – | – | – | {reason} | incomplete |")
             for metric, base, value, delta, rule, ok in verdict["checks"]:
-                shown = fmt(delta * 100 if metric == "hidden" and delta is not None else delta)
+                share = metric in SHARES and delta is not None
+                shown = fmt(delta * 100 if share else delta)
                 out.append(f"| {task} | {metric} | {fmt(base, metric)} | {fmt(value, metric)} | "
-                           f"{shown}{' pp' if metric == 'hidden' and delta is not None else ''} | {rule} | "
-                           f"{'pass' if ok else 'FAIL'} |")
+                           f"{shown}{' pp' if share else ''} | {rule} | {'pass' if ok else 'FAIL'} |")
+    out += chain_markdown(rows, groups, show_runs) + scope_markdown(rows, groups, show_runs)
     if excluded:
         out += ["", "Invalid runs, excluded:", ""]
         out += [f"- {name}: {reason}" for name, reason in excluded]
@@ -336,6 +380,63 @@ def markdown(manifest, rows, groups, comparisons, excluded, unfinished, show_run
                        f"{r['reviewed']}/{r['unavailable']} | {r['pictures']} | {fmt(r['refusals'])} | "
                        f"{'yes' if r['timedOut'] else 'no'} | {fmt(r['cost'])} | {'; '.join(r['problems']) or '–'} |")
     return "\n".join(out) + "\n"
+
+
+def share(part, whole):
+    return f"{part}/{whole} ({part / whole * 100:.1f}%)" if whole else "–"
+
+
+def chain_markdown(rows, groups, show_runs):
+    """The regression table for chain tasks, and with --runs one row per step."""
+    chained = {key: s for key, s in groups.items() if s.get("chains")}
+    if not chained:
+        return []
+    out = ["", "### Chains", "", "| Task | Arm | Chains | With a regression | Earlier checks broken | Regressions per "
+           "carried check | Kept | Final hidden | Code | Wall s | Cost $ |", "| --- | --- | --- | --- | --- | --- | --- | --- "
+           "| --- | --- | --- |"]
+    for (task, arm), s in chained.items():
+        out.append(f"| {task} | {arm} | {s['chains']} | {share(s['regressedChains'], s['chains'])} | "
+                   f"{share(s['brokenChecks'], s['carriedChecks'])} | {share(s['regressionEvents'], s['carriedEvaluations'])} "
+                   f"| {fmt(s['kept'], 'kept')} | {fmt(s['hidden'], 'hidden')} | {fmt(s['code'])} | {fmt(s['wall'])} | "
+                   f"{fmt(s['cost'])} |")
+    out += ["", "A carried check is an earlier step's check (step 0: the starting contract) that passed before a later "
+            "step; it regresses when it fails after that step. Earlier checks broken counts each check once, at any "
+            "later step; regressions per carried check counts every step's carried checks. Wall time is the median "
+            "over the chain's sessions summed, cost the mean per chain."]
+    if show_runs:
+        out += ["", "| Run | Step | Hidden | New checks | Carried | Regressions | Lines / reference | Unneeded edits |",
+                "| --- | --- | --- | --- | --- | --- | --- | --- |"]
+        for r in rows:
+            if not r.get("chain"):
+                continue
+            scopes = {step["step"]: step for step in (r.get("diffScope") or {}).get("steps", [])}
+            for step in r["chain"]["steps"]:
+                found = scopes.get(step["step"], {})
+                out.append(f"| {r['run']} | {step['step']} | {step['passed']}/{step['total']} | "
+                           f"{step['newPassed']}/{step['newTotal']} | {step['carried']} | "
+                           f"{'; '.join(step['regressions']) or '–'} | "
+                           f"{found.get('lines', '–')}/{found.get('referenceLines', '–')} | "
+                           f"{', '.join(found.get('unneededEdits', [])) or '–'} |")
+    return out
+
+
+def scope_markdown(rows, groups, show_runs):
+    scoped = {key: s for key, s in groups.items() if s.get("scoped")}
+    if not scoped:
+        return []
+    out = ["", "### Diff scope", "", "| Task | Arm | Runs | Lines changed / reference (median) | Edits to files the "
+           "reference left unchanged (mean) |", "| --- | --- | --- | --- | --- |"]
+    out += [f"| {task} | {arm} | {s['scoped']} | {fmt(s['scopeRatio'])} | {fmt(s['unneededEdits'])} |"
+            for (task, arm), s in scoped.items()]
+    out += ["", "Lines added plus removed outside tests, over the product's own files (the code judge's view), against "
+            "the reference change for the same request; per step for chains, summed. An unneeded edit changes or "
+            "deletes a file that existed before and that the reference change left alone."]
+    if show_runs:
+        out += ["", "| Run | Lines | Reference lines | Ratio | Test lines | Unneeded edits |", "| --- | --- | --- | --- | --- | --- |"]
+        out += [f"| {r['run']} | {r['diffScope']['total']['lines']} | {r['diffScope']['total']['referenceLines']} | "
+                f"{fmt(r['diffScope']['total']['ratio'])} | {r['diffScope']['total']['testLines']} | "
+                f"{r['diffScope']['total']['unneededEdits']} |" for r in rows if r.get("diffScope")]
+    return out
 
 
 def load_batch(name, score=False, score_jobs=3):
