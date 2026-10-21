@@ -8,6 +8,10 @@ const cases = [
   ["cd packages/pkg && node --test test/value.test.mjs", "packages/pkg/test/value.test.mjs"],
   ["python3 tests/runtests.py utils_tests.test_text", "tests/utils_tests/test_text.py"],
   ["python3 -B tests/runtests.py utils_tests.test_text", "tests/utils_tests/test_text.py"],
+  [
+    "./swe-test ./tests/runtests.py --parallel 1 auth_tests.test_management",
+    "tests/auth_tests/test_management.py",
+  ],
   ["env --cd packages/pkg node --test ./test/value.test.mjs", "packages/pkg/test/value.test.mjs"],
   [
     "env --cd=packages/pkg PYTHONPATH=src python -m unittest tests.test_value.TestValue",

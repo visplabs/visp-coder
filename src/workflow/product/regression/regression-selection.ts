@@ -1,63 +1,46 @@
-import { isExternalRef } from "../../../graph/constants.js";
-import { isApplicationSource } from "../../../graph/coverage-notes.js";
-import {
-  isTestPath,
-  openProjectStore,
-  pathOfEntityId,
-  queryGraph,
-  refreshRepository,
-} from "../../../graph/index.js";
-import { getQueryIndex } from "../../../graph/query/index.js";
 import type { WorkspaceState } from "../../state.js";
 import { pinnedAcceptanceChecks } from "../check/acceptance-checks.js";
 import { describeProductCheck, isBrowserCheckCommand } from "../check/check-command.js";
 import { waiverEnvironment } from "../check/check-execution.js";
 import { checksFor, closedSlice, type ProductCheck, type ProductSlice } from "../model.js";
-import { namesExistingTest } from "../regression-command-matching.js";
 import type { ProductAuthorization } from "../scopes.js";
-import { MISSING_SOURCE_ENTRY } from "../source-entry.js";
 import { type ProductRecord, readProductRecord } from "../store.js";
-import { productSourceChanges } from "../subject.js";
 import { pinnedWaivers } from "../tester/pinned-dispute-model.js";
-import { testFileCommand, testRunnerFacts } from "./regression-runner.js";
+import { changeCandidates, projectRunners } from "./regression-coverage.js";
 
 /** One command the gate may run: an existing test file, or an earlier declared or pinned check. */
 export interface RegressionCandidate {
   /** How the report names it: a test path, a check id, or `<feature> <check id>`. */
   readonly label: string;
-  readonly origin: "graph" | "feature" | "earlier-feature";
+  readonly origin: "graph" | "convention" | "unlinked" | "feature" | "earlier-feature";
   readonly check: ProductCheck;
   readonly extraEnvironment?: Record<string, string>;
-  /** Graph hops from a changed file to the test. */
+  /** How far the test is from a changed file: import hops, or a convention's strength. */
   readonly distance?: number;
 }
 
-/** Hops the impact walk follows from a changed file: its tests, its importers' tests, and one more. */
-const GRAPH_DEPTH = 3;
-/**
- * A test file that imports no application code (it drives the product through a subprocess or
- * HTTP) may exercise any changed file, so the graph cannot rule it out; it ranks after linked tests.
- */
-const BLACK_BOX = GRAPH_DEPTH + 1;
 /** Accepted features whose tests the gate considers, newest first. */
 const EARLIER_FEATURES = 10;
 
+const RANK: Record<RegressionCandidate["origin"], number> = {
+  graph: 0,
+  convention: 0,
+  feature: 1,
+  "earlier-feature": 2,
+  unlinked: 4,
+};
+
 /**
  * Direct tests of the changed files first, then this feature's earlier slices, then earlier
- * accepted features (newest first), then tests further away in the graph. One command runs once.
+ * accepted features (newest first), then tests further from the change, then tests linked to
+ * no code. One command runs once.
  */
 export function selectRegressionCandidates(
   candidates: readonly RegressionCandidate[],
   max: number,
 ): { selected: RegressionCandidate[]; overCap: RegressionCandidate[] } {
   const rank = (entry: RegressionCandidate) =>
-    entry.origin === "graph"
-      ? (entry.distance ?? GRAPH_DEPTH) <= 1
-        ? 0
-        : 3
-      : entry.origin === "feature"
-        ? 1
-        : 2;
+    RANK[entry.origin] === 0 && (entry.distance ?? 1) > 1 ? 3 : RANK[entry.origin];
   const ordered = candidates
     .map((entry, index) => ({ entry, index }))
     .sort(
@@ -93,133 +76,19 @@ export async function regressionCandidates(
   const fresh = (entry: RegressionCandidate) =>
     !isBrowserCheckCommand(entry.check.command) &&
     !ranCommands.has(describeProductCheck(entry.check));
-  const graph = await graphCandidates(workspace, auth, snapshot, [...ranCommands]);
   const feature = await featureCandidates(workspace, record, slice);
   const earlier = await earlierFeatureCandidates(workspace, record.brief.feature);
+  // Tests run through the project's own runner, as the checks this call and earlier work declared.
+  const runners = projectRunners(workspace.paths.root, [
+    ...ran,
+    ...[...feature, ...earlier].map((entry) => entry.check),
+  ]);
+  const change = await changeCandidates(workspace, auth, snapshot, [...ranCommands], runners);
   return {
-    candidates: [...graph.candidates, ...feature, ...earlier].filter(fresh),
-    notes: graph.notes,
-    blind: graph.blind,
+    candidates: [...change.candidates, ...feature, ...earlier].filter(fresh),
+    notes: change.notes,
+    blind: change.blind,
   };
-}
-
-async function graphCandidates(
-  workspace: WorkspaceState,
-  auth: ProductAuthorization | undefined,
-  snapshot: Record<string, string>,
-  ranCommands: readonly string[],
-): Promise<{ candidates: RegressionCandidate[]; notes: string[]; blind: boolean }> {
-  const blind = (note: string) => ({ candidates: [], notes: [note], blind: true });
-  if (!auth) return blind("no baseline of the code before this work, so its changes are unknown");
-  const changes = await productSourceChanges(workspace, auth.baseline, snapshot);
-  if (!changes.ok) return blind(`changed files unknown: ${changes.error.message}`);
-  const changed = changes.value.filter(isApplicationSource);
-  if (!changed.length) return { candidates: [], notes: [], blind: false };
-  const tests = await coveringTests(workspace, changed);
-  if (!tests.ok) return blind(`graph unavailable: ${tests.reason}`);
-  const existed = (path: string) =>
-    auth.baseline[path] !== undefined && auth.baseline[path] !== MISSING_SOURCE_ENTRY;
-  const found = new Map(tests.found);
-  for (const path of tests.blackBox) if (!found.has(path)) found.set(path, BLACK_BOX);
-  const paths = [...found]
-    .filter(
-      ([path]) =>
-        existed(path) &&
-        !ranCommands.some((command) => namesExistingTest(command, path, workspace.paths.root)),
-    )
-    .sort(([a], [b]) => a.localeCompare(b));
-  const runnable = await testFileCandidates(workspace, paths);
-  const uncovered = tests.uncovered.length === 1 ? tests.uncovered[0] : undefined;
-  return {
-    candidates: runnable.candidates,
-    notes: [
-      ...runnable.notes,
-      ...(tests.uncovered.length
-        ? [
-            `no existing test reaches ${uncovered ?? `${tests.uncovered.length} changed files`} in the graph`,
-          ]
-        : []),
-    ],
-    blind: false,
-  };
-}
-
-/** A command for each test file, run the way its project runs tests, or a note why not. */
-async function testFileCandidates(
-  workspace: WorkspaceState,
-  paths: readonly (readonly [string, number])[],
-): Promise<{ candidates: RegressionCandidate[]; notes: string[] }> {
-  const facts = await testRunnerFacts(workspace.paths.root);
-  const candidates: RegressionCandidate[] = [];
-  const notes: string[] = [];
-  for (const [path, distance] of paths) {
-    const source = await workspace.files.readTextIfExists(path);
-    const command = source.ok ? testFileCommand(path, source.value ?? "", facts) : undefined;
-    if (command)
-      candidates.push({
-        label: path,
-        origin: "graph",
-        distance,
-        check: { id: "REGRESSION", command, outcomes: [], files: [path], environment: "other" },
-      });
-    else notes.push(`no known way to run ${path}`);
-  }
-  return { candidates, notes };
-}
-
-/**
- * Test files within GRAPH_DEPTH hops of each changed file, and test files that import no
- * application code, from a refreshed index.
- */
-async function coveringTests(
-  workspace: WorkspaceState,
-  changed: readonly string[],
-): Promise<
-  | { ok: true; found: Map<string, number>; uncovered: string[]; blackBox: string[] }
-  | { ok: false; reason: string }
-> {
-  const indexed = await refreshRepository(
-    workspace.paths.root,
-    workspace.config.graph,
-    workspace.paths.graphStore,
-  );
-  if (!indexed.ok) return { ok: false, reason: indexed.error.message };
-  const store = await openProjectStore(workspace.files, workspace.paths.graphStore, {
-    writable: false,
-  });
-  if (!store.ok) return { ok: false, reason: store.error.message };
-  try {
-    const found = new Map<string, number>();
-    const uncovered: string[] = [];
-    for (const path of changed) {
-      const impact = queryGraph(store.value, "impact", { path }, { depth: GRAPH_DEPTH });
-      if (!impact.ok) return { ok: false, reason: impact.error.message };
-      const tests = impact.value.rows.filter((row) => isTestPath(row.path));
-      if (!tests.length) uncovered.push(path);
-      for (const row of tests) {
-        const distance = row.distance ?? GRAPH_DEPTH;
-        found.set(row.path, Math.min(found.get(row.path) ?? distance, distance));
-      }
-    }
-    const index = getQueryIndex(store.value);
-    if (!index.ok) return { ok: false, reason: index.error.message };
-    const linked = new Set(
-      index.value.snapshot.relations
-        .filter(
-          (relation) =>
-            relation.kind === "imports" &&
-            !isExternalRef(relation.target) &&
-            isApplicationSource(pathOfEntityId(relation.target)),
-        )
-        .map((relation) => relation.path),
-    );
-    const blackBox = index.value.snapshot.files
-      .map((file) => file.path)
-      .filter((path) => isTestPath(path) && !linked.has(path));
-    return { ok: true, found, uncovered, blackBox };
-  } finally {
-    store.value.close();
-  }
 }
 
 /** This feature's pinned suite and the checks of its other closed slices. */

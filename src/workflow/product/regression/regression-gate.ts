@@ -31,6 +31,7 @@ import {
 import {
   type RegressionGateReport,
   type RegressionGateResult,
+  type RegressionSelection,
   readRegressionGate,
 } from "./regression-report.js";
 import {
@@ -114,6 +115,7 @@ export async function runRegressionGate(
     key,
     status: overallStatus(results, found.blind),
     results,
+    selection: selectionOf(entries.map((entry) => entry.candidate)),
     leftOut: [
       ...found.notes,
       ...(overCap.length
@@ -153,6 +155,16 @@ function overallStatus(
   return blind || !results.length || results.some((result) => result.status === "unchecked")
     ? "unchecked"
     : "clear";
+}
+
+function selectionOf(candidates: readonly RegressionCandidate[]): RegressionSelection {
+  const count = (...origins: RegressionCandidate["origin"][]) =>
+    candidates.filter((candidate) => origins.includes(candidate.origin)).length;
+  return {
+    linked: count("graph", "convention"),
+    earlierWork: count("feature", "earlier-feature"),
+    unlinked: count("unlinked"),
+  };
 }
 
 function labels(entries: readonly RegressionCandidate[]) {
