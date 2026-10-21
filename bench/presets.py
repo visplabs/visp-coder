@@ -44,6 +44,33 @@ PRESETS = {
 }
 
 
+# VISP workflow modes an arm can add with `visp:<build>+<mode>`: visp.yml `workflow` keys. The
+# mode is part of the arm, not the preset, so a batch compares it with the default on one preset.
+VISP_MODES = {
+    # Lean mode (docs/workflow.md#lean-mode): draft pictures first, one review per feature with at
+    # most two rounds unless required findings remain, and gaps against the request required.
+    "lean": {"draftFirst": "visual", "reviewCadence": "feature", "requestGaps": "required"},
+}
+
+
+def visp_build(arm):
+    """The build and workflow mode of a VISP arm: `visp:visp-cand+lean` -> ("visp-cand", "lean")."""
+    build, _, mode = arm.split(":", 1)[1].partition("+")
+    if mode and mode not in VISP_MODES:
+        raise SystemExit(f"unknown VISP mode {mode}; known: {', '.join(VISP_MODES)}")
+    return build, mode or None
+
+
+def workflow_yaml(config, mode):
+    """visp.yml with the mode's workflow keys added under `workflow:`, as `visp init` writes it."""
+    if not mode:
+        return config
+    if "\nworkflow:\n" not in config:
+        raise SystemExit("setup failed: visp.yml has no workflow block for the VISP mode")
+    keys = "".join(f"  {key}: {value}\n" for key, value in VISP_MODES[mode].items())
+    return config.replace("\nworkflow:\n", f"\nworkflow:\n{keys}", 1)
+
+
 def preset(name):
     if name not in PRESETS:
         raise SystemExit(f"unknown preset {name}; known: {', '.join(PRESETS)}")

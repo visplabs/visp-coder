@@ -77,6 +77,12 @@ const operationNotes: Readonly<Record<string, string>> = {
   "workflow.blockedPaths": "Blocks matching paths in product scope and source access.",
   "workflow.validationCommands":
     "Runs configured project checks during product verification; results are evidence, not review judgments.",
+  "workflow.draftFirst":
+    "Lean mode: visual authorizes a picture request as one slice at visp work, before any check, so the whole picture is drafted first.",
+  "workflow.reviewCadence":
+    "Lean mode: feature reviews only the slice that completes the feature and stops after two reviews unless required findings remain.",
+  "workflow.requestGaps":
+    "Lean mode: required makes reviewer findings tagged as gaps against the request required and shows other findings as notes.",
   "graph.languages":
     "Selects languages for indexing; a configured language does not prove an index is current.",
   "graph.exclude": "Excludes matching repository paths from graph indexing.",
@@ -87,7 +93,7 @@ const operationNotes: Readonly<Record<string, string>> = {
     "Limits source excerpts in product context; does not limit all evidence or skill entries.",
   "memory.enabled": "Enables relevant project-memory recall; recalled notes remain advisory.",
   "memory.recall":
-    "With a VISP-launched reviewer and no memory service, selects relevant earlier requests for each new feature.",
+    "With a reviewer VISP launches (codex-exec or claude-exec) and no memory service, its model selects relevant earlier requests for each new feature; a reviewer the host runs recalls nothing.",
   "memory.service.command":
     "Executable used to record earlier requests and retrieve relevant decisions from Visp Memory.",
   "memory.service.select": "Chooses reviewer-model or keyword selection of Visp Memory candidates.",

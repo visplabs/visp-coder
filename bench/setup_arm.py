@@ -2,7 +2,7 @@
 
 Usage: setup_arm.py <task> <arm> <run_name> [--skill <id>]... [--preset default]
 arm: bare | speckit | bmad | visp:<build> (Claude Code worker) | visp-codex:<build> (Codex worker)
-<build> is a name given to build_visp.sh. --skill seeds and admits a bundled VISP skill, so an
+<build> is a name given to build_visp.sh; `visp:<build>+lean` adds a workflow mode from presets.py. --skill seeds and admits a bundled VISP skill, so an
 arm with it differs from one without only by that skill. --preset (presets.py) sets VISP's
 reviewer and tester and is recorded in arm.json, where the runners read the worker model.
 
@@ -21,7 +21,7 @@ import shutil
 import subprocess
 
 from common import RUNS
-from presets import critic_yaml, preset
+from presets import critic_yaml, preset, visp_build, workflow_yaml
 
 BENCH = pathlib.Path(__file__).resolve().parent
 parser = argparse.ArgumentParser()
@@ -94,7 +94,8 @@ elif arm == "bmad":
 elif arm.startswith("visp:") or arm.startswith("visp-codex:"):
     # visp-codex installs the Codex instructions for a Codex worker; the reviewer is Codex either way.
     host = "codex" if arm.startswith("visp-codex:") else "claude-code"
-    shim = RUNS / "shims" / arm.split(":", 1)[1]
+    build, mode = visp_build(arm)
+    shim = RUNS / "shims" / build
     shim_dir = str(shim)
     env["PATH"] = f"{shim}:{env['PATH']}"
     sh(["visp", "init", "--harness", host, "--json"])
@@ -104,7 +105,7 @@ elif arm.startswith("visp:") or arm.startswith("visp-codex:"):
     config = config.replace("critic:\n  harness: claude-code", critic)
     if args.preset != "default" and critic not in config:
         raise SystemExit(f"setup failed: visp.yml has no critic block to replace for preset {args.preset}")
-    (root / "visp.yml").write_text(config)
+    (root / "visp.yml").write_text(workflow_yaml(config, mode))
     sh(["visp", "install", "--harness", host, "--json"])
     for skill in args.skill:
         sh(["visp", "skill", "seed", skill, "--by", "bench"])

@@ -7,9 +7,13 @@ import { TestWorkspace } from "../../support/workspace.js";
 
 // The model call is replaced: these tests cover which path `visp feature` takes.
 const extractor = vi.fn();
+const extractorModel = vi.fn();
 vi.mock("../../../../src/workflow/product/rule-extraction.js", async (importOriginal) => ({
   ...(await importOriginal<object>()),
-  codexRuleExtractor: () => extractor,
+  reviewerRuleExtractor: (reviewer: unknown) => {
+    extractorModel(reviewer);
+    return extractor;
+  },
 }));
 
 const { createProductFeature } = await import("../../../../src/workflow/product/feature-create.js");
@@ -18,6 +22,7 @@ let workspace: TestWorkspace | undefined;
 
 afterEach(() => {
   extractor.mockReset();
+  extractorModel.mockReset();
   workspace = undefined;
 });
 
@@ -81,6 +86,25 @@ it("records the rules the reviewer's model quotes from all recorded prompts", as
     "Scratch that: from now on use four spaces.",
   ]);
   expect(await recorded()).toEqual(["Use four spaces for indentation."]);
+});
+
+// Phrase matching found 4 of 18 rule statements in a held-out set; the model found 18.
+it("reads the rules with a VISP-launched Claude reviewer's model", async () => {
+  await project({
+    enabled: true,
+    harness: "claude-code",
+    launch: "claude-exec",
+    model: "claude-sonnet-5-5",
+  });
+  extractor.mockResolvedValue([
+    { rule: "Every money field ends in Cents.", quote: "money fields end in Cents" },
+  ]);
+  await feature("Prices", "House style for this API: money fields end in Cents.");
+  expect(extractorModel).toHaveBeenCalledWith({
+    launch: "claude-exec",
+    model: "claude-sonnet-5-5",
+  });
+  expect(await recorded()).toEqual(["Every money field ends in Cents."]);
 });
 
 it("falls back to phrase matching when the model fails", async () => {

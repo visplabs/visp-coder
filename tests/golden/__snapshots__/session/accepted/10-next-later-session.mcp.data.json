@@ -1,0 +1,18 @@
+{
+  "tool": "visp_next",
+  "ok": true,
+  "data": {
+    "action": "understand",
+    "objective": "The user's latest message came after 001-return-two-from-the-public was accepted, and no feature has taken it. If it asks for a change, start it as its own feature",
+    "command": "visp feature \"<the user's request>\"",
+    "evidence": [],
+    "mayEdit": false
+  },
+  "nextCommand": "visp_feature {\"goal\":\"<the user's request>\"}",
+  "nextAction": {
+    "tool": "visp_feature",
+    "arguments": {
+      "goal": "<the user's request>"
+    }
+  }
+}

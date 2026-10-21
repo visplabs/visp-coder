@@ -35,6 +35,21 @@ const workflowSchema = z
      * the old implementation, repeating its external side effects. Never an acceptance gate; off stops it.
      */
     flipCheck: z.enum(["off", "auto", "on"]).default("auto"),
+    /**
+     * Lean mode. `visual`: a picture request is authorized as one slice at `visp work` without a
+     * check, so the worker drafts the whole picture before declaring its check.
+     */
+    draftFirst: z.enum(["off", "visual"]).default("off"),
+    /**
+     * Lean mode. `feature`: only the slice that completes the feature is reviewed, and a review
+     * after the second runs only while required findings remain open.
+     */
+    reviewCadence: z.enum(["slice", "feature"]).default("slice"),
+    /**
+     * Lean mode. `required`: a reviewer finding tagged as a gap against the request is required;
+     * other findings reach the worker as notes it is not asked to act on.
+     */
+    requestGaps: z.enum(["reviewer", "required"]).default("reviewer"),
   })
   .strict()
   .default({});

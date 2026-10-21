@@ -303,7 +303,10 @@ async function verificationProgress(
     subject,
     slice,
     workspace.config.workflow.reviewMode,
-    { reviewer: await reviewerPointer(workspace, record.brief.feature, subject, slice?.id) },
+    {
+      reviewer: await reviewerPointer(workspace, record.brief.feature, subject, slice?.id),
+      requiredOnly: workspace.config.workflow.requestGaps === "required",
+    },
   );
   return {
     feedbackPlan,

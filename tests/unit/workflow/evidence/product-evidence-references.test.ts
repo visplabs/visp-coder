@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { defaultConfig } from "../../../../src/config/schema.js";
 import { hashValue, sha256 } from "../../../../src/core/hash.js";
 import { err, ok } from "../../../../src/core/result.js";
 import { browserJourneySchema } from "../../../../src/testing/browser-journey.js";
@@ -35,6 +36,7 @@ const productEvidenceCatalogue = (...args: Parameters<typeof buildCatalogue>) =>
   buildCatalogue(...([args[0], args[1], args[2], args[3], args[4], []] as const));
 const subject = "a".repeat(64);
 const workspace = {
+  config: defaultConfig(),
   files: { readBytesIfExists: async () => ok(undefined) },
 } as unknown as WorkspaceState;
 function record(): ProductRecord {

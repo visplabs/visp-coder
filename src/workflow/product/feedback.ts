@@ -131,10 +131,11 @@ export function productFeedbackPlan(
   subject: string,
   slice?: ProductSlice,
   reviewMode: "current" | "observation-preview" = "current",
-  options: { readonly reviewer?: ReviewerPointer } = {},
+  options: { readonly reviewer?: ReviewerPointer; readonly requiredOnly?: boolean } = {},
 ) {
-  const findings = outstandingFeedback(record).filter((entry) =>
-    findingAppliesToSlice(entry, slice),
+  // Lean mode's requestGaps: advisory findings are notes, never a next correction.
+  const findings = outstandingFeedback(record).filter(
+    (entry) => findingAppliesToSlice(entry, slice) && (!options.requiredOnly || entry.required),
   );
   const gaps = productFeedbackGaps(record, subject, slice);
   const question = record.brief.uncertainties[0];
