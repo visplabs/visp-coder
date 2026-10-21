@@ -50,6 +50,9 @@ VISP_MODES = {
     # Lean mode (docs/workflow.md#lean-mode): draft pictures first, one review per feature with at
     # most two rounds unless required findings remain, and gaps against the request required.
     "lean": {"draftFirst": "visual", "reviewCadence": "feature", "requestGaps": "required"},
+    # Regression gate (docs/workflow.md#regression-gate): done and accept refuse while a test that
+    # passed on the old code fails now.
+    "gate": {"regressionGate": "gate"},
 }
 
 

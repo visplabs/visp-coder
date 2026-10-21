@@ -106,6 +106,57 @@ Bare Claude Haiku 5.5 at high effort (`quality-2026-10`), the worker the chains 
 - Cost at list price: workers $1.12 for all six chains, code judge $3.09 (six Opus 5.5 calls).
 - What could give headroom, untested: a weaker worker (Haiku 4.5, `default`, or Haiku 5.5 at low effort, `quality-2026-10-low`), longer chains, or requests that leave a preserved rule unstated in the README as well as in the request.
 
+### ChainSWE
+
+[ChainSWE](https://arxiv.org/abs/2607.02606) chains real issues of one Python repository in date order, from six SWE-bench-family datasets. Its data is public under MIT at [C-lister/ChainSWE](https://huggingface.co/datasets/C-lister/ChainSWE): 376 chains of 3 to 5 issues (`len_3`, `len_4`, `len_5`; `unique` is a non-overlapping union of 213), each with one base commit and one Docker image. Each issue has its problem statement, gold patch, test patch, test command, `FAIL_TO_PASS` and `PASS_TO_PASS`. Its harness is in [SWE-Edit](https://github.com/C-lister/SWE-Edit) (`evaluation/chainswe`, MIT). The released data is larger than the paper's 100 chains and 304 issues.
+
+`chainswe.py` runs the chains with the bench's Claude Code worker and arms (`bare`, `visp:<build>[+mode]`):
+
+- A run starts from the chain image's `/testbed`, copied into a fresh Git repository tagged `swe-base`, with the arm installed as `setup_arm.py` installs it.
+- Each issue is a fresh `run_claude.py` session on the project as the previous issue left it, with the `swe.py` prompt: the issue text, "hidden tests will check the fix, and the existing tests must keep passing", and `./swe-test <command>` to run tests. The worker never sees a hidden test. After each session the runner commits everything, as the user would and as ChainSWE's sequential mode does.
+- `./swe-test` sends the change since `swe-base` to `swe_env/testsvc.py`, which applies it in a fresh networkless container of the chain image and runs the command there. The worker's `python`, `python3` and `pytest` (`swe_env/python`) send test runs (`-m pytest`, `-m unittest`, `runtests.py`, `pytest`) the same way, from any Git worktree of the project, VISP's old-code copy included. Everything else runs on the host Python.
+- After issue k, a fresh container gets the worker's whole change, without the scaffold, the files test patches 1..k touch, and the environment files ChainSWE also drops (`setup.py`, `tox.ini`, `pyproject.toml`, `uv.lock`). It then gets test patches 1..k and runs each distinct test command of issues 1..k with no network. The dataset's `pip install -e .` prefix is dropped: pip needs the network, and the image already has the project installed in place. Results are parsed as ChainSWE parses them (`swe_tests.py`, adapted from its `evaluate.py`).
+- The report's regression measures:
+  - *Steps that broke a passing test*, the primary one. A test that passes before step k and fails after it. Both sides are scored with test patches 1..k: before is the change as step k-1 left it (`before.json`), after is the change after step k (`hidden.json`). This is the gate's question, old code against new. A break is *visible* when no test patch up to k adds the test function, so the worker's repository has it and a gate could run it.
+  - *Earlier tests broken*. A test listed by an earlier issue that passed after step k-1 and fails after step k (`chains.py`). A test that issue k lists in `FAIL_TO_PASS` is not carried into step k: its test patch rewrote that test.
+  - *Steps breaking an existing test*. A test listed only as `PASS_TO_PASS` that passes in the `none` run of the chain and fails after the worker's changes.
+- Issue k is *resolved* when all its `FAIL_TO_PASS` and `PASS_TO_PASS` tests pass after step k. It is *strict* (ChainSWE's sequential score) when, in addition, every earlier issue is still resolved and issue k-1 was strict. ChainSWE's validator also fails an issue when any other test of its command fails, or when the bug is already fixed before its step. Neither rule is applied here.
+- The pseudo-arms `gold` (each step applies the gold patch) and `none` (no change) validate the scoring without a model; `none` also gives the unchanged repository's results for the existing-test measure. `chainswe.py before --batch <name>` scores missing before-states from the saved `model.patch` files.
+
+```bash
+python3 -m pip install pyarrow   # only for export
+python3 bench/chainswe.py export <dir with ChainSWE's data/*.parquet>       # -> $VISP_BENCH_RUNS/chainswe/chains.jsonl
+python3 bench/chainswe.py list --repo django/django
+docker pull swebench/sweb.eval.x86_64.django_1776_django-16208:latest      # each chain's docker_image
+systemd-run --user --unit=chainswe-testsvc python3 "$PWD/bench/swe_env/testsvc.py"
+python3 bench/chainswe.py run --batch csv --chains dj16208-5 --arms gold,none --jobs 2
+python3 bench/chainswe.py run --batch cs1 --chains dj16208-5,sp9828-5 --arms bare,visp:visp-dev,visp:visp-dev+gate --jobs 4
+python3 bench/chainswe.py report --batch cs1 --runs
+```
+
+Docker is reached through `DOCKER_HOST` (default the system engine, `unix:///var/run/docker.sock`). Images are 3 to 4 GB each before layers are shared. `chainswe.py` removes each run's working copy at the end and keeps `step<k>/{result,hidden}.json`, `step.patch`, `model.patch` and `visp-state.tgz`.
+
+#### Calibration (Oct 21 2026)
+
+Seven chains (`dj16208-5`, `dj13111-5`, `dj14954-3`, `sp9828-5`, `sp8075-5`, `sp8595-5`, `pl6358-4`; 32 issues, 7 images, 18.2 GB), bare, 1 run each.
+
+| Batch | Worker | Resolved at its step | Strict | Steps that broke a passing test (visible) | Earlier tests broken | Worker min per chain (median) | $ per chain |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| csg2 | gold patches | 32/32 | 32/32 | 0/32 | 0/995 | – | – |
+| csg2 | no change | 0/32 | 0/32 | 0/32 | 0/942 | – | – |
+| csc1 | Haiku 5.5 high (`quality-2026-10`) | 21/32 (66%) | 10/32 (31%) | 0/32 (0) | 0/973 | 15.8 | 0.11 |
+| csc2 | Haiku 5.5 low (`quality-2026-10-low`) | 14/32 (44%) | 2/32 (6%) | 0/32 (0) | 0/960 | 6.2 | 0.04 |
+| csc3 | Haiku 4.5 (`default`) | 14/32 (44%) | 4/32 (12%) | 1/32 (0) | 0/964 | 28.6 | 2.89 |
+
+- The strict score falls (66% to 31%, 44% to 6%) because an unresolved issue fails every later strict score, as in ChainSWE. Resolved issues stayed resolved: workers missed by undershooting, with FAIL_TO_PASS tests still failing.
+- The one break was hidden. Haiku 4.5's logging change in `dj16208-5` step 1 broke `test_no_logs_without_debug`, which that issue's hidden test patch adds. No step broke a test the worker's repository had: 0 of 96 bare sessions, and 0 of 8 in two VISP `+gate` smoke runs.
+- Four PASS_TO_PASS tests fail in every arm, already before their step, and with no change too. They encode an earlier issue's gold behaviour that the worker's own fix does not match: these are ChainSWE's chain errors, not regressions.
+- So on these chains the gate has nothing to stop.
+- The smoke runs also show what the gate (develop 9f618a92) selects on these repositories. Earlier accepted features' declared checks rerun as intended. The graph route does little:
+  - the impact walk stops at 25 rows per changed file;
+  - most test files count as black-box (243 of 248 in Sphinx, 721 of 733 in Django) and fill the 12-command cap alphabetically: `js_tests/*.test.js` run with `node`, and empty `__init__.py` files;
+  - Django test files run with `python3 -m unittest` fail on old and new code alike without `tests/runtests.py`.
+
 ### Diff scope
 
 `diffscope.py` compares a change with the reference change for the same request, over the product's own files as the code judge sees them: lines added plus removed outside tests against the reference's (tests are counted apart, since the references have few), and unneeded edits, files that existed before which the worker changed or deleted and the reference left alone. Chains are measured per step against `reference/<task>/step<k>`; `reservations-bundles`, `spreadsheet-extend`, `spreadsheet-audit` and the carryover tasks from `start/` to the final project. The report shows the median ratio and mean unneeded edits per task and arm; neither is a required score.
@@ -176,6 +227,7 @@ The rubric is fixed: correctness risks, structure, readability, naming, tests (d
 
 ```bash
 python3 -m unittest bench/test_hidden_oracles.py
+python3 -m unittest bench/test_chainswe.py      # ChainSWE scoring: test output parsing, regressions, the worker's python
 ```
 
 These local checks (spreadsheet-cli, spreadsheet-extend, sheet-carryover, spreadsheet-audit, sheet-chain, reservations-chain and recurrence-cli) verify
@@ -214,7 +266,7 @@ python3 bench/run_carryover.py c1 --modes wiped,fresh,oracle  # session 1 once, 
 python3 bench/score.py conventions-carryover c1/wiped c1/fresh c1/oracle
 ```
 
-- `setup_arm.py` creates a fresh Git project, installs the arm's workflow and writes the prompt. Spec Kit needs `specify` on `PATH`; BMAD is fetched with `npx`. VISP arms use the preset's VISP-launched reviewer and tester: with `default`, Codex (`critic.launch: codex-exec`, medium effort), so the Codex CLI must be signed in; with the quality presets, Sonnet 5.5 through `claude -p`. `--skill <id>` seeds and admits a bundled VISP skill, so two arms on the same build differ only by that skill. `visp:<build>+lean` adds a workflow mode from `presets.py` (`VISP_MODES`) to visp.yml, so one build runs with and without [lean mode](../docs/workflow.md#lean-mode) on the same preset; `batch.py` labels the arm `<build>-lean`.
+- `setup_arm.py` creates a fresh Git project, installs the arm's workflow and writes the prompt. Spec Kit needs `specify` on `PATH`; BMAD is fetched with `npx`. VISP arms use the preset's VISP-launched reviewer and tester: with `default`, Codex (`critic.launch: codex-exec`, medium effort), so the Codex CLI must be signed in; with the quality presets, Sonnet 5.5 through `claude -p`. `--skill <id>` seeds and admits a bundled VISP skill, so two arms on the same build differ only by that skill. `visp:<build>+lean` adds a workflow mode from `presets.py` (`VISP_MODES`) to visp.yml, so one build runs with and without [lean mode](../docs/workflow.md#lean-mode) on the same preset; `batch.py` labels the arm `<build>-lean`. `+gate` sets `workflow.regressionGate: gate` ([regression gate](../docs/workflow.md#regression-gate)).
 - `run_claude.py` runs `claude -p` in the project with project settings only, so each workflow's own instructions, skills and hooks apply; Spec Kit's phases are sent as follow-up turns and BMAD's approval prompts are answered, as a user would.
 - `run_codex.py` runs `codex exec` with a clean home holding only the Codex sign-in and a workspace-write sandbox with network, with project hooks trusted.
 - Each writes `result.json` (duration, turns, tokens) beside the project.
