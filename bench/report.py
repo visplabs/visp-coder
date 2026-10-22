@@ -1,6 +1,7 @@
 """Report a batch: facts per run and per task x arm, and the base-versus-candidate quality rule.
 
 Usage: report.py --batch <name> [--score] [--score-jobs 3] [--base LABEL] [--runs] [--md FILE] [--json FILE]
+       report.py --batch <name> --carry [--score]
        report.py --compare BATCH:LABEL BATCH:LABEL ... [--score] [--runs] [--md FILE] [--json FILE]
 
 Reads $VISP_BENCH_RUNS/batches/<name>/manifest.json (batch.py). Refuses a batch whose runs were
@@ -42,6 +43,12 @@ transcript (Codex workers); when only one has, the task is incomplete. The candi
 batch only when it passes every task. Prints Markdown and writes JSON (default
 batches/<name>/report.json).
 
+--carry (with --score, hidden checks only: no judge or code judge call) prints only the carry report of a batch with archive-carryover or archive-carryover-raised runs
+(carry.py): per task and arm the share of runs that kept the restock cap at its current value, the
+labels (carried, lost; current, stale, forgot, partial), the intermediate reruns, and VISP against each
+bare arm with a one-sided Fisher exact p on the counts pooled over the tasks both ran. The labels come
+from hidden.json, so runs scored before carry.py have them too. Hidden scores are not touched.
+
 --compare is the one mode that crosses presets: it sets arms of different batches side by side
 (say bare Sonnet against VISP with a Haiku worker), each batch under its own preset guard, with
 cost per run and per passed hidden check, and gives no verdict.
@@ -55,6 +62,7 @@ import statistics
 import subprocess
 import sys
 
+import carry
 from chains import is_chain, run_summary
 from common import RUNS
 from diffscope import run_scope
@@ -190,6 +198,10 @@ def facts(entry):
     if "code" in needed:
         row["code"], row["codeCriteria"], problem = code_score(project)
         row["problems"] += [problem] if problem else []
+    labelled = carry.for_hidden(entry["task"], project.parent / "hidden.json")
+    row["carry"] = labelled["carry"] if labelled else None
+    row["carryReruns"] = (load(project.parent / "intermediate.json") or {}).get("reruns") \
+        if entry["task"] in carry.CARRY_TASKS else None
     chain = run_summary(run) if is_chain(entry["task"]) else None
     if "kept" in needed:
         row["kept"] = chain["kept"] if chain else None
@@ -257,8 +269,8 @@ def check_presets(manifest, entries):
                          f"{manifest['preset']}, or a VISP arm's config differs from its name:\n" + "\n".join(wrong))
 
 
-def score_missing(entries, jobs):
-    """Score what is missing, and judge again where a judge call failed."""
+def score_missing(entries, jobs, hidden_only=False):
+    """Score what is missing, and judge again where a judge call failed; hidden_only runs score.py alone."""
     def needs(path):
         data = load(path)
         return data is None or judge_failed(data)
@@ -271,11 +283,11 @@ def score_missing(entries, jobs):
         steps = []
         if "hidden" in needed and not (project.parent / "hidden.json").exists():
             steps.append(["score.py", entry["task"], name])
-        if has_probes(entry["task"]) and not (project.parent / "probes.json").exists():
+        if not hidden_only and has_probes(entry["task"]) and not (project.parent / "probes.json").exists():
             steps.append(["probe.py", entry["task"], name])
-        if "judge" in needed and needs(run / "judge.json"):
+        if not hidden_only and "judge" in needed and needs(run / "judge.json"):
             steps.append(["judge.py", entry["name"]])
-        if "code" in needed and needs(project.parent / "code_judge.json"):
+        if not hidden_only and "code" in needed and needs(project.parent / "code_judge.json"):
             steps.append(["code_judge.py", entry["name"]])
         for step in steps:
             done = subprocess.run([sys.executable, str(BENCH / step[0]), *step[1:]], capture_output=True, text=True)
@@ -523,7 +535,7 @@ def scope_markdown(rows, groups, show_runs):
     return out
 
 
-def load_batch(name, score=False, score_jobs=3):
+def load_batch(name, score=False, score_jobs=3, hidden_only=False):
     """A batch's manifest, valid rows, invalid and unfinished runs, under the preset guard."""
     directory = RUNS / "batches" / name
     manifest = load(directory / "manifest.json")
@@ -550,7 +562,7 @@ def load_batch(name, score=False, score_jobs=3):
             excluded.append((moved.name, f"moved to discarded/ by --rerun-invalid: {reason.get('reason')}, "
                                          f"{reason.get('source')}"))
     if score:
-        score_missing(valid, score_jobs)
+        score_missing(valid, score_jobs, hidden_only)
     check_presets(manifest, valid)
     return manifest, [facts(entry) for entry in valid], excluded, unfinished
 
@@ -676,6 +688,8 @@ def main():
     parser.add_argument("--score-jobs", type=int, default=3)
     parser.add_argument("--base", help="the base arm label (default: the first arm in the manifest)")
     parser.add_argument("--runs", action="store_true", help="also print one row per run")
+    parser.add_argument("--carry", action="store_true",
+                        help="print only the carry rate per arm and task and VISP against each bare arm (carry.py)")
     parser.add_argument("--pairwise", action="store_true",
                         help="also judge each picture task's base and candidate images side by side (pairwise.py)")
     parser.add_argument("--md", type=pathlib.Path)
@@ -701,7 +715,10 @@ def main():
     if not args.batch:
         raise SystemExit("give --batch, or --compare BATCH:LABEL ...")
     directory = RUNS / "batches" / args.batch
-    manifest, rows, excluded, unfinished = load_batch(args.batch, args.score, args.score_jobs)
+    manifest, rows, excluded, unfinished = load_batch(args.batch, args.score, args.score_jobs, args.carry)
+    if args.carry:
+        print(carry.markdown(manifest, rows))
+        return
     labels = [arm["label"] for arm in manifest["arms"]]
     groups = {}
     for task in manifest["tasks"]:
