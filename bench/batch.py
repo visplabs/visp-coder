@@ -10,7 +10,8 @@ arm itself otherwise; a mode joins the label with a dash (visp:cand+lean+nocriti
 The queue goes repetition by repetition, and within one through every task with the arms in an
 order that rotates per task, so machine load and a partial batch fall on every arm alike. A
 two-session task (session1.md) runs with run_carryover.py in fresh mode: the second session
-starts on the project the first left, notes kept. A chain task (steps/) runs with run_chain.py:
+starts on the project the first left, notes kept. A -raised task runs in intermediate mode, with a
+session of its intermediate.md between the two. A chain task (steps/) runs with run_chain.py:
 each step is a fresh session on the project the previous step left. Timeouts per session: games
 3600 s, every other task 2700 s (per step for a chain). A visp-codex arm runs with run_codex.py; every other arm with run_claude.py.
 
@@ -43,6 +44,7 @@ from chains import is_chain, step_files
 from common import RUNS, stop_recorded
 from judge import CHECKLISTS, GAMES
 from presets import preset, visp_build
+from run_carryover import batch_mode, planned_sessions
 from runfacts import invalid, invalidity, is_finished, mark_if_invalid
 
 BENCH = pathlib.Path(__file__).resolve().parent
@@ -93,7 +95,8 @@ def plan(args):
             for name, arm in arms[shift:] + arms[:shift]:
                 runs.append({"name": f"{args.batch}-{task}-{name}-{rep}", "task": task, "kind": task_kind,
                              "arm": arm, "label": name, "rep": rep, "timeout": TIMEOUTS[task_kind],
-                             "twoSessions": task_kind == "carryover"})
+                             "twoSessions": task_kind == "carryover",
+                             "mode": batch_mode(task) if task_kind == "carryover" else None})
     return tasks, arms, runs
 
 
@@ -152,7 +155,7 @@ def execute(entry, args, directory):
         return name, "setup failed"
     timeout = str(entry["timeout"])
     if entry["twoSessions"]:
-        argv = [str(BENCH / "run_carryover.py"), name, "--modes", "fresh", "--timeout", timeout]
+        argv = [str(BENCH / "run_carryover.py"), name, "--modes", entry["mode"], "--timeout", timeout]
     elif entry["kind"] == "chain":
         argv = [str(BENCH / "run_chain.py"), name, "--timeout", timeout]
     elif entry["arm"].startswith("visp-codex:"):
@@ -249,7 +252,7 @@ def main():
         print(f"batch {args.batch}, preset {args.preset} (worker {settings['worker']['model']}"
               f" {settings['worker']['effort'] or 'default effort'}), {len(runs)} runs, {args.jobs} at a time")
         for entry in runs:
-            sessions = " x2 sessions" if entry["twoSessions"] else ""
+            sessions = f" x{1 + len(planned_sessions(entry['mode']))} sessions" if entry["twoSessions"] else ""
             if entry["kind"] == "chain":
                 sessions = f" x{len(step_files(entry['task']))} steps"
             print(f"{state(entry, args.rerun_invalid, record=False):13} {entry['name']:60} {entry['arm']:30} "

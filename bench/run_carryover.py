@@ -1,6 +1,7 @@
 """Run a two-session task: one first session, then the second request under several memory modes.
 
 Usage: run_carryover.py <run_name> [--modes wiped,fresh,oracle] [--model ...] [--effort ...] [--timeout 2700]
+                        [--dry-run]
 
 The run must be prepared by setup_arm.py with a two-session task. The first session runs once;
 its project is snapshotted, and every mode restores that snapshot at the same path before its
@@ -18,21 +19,31 @@ second session, so the modes are paired on one first session. Modes:
           task's noise.md (unrelated features and near-miss traps), recorded as VISP would;
           Visp Memory's keyword selection alone chooses what the request carries.
 - gated:  noisy, with the reviewer's model choosing among the candidates.
-- outdated, outdated-kw, outdated-none: an intermediate feature (the task's intermediate.md)
-          raised the item limit after the first session: the code change is committed and, in
-          the first two, the store holds the ten noisy features, the first request and then the
-          intermediate one, recorded in that order as VISP would have; model choice, keyword
-          choice, and no memory. Score with the task's -raised variant.
+- intermediate: a session between the first and second, with the task's intermediate.md as its
+          request (it raises the item limit), run as a real worker session of the arm like the
+          other two, then verified (verify_intermediate); the second session follows on the
+          project as that session left it. The run is invalid, and the second session not run,
+          if the intermediate session ends in a CLI error or the raised limit does not hold.
+          Score with the task's -raised variant.
+- outdated, outdated-kw: intermediate, with the store holding the ten noisy features, the first
+          request and, after the session, the intermediate one, recorded in that order as VISP
+          would have (Visp Memory's model choice, keyword choice).
 - recall, recall-outdated: gated and outdated with VISP's own store (no memory.service): the
           same earlier requests are written to .visp/state/request-history.json, and the
-          reviewer's model chooses among every recorded note.
+          reviewer's model chooses among every recorded note. VISP records the intermediate
+          request itself in its session.
 - memory: like fresh, with Visp Memory as VISP's long-term store (`memory.service`, set up
           before the second session; needs $VISP_BENCH_RUNS/visp-memory-venv and a VISP build
           that supports it).
 
-Writes session1/ (result.json, carriers.json, hidden-stage1.json, snapshot.tar, visp-scaffold.tar) and <mode>/
-(result.json, the finished project) under the run. Score each mode with
-score.py <task> <run>/<mode> after the batch.
+Claude Code's auto memory is off unless the arm is bare-automemory (arm.json "memory": "auto"; see
+run_claude.py). Its directory is <run>/memory: session 1 fills it, memory.tar keeps it, and every
+mode starts from that copy, so the modes are paired on one first session and never share memory.
+
+Writes session1/ (result.json, carriers.json, hidden-stage1.json, snapshot.tar, memory.tar,
+visp-scaffold.tar) and <mode>/ (result.json, intermediate.json for the intermediate session, memory/
+when auto memory is on, the finished project) under the run. Score each mode with
+score.py <task> <run>/<mode> after the batch. --dry-run prints the sessions each mode would run.
 """
 import argparse
 import json
@@ -45,11 +56,14 @@ import sys
 import tarfile
 
 from common import RUNS
-from run_claude import run_session
+from run_claude import memory_directory, memory_setting, run_session
+from runfacts import mark_if_invalid
 
 BENCH = pathlib.Path(__file__).resolve().parent
 MODES = ("wiped", "fresh", "oracle", "resume", "memory", "noisy", "gated",
-         "outdated", "outdated-kw", "outdated-none", "recall", "recall-outdated")
+         "intermediate", "outdated", "outdated-kw", "recall", "recall-outdated")
+# Modes with a session of the intermediate request between the first and the second.
+INTERMEDIATE_MODES = ("intermediate", "outdated", "outdated-kw", "recall-outdated")
 MEMORY = RUNS / "visp-memory-venv" / "bin" / "visp-memory"
 NOTES = ("CLAUDE.md", "AGENTS.md")
 # Where each first-session convention could have been written down. C1 and C2 are also visible
@@ -169,14 +183,6 @@ def first_feature(project):
     return first.name, intent["goal"], intent["sourceBrief"]
 
 
-# The item limit as code or prose may spell it: 10000, 10_000, 10,000, 10001, 10 ** 4, 1e4.
-OLD_LIMIT = re.compile(r"(?<!\w)(?<!\d\.)(?:10([_,]?)00([01])|10\s*\*\*\s*4|1e4)(?!\w|\.\d)")
-
-
-def raise_limit(text):
-    return OLD_LIMIT.sub(lambda match: f"50{match.group(1)}00{match.group(2)}" if match.group(2) else "50000", text)
-
-
 class IntermediateFailed(RuntimeError):
     pass
 
@@ -191,11 +197,11 @@ def verify_intermediate(project, mode):
         raise IntermediateFailed(f"{mode}: the raised-limit check produced no result") from None
     limit = [r for r in results if r["name"].startswith(("create above 50000", "create exactly 50000"))]
     if len(limit) != 2 or not all(r["passed"] for r in limit):
-        raise IntermediateFailed(f"{mode}: the intermediate change did not raise the item limit to 50000: {limit}")
+        raise IntermediateFailed(f"{mode}: the intermediate session did not raise the item limit to 50000: {limit}")
 
 
-def apply_intermediate(project, task, remember, mode):
-    """The intermediate feature: its code change, and, with memory, the store's history."""
+def seed_first_request(project, remember):
+    """The first request in the store the mode uses, as VISP would have recorded it."""
     if remember == "builtin":
         seed_history(project, [first_feature(project)])
     elif remember:
@@ -205,26 +211,13 @@ def apply_intermediate(project, task, remember, mode):
         state = project / ".visp" / "state" / "memory-service.json"
         state.parent.mkdir(parents=True, exist_ok=True)
         state.write_text(json.dumps({"version": 1, "recorded": [first.name]}))
-    for path in git(project, "ls-files").split():
-        file = project / path
-        # The project's own code, tests and README; never VISP's installed assets.
-        own = path == "README.md" or (file.suffix in (".py", ".sh") and not path.startswith("."))
-        if not own or not file.is_file():
-            continue
-        text = file.read_text()
-        raised = raise_limit(text)
-        if raised != text:
-            file.write_text(raised)
-            git(project, "add", path)
-    git(project, "-c", "core.hooksPath=/dev/null", "commit", "-q", "-m", "Raise the item limit to 50000 units")
-    verify_intermediate(project, mode)
-    if remember:
-        request = (BENCH / "tasks" / task / "intermediate.md").read_text()
-        goal = request.strip().splitlines()[0].removeprefix("Feature:").strip()
-        if remember == "builtin":
-            seed_history(project, [("n11", goal, request.strip().split("\n", 1)[1])])
-        else:
-            record_request(project, request.strip().split("\n", 1)[1], "n11", goal)
+
+
+def record_intermediate(project, task):
+    """The intermediate request in Visp Memory after its session (VISP no longer writes there)."""
+    request = (BENCH / "tasks" / task / "intermediate.md").read_text()
+    goal = request.strip().splitlines()[0].removeprefix("Feature:").strip()
+    record_request(project, request.strip().split("\n", 1)[1], "n11", goal)
 
 
 def refresh_install(project, arm):
@@ -238,12 +231,54 @@ def refresh_install(project, arm):
     git(project, "-c", "core.hooksPath=/dev/null", "commit", "-q", "-m", "Refresh VISP install")
 
 
-def second_prompt(run, mode, arm):
-    """The second request; with --build, its `export PATH=<shim>` names the new build's shim."""
-    prompt = (run / ("prompt2-oracle.txt" if mode == "oracle" else "prompt2.txt")).read_text()
+def read_prompt(run, name, arm):
+    """A prepared request; with --build, its `export PATH=<shim>` names the new build's shim."""
+    prompt = (run / name).read_text()
     if arm.get("oldShim") and arm["oldShim"] != arm["shim"]:
         prompt = prompt.replace(f"export PATH={arm['oldShim']}:", f"export PATH={arm['shim']}:")
     return prompt
+
+
+def second_prompt(run, mode, arm):
+    return read_prompt(run, "prompt2-oracle.txt" if mode == "oracle" else "prompt2.txt", arm)
+
+
+def batch_mode(task):
+    """The mode batch.py runs for a two-session task: the intermediate session for a -raised task."""
+    return "intermediate" if task.endswith("-raised") else "fresh"
+
+
+def planned_sessions(mode):
+    """The worker sessions a mode runs after the first, in order."""
+    return ["intermediate request", "second request"] if mode in INTERMEDIATE_MODES else ["second request"]
+
+
+def check_plan(run, arm, modes):
+    """Fail before the first session, not after it, when a mode cannot run on this prepared run."""
+    if set(modes) & set(INTERMEDIATE_MODES) and not (run / "prompt-intermediate.txt").is_file():
+        raise SystemExit(f"{run.name} has no prompt-intermediate.txt: setup_arm.py writes it for a task "
+                         f"with intermediate.md, and {arm['task']} has none")
+
+
+def snapshot_memory(project, path):
+    """The run's auto memory after the first session; an empty archive when there is none."""
+    with tarfile.open(path, "w") as archive:
+        if memory_directory(project).is_dir():
+            archive.add(memory_directory(project), arcname="memory")
+
+
+def restore_memory(project, path):
+    """The run's auto memory as the first session left it, for the next mode."""
+    shutil.rmtree(memory_directory(project), ignore_errors=True)
+    if path.is_file():
+        with tarfile.open(path) as archive:
+            archive.extractall(memory_directory(project).parent)
+
+
+def keep_memory(project, out):
+    """Move a mode's auto memory beside its project, if the arm has any."""
+    if memory_directory(project).is_dir():
+        shutil.move(str(memory_directory(project)), out / "memory")
 
 
 def main():
@@ -256,6 +291,7 @@ def main():
     parser.add_argument("--reuse", metavar="LABEL",
                         help="reuse the run's first session and write each mode to <mode>-LABEL")
     parser.add_argument("--build", help="with --reuse, run the second sessions on this VISP build")
+    parser.add_argument("--dry-run", action="store_true", help="print the sessions each mode would run; run none")
     args = parser.parse_args()
     modes = args.modes.split(",")
     unknown = set(modes) - set(MODES)
@@ -271,6 +307,12 @@ def main():
         # The prepared prompts name the old shim; the second sessions' copies name the new one.
         arm["oldShim"], arm["shim"] = arm.get("shim"), str(RUNS / "shims" / args.build)
     first = run / "session1"
+    check_plan(run, arm, modes)
+    if args.dry_run:
+        print(json.dumps({"run": args.run, "arm": arm["arm"], "autoMemory": memory_setting(arm),
+                          "first": [] if args.reuse else ["first request"],
+                          "modes": {mode: planned_sessions(mode) for mode in modes}}))
+        return
     if args.reuse:
         run_modes(args, run, project, arm, first, json.loads((first / "result.json").read_text()), modes)
         return
@@ -301,6 +343,7 @@ def main():
     with tarfile.open(snapshot, "w") as archive:
         for path in project.iterdir():
             archive.add(path, arcname=path.name)
+    snapshot_memory(project, first / "memory.tar")
     print(json.dumps({"run": args.run, "session": 1, "seconds": result["seconds"],
                       "timedOut": result["timedOut"], "stage1": stage1, "carriers": carried}))
 
@@ -319,6 +362,7 @@ def run_modes(args, run, project, arm, first, result, modes):
             print(json.dumps({"run": args.run, "mode": mode, "skipped": "first session has no id"}))
             continue
         restore(project, snapshot)
+        restore_memory(project, first / "memory.tar")
         if args.build:
             refresh_install(project, arm)
         if mode == "wiped":
@@ -329,21 +373,38 @@ def run_modes(args, run, project, arm, first, result, modes):
             seed_noise(project, arm["task"])
         if mode.startswith("recall"):
             seed_history(project, noise_requests(arm["task"]))
-        if mode.startswith("outdated") or mode == "recall-outdated":
-            remember = "builtin" if mode == "recall-outdated" else mode != "outdated-none"
-            try:
-                apply_intermediate(project, arm["task"], remember, mode)
-            except IntermediateFailed as failure:
-                failed.append(str(failure))
-                print(json.dumps({"run": args.run, "mode": mode, "error": str(failure)}))
-                shutil.rmtree(project)
-                project.mkdir()
-                continue
-        prompt = second_prompt(run, mode, arm)
-        second = run_session(project, arm, prompt, args.model, args.timeout, resume, args.effort)
         out = run / (f"{mode}-{args.reuse}" if args.reuse else mode)
         out.mkdir()
+        if mode in INTERMEDIATE_MODES:
+            seed_first_request(project, "builtin" if mode == "recall-outdated" else mode != "intermediate")
+            middle = run_session(project, arm, read_prompt(run, "prompt-intermediate.txt", arm), args.model,
+                                 args.timeout, None, args.effort)
+            (out / "intermediate.json").write_text(json.dumps({"run": args.run, "mode": mode, **middle}, indent=2))
+            if mode in ("outdated", "outdated-kw"):
+                record_intermediate(project, arm["task"])
+            problem, invalid = None, mark_if_invalid(run)
+            if invalid:
+                problem = f"{mode}: the run is invalid ({invalid['reason']}: {invalid['source']})"
+            else:
+                try:
+                    verify_intermediate(project, mode)
+                except IntermediateFailed as failure:
+                    problem = str(failure)
+                    (run / "invalid.json").write_text(json.dumps(
+                        {"reason": "intermediate feature not verified", "source": f"{mode} intermediate session",
+                         "match": problem}, indent=2))
+            if problem:
+                # The run is invalid: the second session would not measure carryover. Keep the project to inspect.
+                failed.append(problem)
+                print(json.dumps({"run": args.run, "mode": mode, "error": problem}))
+                keep_memory(project, out)
+                shutil.move(str(project), out / "project")
+                project.mkdir()
+                continue
+        second = run_session(project, arm, second_prompt(run, mode, arm), args.model, args.timeout, resume,
+                             args.effort)
         (out / "result.json").write_text(json.dumps({"run": args.run, "mode": mode, **second}, indent=2))
+        keep_memory(project, out)
         shutil.move(str(project), out / "project")
         project.mkdir()
         print(json.dumps({"run": args.run, "mode": mode, "seconds": second["seconds"],

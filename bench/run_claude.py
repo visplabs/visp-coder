@@ -7,6 +7,12 @@ CLAUDE.md, skills and hooks, so each workflow is enforced the way a user would r
 User-level settings and MCP servers are excluded so every arm starts from the same host.
 Writes result.json (duration, turns, cost, tokens, session id, preset) beside the project.
 The model and effort default to the worker of the preset recorded in arm.json (presets.py).
+
+Claude Code's own auto memory is off for every arm unless arm.json has "memory": "auto" (the
+bare-automemory arm). It is then on, with its directory set to <run>/memory through
+`--settings` (autoMemoryDirectory, https://code.claude.com/docs/en/memory#storage-location),
+so a run starts with an empty directory and reads or writes nothing in the memory of any other
+project under ~/.claude. Each session's result records the setting in force ("autoMemory").
 """
 import argparse
 import json
@@ -16,6 +22,7 @@ import shutil
 import time
 
 from common import RUNS, isolate, run_worker
+from runfacts import CLAUDE_PROJECTS, project_key
 
 MODEL = "claude-haiku-4-5-20251001"
 # Spec Kit is driven one command per user turn; each skill ends by naming the next one
@@ -26,6 +33,34 @@ FOLLOW_UPS = {
 }
 
 
+def memory_setting(arm):
+    """Claude Code's auto memory for an arm's workers: "off" (the default) or "auto"."""
+    return arm.get("memory") or "off"
+
+
+def memory_directory(project):
+    """The run's auto memory, beside its project, so it is unique to the run."""
+    return pathlib.Path(project).resolve().parent / "memory"
+
+
+def default_memory(project):
+    """Where Claude Code would keep the project's memory without autoMemoryDirectory."""
+    return CLAUDE_PROJECTS / project_key(pathlib.Path(project).resolve()) / "memory"
+
+
+def listing(directory):
+    """The files under a directory, relative and sorted; [] when it does not exist."""
+    directory = pathlib.Path(directory)
+    return sorted(str(path.relative_to(directory)) for path in directory.rglob("*") if path.is_file())
+
+
+def memory_settings(arm, project):
+    """The `--settings` JSON that fixes auto memory: off, or on in the run's own directory."""
+    if memory_setting(arm) == "auto":
+        return {"autoMemoryEnabled": True, "autoMemoryDirectory": str(memory_directory(project))}
+    return {"autoMemoryEnabled": False}
+
+
 def worker_env(arm):
     env = dict(os.environ)
     if arm.get("shim"):
@@ -34,8 +69,12 @@ def worker_env(arm):
     for directory in reversed(arm.get("extraPath") or []):
         env["PATH"] = f"{directory}:{env['PATH']}"
     # Claude Code's own auto memory lives outside the project and would carry knowledge
-    # between sessions of one run; only what the workflow keeps in the project may carry.
-    env["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] = "1"
+    # between sessions of one run; only what the workflow keeps in the project may carry,
+    # except in the arm that measures auto memory, whose directory memory_settings sets.
+    if memory_setting(arm) == "auto":
+        env.pop("CLAUDE_CODE_DISABLE_AUTO_MEMORY", None)
+    else:
+        env["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] = "1"
     return env
 
 
@@ -62,12 +101,20 @@ def run_session(project, arm, prompt, model=None, timeout=2700, resume=None, eff
     """Run one user session (the prompt plus the arm's scripted follow-ups) and summarize it."""
     model, effort = worker(arm, model, effort)
     env = record_calls(worker_env(arm), pathlib.Path(project).parent / "claude-calls.jsonl")
+    settings = memory_settings(arm, project)
+    memory = memory_directory(project) if memory_setting(arm) == "auto" else None
+    if memory:
+        # A stale directory at Claude Code's own location means an earlier run used this path.
+        if listing(default_memory(project)):
+            raise SystemExit(f"{default_memory(project)} already holds memory; this run's path is not fresh")
+        memory.mkdir(exist_ok=True)
+    inherited = listing(memory) if memory else []
     started = time.time()
 
     def turn(text, session=None):
         argv = [*isolate(), "claude", "-p", text, "--model", model, "--output-format", "json",
                 "--permission-mode", "bypassPermissions", "--setting-sources", "project,local",
-                "--strict-mcp-config"]
+                "--settings", json.dumps(settings), "--strict-mcp-config"]
         if effort:
             argv += ["--effort", effort]
         if session:
@@ -110,6 +157,14 @@ def run_session(project, arm, prompt, model=None, timeout=2700, resume=None, eff
 
     return {
         "arm": arm["arm"], "preset": arm.get("preset"), "model": model, "effort": effort, "seconds": round(time.time() - started), "timedOut": timed_out,
+        "autoMemory": {
+            "setting": memory_setting(arm), "enabled": settings["autoMemoryEnabled"], "settings": settings,
+            "env": {key: env.get(key) for key in ("CLAUDE_CODE_DISABLE_AUTO_MEMORY",)},
+            "directory": str(memory) if memory else None,
+            "filesBefore": inherited, "filesAfter": listing(memory) if memory else [],
+            # Memory Claude Code kept at its own location despite the setting: always empty.
+            "outsideFiles": listing(default_memory(project)),
+        },
         "turns": sum(entry.get("num_turns") or 0 for entry in turns), "userTurns": len(turns),
         "isError": any(entry.get("is_error") for entry in turns),
         "sessionId": next((entry["session_id"] for entry in reversed(turns) if entry.get("session_id")), None),

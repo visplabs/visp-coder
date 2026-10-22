@@ -1,7 +1,8 @@
 """Prepare one benchmark project and write the actor prompt for it.
 
 Usage: setup_arm.py <task> <arm> <run_name> [--skill <id>]... [--preset default]
-arm: bare | speckit | bmad | visp:<build> (Claude Code worker) | visp-codex:<build> (Codex worker)
+arm: bare | bare-automemory | speckit | bmad | visp:<build> (Claude Code worker) | visp-codex:<build> (Codex worker)
+bare-automemory is bare with Claude Code's auto memory on, in a directory of the run; every other arm has it off.
 <build> is a name given to build_visp.sh; `visp:<build>+lean+nocritic` adds modes from presets.py,
 each a set of visp.yml keys. arm.json records them and the settings `visp doctor --settings` reports. --skill seeds and admits a bundled VISP skill, so an
 arm with it differs from one without only by that skill. --preset (presets.py) sets VISP's
@@ -12,7 +13,8 @@ works only inside the project. Every arm receives the same task and constraints.
 
 A two-session task (session1.md, session2.md, conventions.md) also gets prompt2.txt and
 prompt2-oracle.txt, the second request without and with the first session's conventions;
-run_carryover.py runs both sessions. A chain task (steps/step1.md ... stepN.md) gets
+run_carryover.py runs both sessions. A task with intermediate.md also gets prompt-intermediate.txt, the
+request of the session between them. A chain task (steps/step1.md ... stepN.md) gets
 prompt-step<k>.txt for every step, prompt.txt being the first; run_chain.py runs them in order.
 """
 import argparse
@@ -78,7 +80,7 @@ COMMON = (
     "Do not delegate to other agents. Build it, run your tests, and finish with a short report "
     "of what you actually verified."
 )
-if arm == "bare":
+if arm in ("bare", "bare-automemory"):
     workflow = "Use ordinary coding: write the code and tests directly."
 elif arm == "speckit":
     sh(["specify", "init", "--here", "--force", "--non-interactive", "--integration", "claude"])
@@ -139,9 +141,13 @@ if sessions:
     (root.parent / "prompt2.txt").write_text(f"{workflow}\n\n{COMMON}\n\nTask:\n\n{second}")
     (root.parent / "prompt2-oracle.txt").write_text(
         f"{workflow}\n\n{COMMON}\n\nTask:\n\n{second}\n{conventions}\n")
+if sessions and (task_dir / "intermediate.md").is_file():
+    intermediate = (task_dir / "intermediate.md").read_text()
+    (root.parent / "prompt-intermediate.txt").write_text(f"{workflow}\n\n{COMMON}\n\nTask:\n\n{intermediate}")
 for number, step in enumerate(steps, start=1):
     (root.parent / f"prompt-step{number}.txt").write_text(f"{workflow}\n\n{COMMON}\n\nTask:\n\n{step.read_text()}")
 # The headless runner puts the arm's VISP build on PATH so installed hooks find it.
 (root.parent / "arm.json").write_text(json.dumps({"task": task_name, "arm": arm, "shim": shim_dir, "skills": args.skill,
-                                                 "preset": args.preset, "settings": settings, **arm_config}))
+                                                 "preset": args.preset, "settings": settings, **arm_config,
+                                                 "memory": "auto" if arm == "bare-automemory" else "off"}))
 print(json.dumps({"root": str(root), "prompt": str(root.parent / "prompt.txt")}))
