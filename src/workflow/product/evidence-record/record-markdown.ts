@@ -152,7 +152,7 @@ function accountsSection(record: EvidenceRecord): string[] {
         `| **${entry.requirement}** ${cell(shorten(entry.statement))} | ${accountCell(entry)} | ${verificationCell(entry)} |`,
     ),
     "",
-    'The account is what the worker said at `visp done`. VISP confirms only that the cited check passed, and that a test the worker names is in that check\'s latest output as passed (and failed on the old code, where a comparison ran). A name it cannot find stays "claimed, not verified".',
+    'The account is what the worker said at `visp done`. VISP confirms only that the cited check passed, and that a test the worker names is in that check\'s latest output as passed (and failed on the old code, where a comparison ran), or, when the runner prints no test names, that the suite passed and the test files define the name. A name it cannot confirm from the output is marked "not confirmed from the check output", with the reason. That is a limit of the output, not a finding against the worker.',
     "",
   ];
 }

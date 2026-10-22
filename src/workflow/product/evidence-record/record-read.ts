@@ -1,4 +1,5 @@
 import type { WorkspaceState } from "../../state.js";
+import { testSourcesFor } from "../account-verification.js";
 import type { ProductOutcomeStatus } from "../assessment.js";
 import { REVIEWER_ACTIVITY_FILE } from "../critic/critic-exec.js";
 import { readFeatureDiff } from "../feature-diff.js";
@@ -43,7 +44,14 @@ export async function productEvidenceRecord(
     outcomes,
     next,
     ...(stored?.ok
-      ? { accounts: accountEvidence(listed, stored.value.accounts, record.state.executions) }
+      ? {
+          accounts: accountEvidence(
+            listed,
+            stored.value.accounts,
+            record.state.executions,
+            await testSourcesFor(workspace, stored.value.accounts),
+          ),
+        }
       : {}),
     ...(tests.ok && tests.value ? { tests: tests.value } : {}),
     gate: {

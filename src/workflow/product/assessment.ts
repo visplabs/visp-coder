@@ -3,7 +3,7 @@ import { productJourneyGaps } from "../evidence/product-journey.js";
 import type { ProductReviewCapture } from "../evidence/product-review.js";
 import { cliCommand } from "../next-action.js";
 import type { WorkspaceState } from "../state.js";
-import { verifyAccounts } from "./account-verification.js";
+import { testSourcesFor, verifyAccounts } from "./account-verification.js";
 import { captureRunEntries } from "./capture-run-model.js";
 import { isBrowserCheckCommand, productCheckSupportsBehavior } from "./check/check-command.js";
 import { currentCoverage, productReviewChallenges } from "./coverage.js";
@@ -295,7 +295,11 @@ export async function requirementStatus(
     ? requirementSummary(
         accounted.listed,
         accounted.accounts,
-        verifyAccounts(accounted.accounts, record.state.executions),
+        verifyAccounts(
+          accounted.accounts,
+          record.state.executions,
+          await testSourcesFor(workspace, accounted.accounts),
+        ),
       )
     : [];
 }

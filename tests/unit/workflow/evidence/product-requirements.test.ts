@@ -329,7 +329,7 @@ describe("at visp done", () => {
     });
   });
 
-  it("marks a test the worker names but the check's output does not show as claimed, not verified", async () => {
+  it("marks a test the worker names but the check's output does not show as not confirmed from the check output", async () => {
     await started("- Export value two.\n- Export label two.", {
       "test/value.test.mjs":
         "import {test} from 'node:test'; import assert from 'node:assert/strict'; import {value, label} from '../src/value.mjs'; test('value_is_two',()=>{assert.equal(value,2);}); test('label_is_two',()=>{assert.equal(label,'two');});\n",
@@ -341,7 +341,7 @@ describe("at visp done", () => {
       closed: true,
       requirements: [
         "R001: done, C001 value_is_two (verified: the test passed in C001's latest run)",
-        "R002: done, C001 label_is_two no_such_test (claimed, not verified: no_such_test: not in C001's output)",
+        "R002: done, C001 label_is_two no_such_test (not confirmed from the check output: no_such_test: not in C001's output)",
       ],
     });
   });

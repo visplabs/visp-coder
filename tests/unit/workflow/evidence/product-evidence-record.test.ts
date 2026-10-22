@@ -345,14 +345,16 @@ describe("the worker's account of the listed requirements", () => {
     { id: "R003", status: "not-done" as const, reason: "the name stays as it was" },
   ];
 
-  it("marks a named test VISP cannot find in the check's output as claimed, not verified", () => {
+  it("marks a named test VISP cannot find in the check's output as not confirmed from the check output", () => {
     const entries = accountEvidence(listed, accounts, [verbose]);
     expect(entries.map((entry) => [entry.requirement, entry.account, entry.verification])).toEqual([
       ["R001", "done", "verified"],
       ["R002", "done", "claimed"],
       ["R003", "not-done", undefined],
     ]);
-    expect(entries[1]?.detail).toBe("claimed, not verified: missing_test: not in C001's output");
+    expect(entries[1]?.detail).toBe(
+      "not confirmed from the check output: missing_test: not in C001's output",
+    );
   });
 
   it("raises one gap for the claimed accounts, none when every name is confirmed", () => {
@@ -361,7 +363,7 @@ describe("the worker's account of the listed requirements", () => {
       {
         kind: "account",
         severity: "attention",
-        text: "1 of 2 requirement accounts (R002) name tests VISP could not confirm in the cited check's output: claimed, not verified. For example missing_test: not in C001's output",
+        text: "1 of 2 requirement accounts (R002) name tests that VISP could not confirm from the cited check's output. For example missing_test: not in C001's output",
       },
     ]);
     const confirmed = accountEvidence(listed.slice(0, 1), accounts.slice(0, 1), [verbose]);
@@ -379,7 +381,7 @@ describe("the worker's account of the listed requirements", () => {
     const rows = text.split("\n").filter((line) => /^\| \*\*R00\d\*\*/.test(line));
     expect(rows).toEqual([
       "| **R001** Export value two. | C001 value_is_two | verified: the test passed in C001's latest run |",
-      "| **R002** Export label two. | C001 label_is_two missing_test | claimed, not verified: missing_test: not in C001's output |",
+      "| **R002** Export label two. | C001 label_is_two missing_test | not confirmed from the check output: missing_test: not in C001's output |",
       "| **R003** Keep the module name. | not done: the name stays as it was | — |",
     ]);
     expect(renderEvidenceRecord(record())).not.toContain("Worker's account");

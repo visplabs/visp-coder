@@ -1,6 +1,7 @@
-import { verifyAccounts } from "../account-verification.js";
+import { NOT_CONFIRMED, verifyAccounts } from "../account-verification.js";
 import type { ProductExecution } from "../model.js";
 import type { ListedRequirement } from "../requirements.js";
+import type { TestSources } from "../test-sources.js";
 import type { EvidenceAccount, EvidenceGap } from "./record-types.js";
 
 const IDS_SHOWN = 6;
@@ -21,8 +22,9 @@ export function accountEvidence(
   listed: readonly ListedRequirement[],
   accounts: readonly RecordedAccount[],
   executions: readonly ProductExecution[],
+  sources?: TestSources,
 ): EvidenceAccount[] {
-  const verified = verifyAccounts(accounts, executions);
+  const verified = verifyAccounts(accounts, executions, sources);
   const byId = new Map(accounts.map((account) => [account.id, account]));
   return listed.map((requirement): EvidenceAccount => {
     const account = byId.get(requirement.id);
@@ -49,12 +51,12 @@ export function accountGaps(accounts: readonly EvidenceAccount[] | undefined): E
   const ids = claimed.map((entry) => entry.requirement);
   const shown =
     ids.length > IDS_SHOWN ? `${ids.slice(0, IDS_SHOWN).join(", ")}, …` : ids.join(", ");
-  const why = claimed[0]?.detail?.replace(/^claimed, not verified: /, "");
+  const why = claimed[0]?.detail?.replace(NOT_CONFIRMED, "");
   return [
     {
       kind: "account",
       severity: "attention",
-      text: `${claimed.length} of ${done} requirement accounts (${shown}) name tests VISP could not confirm in the cited check's output: claimed, not verified. For example ${why}`,
+      text: `${claimed.length} of ${done} requirement accounts (${shown}) name tests that VISP could not confirm from the cited check's output. For example ${why}`,
     },
   ];
 }

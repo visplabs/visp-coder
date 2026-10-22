@@ -6,7 +6,7 @@ $ visp pr
 
 ## Not verified (1)
 
-- 1 of 1 requirement accounts (R001) name tests VISP could not confirm in the cited check's output: claimed, not verified. For example C001's output lists no test names (1 named)
+- 1 of 1 requirement accounts (R001) name tests that VISP could not confirm from the cited check's output. For example C001's output lists no test names (1 named)
 
 ## Asked
 
@@ -29,10 +29,10 @@ Results are commands VISP ran. `stale` runs were on an earlier version and show 
 
 | Requirement | Worker's account | VISP checked |
 | --- | --- | --- |
-| **R001** `value` returns two instead of one. | C001 value_is_two | claimed, not verified: C001's output lists no test names (1 named) |
+| **R001** `value` returns two instead of one. | C001 value_is_two | not confirmed from the check output: C001's output lists no test names (1 named) |
 | **R002** Add a `label` export that is "two". | not done: the label export is left for a later request | — |
 
-The account is what the worker said at `visp done`. VISP confirms only that the cited check passed, and that a test the worker names is in that check's latest output as passed (and failed on the old code, where a comparison ran). A name it cannot find stays "claimed, not verified".
+The account is what the worker said at `visp done`. VISP confirms only that the cited check passed, and that a test the worker names is in that check's latest output as passed (and failed on the old code, where a comparison ran), or, when the runner prints no test names, that the suite passed and the test files define the name. A name it cannot confirm from the output is marked "not confirmed from the check output", with the reason. That is a limit of the output, not a finding against the worker.
 
 ## Changed
 

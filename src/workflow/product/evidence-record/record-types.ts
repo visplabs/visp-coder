@@ -127,8 +127,9 @@ export interface EvidenceAccount {
   /** Why a not-done requirement is not done, in the worker's words. */
   readonly reason?: string;
   /**
-   * - `verified`: every named test is in the check's latest output as passed.
-   * - `claimed`: a named test is not (claimed, not verified).
+   * - `verified`: every named test is in the check's latest output as passed, or the suite passed
+   *   and the test files define it (the detail says which).
+   * - `claimed`: a named test could not be confirmed from the output (the detail gives the reason).
    * - `no-names`: the account names no test; only the check's own result stands.
    */
   readonly verification?: "verified" | "claimed" | "no-names";
