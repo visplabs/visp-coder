@@ -433,6 +433,7 @@ export type ProductCoverageAssessment = z.infer<typeof coverageAssessmentSchema>
 export const reviewerContextSchema = z
   .object({
     session: z.string().uuid().optional(),
+    // Read-only: reviews recorded before the observation-preview mode was removed carry it.
     reviewMode: z.enum(["current", "observation-preview"]).optional(),
     context: z.enum(["fresh", "current", "unavailable", "unspecified"]),
     reason: z.string().trim().min(1).optional(),

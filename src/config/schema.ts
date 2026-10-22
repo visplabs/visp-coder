@@ -24,7 +24,6 @@ import { criticDefaultsSchema } from "./critic.js";
 const workflowSchema = z
   .object({
     strictness: z.enum(STRICTNESS_MODES).default(DEFAULT_STRICTNESS),
-    reviewMode: z.enum(["current", "observation-preview"]).default("current"),
     maxChangedFiles: z.number().int().positive().default(40),
     blockedPaths: z.array(z.string()).default([...DEFAULT_BLOCKED_PATHS]),
     validationCommands: z.array(commandSpecSchema).default([]),
