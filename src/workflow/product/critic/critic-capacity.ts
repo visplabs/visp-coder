@@ -68,7 +68,7 @@ async function recordedCapacity(
       reservableCalls,
       reason: "The independent review budget is spent.",
     };
-  const rounds = reviewRoundGap(workspace, selected.value.record, budget.value.budget);
+  const rounds = reviewRoundGap(workspace, selected.value.record, budget.value);
   if (rounds) return { available: false, callsRemaining, reservableCalls, reason: rounds };
   if (state && relaunchBlocked(state, subject, selected.value.phase))
     return {

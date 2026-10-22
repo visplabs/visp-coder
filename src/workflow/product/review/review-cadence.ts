@@ -22,15 +22,26 @@ export function featureReviewCadence(workspace: WorkspaceState, record: ProductR
 export const LEAN_MIDDLE_SLICE_REASON =
   "Lean review cadence: the independent review runs once the slice that completes the feature is done; no call spent";
 
-/** Why another product review may not run, under the lean cadence; undefined when it may. */
+/**
+ * Why another product review may not run, under the lean cadence; undefined when it may. A round
+ * is a review VISP recorded: an attempt that ended unavailable (no answer, or an answer VISP
+ * rejected) spends a call from the budget but not a round. In batch leandef2 a rejected review
+ * counted as the round, so the repaired product was never re-reviewed.
+ */
 export function reviewRoundGap(
   workspace: WorkspaceState,
   record: ProductRecord,
-  budget: { readonly entries: readonly { phase: string; noResponse?: boolean }[] },
+  spending: {
+    readonly budget: {
+      readonly entries: readonly { key: string; phase: string; noResponse?: boolean }[];
+    };
+    readonly unreviewed: ReadonlySet<string>;
+  },
 ): string | undefined {
   if (!featureReviewCadence(workspace, record)) return undefined;
-  const reviews = budget.entries.filter(
-    (entry) => entry.phase === "product" && !entry.noResponse,
+  const reviews = spending.budget.entries.filter(
+    (entry) =>
+      entry.phase === "product" && !entry.noResponse && !spending.unreviewed.has(entry.key),
   ).length;
   if (reviews === 0) return undefined;
   if (reviews >= LEAN_REVIEW_ROUNDS)
