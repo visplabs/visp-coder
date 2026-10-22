@@ -1,0 +1,25 @@
+This project uses VISP. Read CLAUDE.md and the VISP instructions it references before starting, and follow them. Run every command with `export PATH=/bench/shims/visp-leandef:$PATH` first so `visp` is the project's build.
+
+Your project directory is /bench/run/project. Run every shell command from that directory (start each command with `cd /bench/run/project && `) and create or edit files only inside it. Do not read other directories. No dependency downloads or network APIs; the standard library is available. Do not ask questions: make reasonable assumptions and continue. Do not delegate to other agents. Build it, run your tests, and finish with a short report of what you actually verified.
+
+Task:
+
+Build a small Angry Birds–style slingshot game that runs in a web browser.
+
+Contract (follow it exactly; it will be tested in a real browser, and people will also play it):
+
+- Plain HTML, CSS and JavaScript with no build step and no dependencies: `index.html` in the project root opens the game when the directory is served over HTTP. Load nothing from the network (no CDNs, fonts or images from other hosts); draw everything yourself (canvas or DOM).
+- The world is 960 × 540 units, origin top-left, `y` increasing downward, with flat ground at `y = 500`. The game fits the browser window without scrolling at 1280 × 800 and at a 390 × 844 phone viewport, keeping the whole world visible and its aspect ratio.
+- A slingshot stands near the left edge with the current bird resting in it. Pigs sit on or inside structures of blocks on the right side.
+- Aiming: press on the bird and drag it back from the slingshot, then release. The bird launches in the direction opposite the pull, with speed proportional to the pull distance up to a maximum pull of 120 units. It works with mouse and touch (pointer events). While dragging, show where the bird is being pulled.
+- Physics: constant downward gravity; the bird flies a ballistic arc. Bodies rest on the ground and on each other, and do not pass through the ground. Blocks and pigs have hit points; an impact damages both bodies in proportion to the impact speed, and a body at 0 hit points is removed. Hitting a pig directly with the bird at full launch speed destroys it. Removing a block gives 500 points and removing a pig 5000.
+- A turn ends when the bird leaves the world or everything has come to rest (or 8 seconds after launch at most); then the next bird is placed in the slingshot.
+- Levels: there are 3 levels, and each level starts with 3 birds and score 0 for that level. The level is won as soon as no pigs remain. It is lost when the last bird's turn ends with pigs remaining. After a win show a "Next level" button (after the last level, "Play again" returns to level 1); after a loss show a "Retry" button. A "Restart" button is always available and restarts the current level.
+- Show the level, the score and the birds remaining on screen.
+- State for automated tests: the element `#game` is the one that displays the world (its on-screen box is the 960 × 540 world at the current scale) and carries `data-state` (one of `aiming`, `flying`, `won`, `lost`; `flying` lasts from launch until the turn ends), `data-level` (1–3), `data-score`, `data-birds` (birds not yet launched) and `data-pigs` (pigs remaining), always current.
+- Test hooks on `window.gameTest`, which drive exactly the same game logic as a player:
+  - `pause()` stops the game's own clock; `step(ms)` then advances the simulation by `ms` milliseconds of game time in fixed steps of at most 1000/60 ms; `resume()` restarts the clock.
+  - `launch(angleDegrees, power)` launches the current bird as if pulled and released: angle 0 is straight right and 90 straight up; `power` from 0 to 1 is the fraction of the maximum pull.
+  - `restart(level)` restarts the given level (1–3) from its initial layout.
+  - `snapshot()` returns `{ state, level, score, birds, pigs, bird, bodies }`, where `bird` is the current bird as `{ x, y, vx, vy }` (center, units and units per second; at rest in the slingshot while aiming) or `null` when no birds remain, and `bodies` lists the remaining pigs and blocks as `{ kind: "pig" | "block", x, y, hp }` with the center position.
+- Make it look and feel like a game: readable colors, a sky and ground, a visible trajectory arc as the bird flies, and simple feedback when something is destroyed.

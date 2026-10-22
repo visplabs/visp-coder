@@ -3,6 +3,7 @@ import { vispError } from "../../core/errors.js";
 import { type FileMutation, filePrecondition } from "../../core/file-transaction.js";
 import { err, ok, type Result } from "../../core/result.js";
 import type { WorkspaceState } from "../state.js";
+import { dumpLineIndexes, isPastedLine, isProcessInstruction } from "./requirement-noise.js";
 
 /**
  * The requirements a request states, listed by VISP at `feature` without a model, and the
@@ -28,7 +29,8 @@ export interface ListedRequirement {
 }
 
 const LIST_ITEM = /^(\s*)(?:[-*•+]|\d{1,2}[.)])\s+(.+)$/;
-const FENCE = /^\s*(?:```|~~~)/;
+/** A code fence (CommonMark): up to three spaces, three or more marks, then an info string. */
+const FENCE = /^ {0,3}(`{3,}|~{3,})\s*[\w+#.-]*\s*$/;
 const SENTENCE = /(?<=[.!?])\s+(?=[A-Z0-9`"(])/;
 /** Prose next to a list counts when it instructs or constrains, not when it describes. */
 const IMPERATIVE =
@@ -56,11 +58,15 @@ function statedRequest(request: string): string {
   return cut < 0 ? request : blocks.slice(0, cut).join("");
 }
 
-/** The requirements a request states, in request order: list items, else sentences. */
+/**
+ * The requirements a request states, in request order: list items, else sentences. Pasted code,
+ * logs and tracebacks and instructions about how to work are not requirements.
+ */
 export function requestRequirements(request: string): ListedRequirement[] {
   const parts = requestParts(statedRequest(request));
   const listed = parts.filter((part) => part.item).length >= 2;
   return parts
+    .filter((part) => !isProcessInstruction(part.text))
     .filter((part) => part.item || (listed ? instructs(part.text) : words(part.text) >= MIN_WORDS))
     .flatMap((part) => branches(part.text))
     .map((statement, index) => ({
@@ -77,18 +83,22 @@ interface RequestPart {
 /** List items with their continuation lines, and prose sentences outside the lists, in order. */
 function requestParts(request: string): RequestPart[] {
   const parts: RequestPart[] = [];
-  let fenced = false;
+  let fence: string | undefined;
   let item: { indent: number; text: string } | undefined;
   const flush = () => {
     if (item) parts.push({ text: item.text, item: true });
     item = undefined;
   };
-  for (const line of request.replace(/\r\n?/g, "\n").split("\n")) {
-    if (FENCE.test(line)) {
-      fenced = !fenced;
+  const lines = request.replace(/\r\n?/g, "\n").split("\n");
+  const dump = dumpLineIndexes(lines);
+  for (const [index, line] of lines.entries()) {
+    const mark = FENCE.exec(line)?.[1];
+    if (mark) {
+      if (!fence) fence = mark;
+      else if (mark[0] === fence[0] && mark.length >= fence.length) fence = undefined;
       continue;
     }
-    if (fenced) continue;
+    if (fence) continue;
     const listed = LIST_ITEM.exec(line);
     if (listed) {
       flush();
@@ -96,6 +106,7 @@ function requestParts(request: string): RequestPart[] {
     } else if (!line.trim()) flush();
     else if (item && /^\s/.test(line) && line.search(/\S/) > item.indent)
       item.text = `${item.text} ${line.trim()}`;
+    else if (dump.has(index) || isPastedLine(line)) flush();
     else {
       flush();
       for (const sentence of line.trim().split(SENTENCE))

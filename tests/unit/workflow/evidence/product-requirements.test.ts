@@ -124,6 +124,112 @@ describe("requestRequirements", () => {
   });
 });
 
+/**
+ * Requests as the benchmark and its ChainSWE runs send them: `tests/fixtures/requests` holds the
+ * prompt.txt of lean runs of batch leandef1 and leandef2 (the run's directory generalized), and
+ * ChainSWE issues (MIT) in the bench's wrapper. Before the filter, four of six leandef2 lean runs
+ * had the wrapper listed as R001–R005, and a median of 18 requirements came out of 214 issues.
+ */
+describe("requestRequirements on wrapped requests", () => {
+  const fixture = (name: string) =>
+    readFileSync(join(import.meta.dirname, "../../../fixtures/requests", `${name}.txt`), "utf8");
+  const statements = (text: string) => requestRequirements(text).map((entry) => entry.statement);
+  const wrapperPhrases =
+    /Run every|Do not read|Do not ask|Do not delegate|finish with a short report|Your project directory|swe-test|Hidden tests|Resolve this|No dependency downloads|This project uses VISP/;
+
+  it.each([
+    ["bench-reservations", "reservations-bundles"],
+    ["bench-spreadsheet", "spreadsheet-extend"],
+    ["bench-slingshot", "slingshot-game"],
+    ["bench-lighthouse", "lighthouse-pixel"],
+  ])("lists the task of %s and nothing of the wrapper around it", (name, taskName) => {
+    const listed = statements(fixture(name));
+    expect(listed.filter((statement) => wrapperPhrases.test(statement))).toEqual([]);
+    expect(listed).toEqual(statements(task(taskName)));
+  });
+
+  it("keeps the real requirements of a wrapped request, parallel branches included", () => {
+    const listed = statements(fixture("bench-reservations"));
+    expect(listed).toHaveLength(10);
+    expect(listed[0]).toBe("Extend it without changing any existing behavior:");
+    expect(listed).toContain(
+      "Keep the existing tests passing and add tests for the new behavior. Update the README contract.",
+    );
+    expect(
+      listed.filter((statement) => /^(?:DELETE|POST) \/v1\/reservations\/<id>/.test(statement)),
+    ).toHaveLength(2);
+  });
+
+  it("leaves a traceback, pasted code and a table out of an issue", () => {
+    expect(statements(fixture("swe-alteryx__woodwork-1015"))).toEqual([
+      "Add input validation to ww.init_series",
+      "The `init_series` function added as part of the accessor update does not validate that the input passed in for the series is a valid series type.",
+      "If the user passes in a non-series object an error is currently raised, but the error message is not helpful in understanding what went wrong.",
+      "Current behavior:",
+      "We should add a validation check to this function and raise a better error if improper inputs are supplied.",
+    ]);
+    // The carets under a traceback line (`~~~~^^^^`) are not a code fence.
+    expect(statements(fixture("swe-amaranth-lang__amaranth-841"))).toEqual([
+      "TypeError when accessing reset attribute from a Signal created with an ArrayLayout",
+    ]);
+    const narwhals = statements(fixture("swe-narwhals-dev__narwhals-1948"));
+    expect(narwhals.filter((statement) => /[│┌└╞]|import |nw\./.test(statement))).toEqual([]);
+    const django = statements(fixture("swe-django__django-16229"));
+    expect(
+      django.filter((statement) => /^(?:class|def|thing|plop|#)|ArrayField\($/.test(statement)),
+    ).toEqual([]);
+  });
+
+  it("drops markup and template placeholders of an issue form", () => {
+    const listed = statements(fixture("swe-theacodes__nox-472"));
+    expect(listed.filter((statement) => /<!--|\*\*/.test(statement))).toEqual([]);
+    expect(listed[0]).toBe("Working directory unexpectedly set to wherever noxfile.py is.");
+  });
+
+  it("keeps a long issue with pasted output under the limit that moves a feature to the full loop", () => {
+    const sizes = Object.fromEntries(
+      [
+        "swe-django__django-16229",
+        "swe-narwhals-dev__narwhals-1948",
+        "swe-sphinx-doc__sphinx-9902",
+      ].map((name) => [name, requestRequirements(fixture(name)).length]),
+    );
+    expect(sizes).toEqual({
+      "swe-django__django-16229": 8,
+      "swe-narwhals-dev__narwhals-1948": 5,
+      "swe-sphinx-doc__sphinx-9902": 16,
+    });
+  });
+
+  it("drops an environment dump of four or more label lines but keeps a lone label", () => {
+    const dump = [
+      "Fix the config loader.",
+      "Python: 3.11",
+      "OS: Linux",
+      "numpy: 1.26",
+      "scipy: 1.11",
+    ];
+    expect(statements(dump.join("\n"))).toEqual(["Fix the config loader."]);
+    expect(statements(["Fix the config loader.", "Port: 8080"].join("\n"))).toEqual([
+      "Fix the config loader.",
+      "Port: 8080",
+    ]);
+  });
+
+  it("keeps a plain lowercase request that only looks like code", () => {
+    expect(
+      statements(["return 404 when the id is unknown", "add a button to the toolbar"].join("\n")),
+    ).toEqual(["return 404 when the id is unknown", "add a button to the toolbar"]);
+  });
+
+  it("keeps a bullet that begins like a log line or a command, since a bullet is the user's", () => {
+    expect(statements(["- Error pages show the request id.", "- Add paging."].join("\n"))).toEqual([
+      "Error pages show the request id.",
+      "Add paging.",
+    ]);
+  });
+});
+
 describe("parseRequirementAccounts", () => {
   it("reads a check that shows a requirement, with an optional note, or a reason it is not done", () => {
     expect(
