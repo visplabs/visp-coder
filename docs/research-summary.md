@@ -201,6 +201,43 @@ In the first batch the lean reviewer, at high effort, took most of the time insi
 
 The accuracy drop ChainSWE reports with chain length comes, for these workers, from issues left unresolved (the issue's own failing tests still fail), not from breaking earlier fixes. A regression gate therefore should not block by default: `workflow.regressionGate` defaults to `advise`, which reports and never blocks, and `gate` is opt-in. That default is not measured yet. On both profiles every `done` whose checks pass runs the gate (up to 12 commands and 180 s). Its test selection was fixed for Python projects (#67). Whether the evidence record helps a reviewer is being measured in a separate study.
 
+## Offline findings on the lean runs (October 22 2026)
+
+Four findings from re-reading the 18 lean runs of `leandef1` and `leandef2` (Haiku 5.5 worker, preset `quality-2026-10`). No model calls and no new worker sessions. The bench code is in PRs #79, #82 and #84.
+
+The bench preset runs VISP with `critic.launch: claude-exec`, while `visp init` for Claude Code leaves the reviewer to the host. So these results describe the `claude-exec` configuration, not a default install.
+
+**Account verification (#79).** At `done` the worker maps each requirement to a check and names the tests that cover it. VISP compares the names with the check's recorded output. In a hand audit of 30 `done` accounts that name tests, drawn from the 18 runs, every named test had run and passed. The first verifier marked 17 of them as unconfirmed. Sixteen were `python3 -m unittest discover -s tests` without `-v`, which prints only dots, then `Ran N tests` and `OK`. One was a custom runner that prints `ok <title>`. The fix verifies at suite level (a clean pass, a run that covers the tests the files define, and a source scan that finds the name) and accepts `ok <title>` lines.
+
+| | First verifier | After the fix |
+| --- | --- | --- |
+| Verified | 13 | 30 |
+| Not confirmed | 17 | 0 |
+| Wrongly marked unconfirmed | 17 (57%) | 0 |
+| Wrongly marked verified | 0 | 0 |
+
+Limits: the fix was tuned on the same 30 accounts. No sampled test actually failed, so the sample cannot show a wrongly verified account from a real failing run. A negative control (a test name no file defines) gave 0 of 30 verified. A fresh audit on new runs is pending.
+
+**Regression gate.** The gate left its selection unchecked in 17 of 18 lean runs. In 13 of them it ran a malformed command, `python3 -m unittest discover -s tests/test_api.py`, because it kept `discover -s` from the declared check (fix in #82, which narrows to `python3 -m unittest tests.test_api`). It reported clear once and found 0 regressions, in at most 0.75 s. Its value is unmeasured: the runs held no regression for it to find.
+
+**Lean reviewer and hidden checks.** In 8 of the 18 runs a review failed. For each, the tree the review saw was rebuilt from its recorded candidate and scored with the task's hidden checks, and so were all 33 candidates of those runs.
+
+| | Hidden checks passed |
+| --- | --- |
+| Tree at the first failed review (8 runs) | 425 of 425 |
+| Final tree (8 runs) | 424 of 425 |
+
+The review rescued 0 hidden checks. One repair lost a check: a change made for an optional finding broke the handling of a bad cell reference (`=A0*2`) in `spreadsheet-extend`, and the review budget of two was spent. The reviews still raised 11 required findings, each a real gap against the request (a malformed SKU returned 404 where the request says 422; `0^-1` crashed the sheet; `snapshot().bird` was `null` after a win). The hidden checks test none of them. Recorded review cost was $0.066 per run with a failed review; with an estimate for the 9 timed-out calls, which are not logged, about $0.10. The time cost is larger: 460 s per run in VISP commands, and a mean wall time of 1,092 s against 499 s for the matching bare runs. Limits: one scoring run per tree, and the bare comparison is three runs per task, not paired.
+
+**Lean reviewer and probes (#84).** Because the hidden checks cannot see those findings, #84 adds probe checks drawn from the request's text (47 on `reservations-bundles`, 74 on `spreadsheet-extend`), scored apart from the hidden checks. In the 3 repaired runs per task the repairs did change the product:
+
+| Task | Bare, every run | Lean, before repair | Lean, after repair |
+| --- | --- | --- | --- |
+| reservations-bundles (47 probes) | 42 | 42 | 46–47 |
+| spreadsheet-extend (74 probes) | 70 | 68–70 | 73–74 |
+
+The probes for the review's findings passed in 0–20% of bare runs and 83–93% of repaired lean runs. One repair also caused a regression (`abs-out-of-range`). Limits: the probes were written after seeing the reviewer's findings, so they favour the reviewer by construction. Nine probes cover gaps that the bench's own reference solution shares. They cannot show what the reviewer misses. A fresh batch (B2) with new runs will test whether the gain repeats.
+
 ## What made the difference
 
 **The harness must launch the critic itself.** In the first weak-agent pilot (Luna at low effort, a sentiment API with 36 hidden tests), bare coding scored 36 and both VISP arms 34: workers never ran a check that covered errors and never delegated review. A critic launched by VISP (`codex exec`, read-only) on the same code reported the two missing 405 responses, acceptance of `NaN` and a request that can hang without `Content-Length`, each with a next check. VISP now launches the reviewer after checks pass (`critic.launch: codex-exec`).
