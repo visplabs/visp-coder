@@ -147,13 +147,16 @@ class Intermediate(unittest.TestCase):
         self.assertFalse(hasattr(run_carryover, "apply_intermediate"))
         self.assertFalse(hasattr(run_carryover, "raise_limit"))
 
-    def test_failed_verification_makes_the_run_invalid_and_skips_the_second_session(self):
+    def test_failed_verification_is_rerun_once_then_makes_the_run_invalid_and_skips_the_second_session(self):
         def refuse(project, mode):
             raise run_carryover.IntermediateFailed(f"{mode}: limit still 10000")
 
         stopped = self.run_modes(["intermediate"], verify=refuse)
         self.assertIn("limit still 10000", stopped)
-        self.assertEqual([prompt for prompt, _ in self.seen], ["middle"])
+        self.assertEqual([prompt for prompt, _ in self.seen], ["middle", "middle"])
+        out = self.run / "intermediate"
+        self.assertEqual(json.loads((out / "intermediate.json").read_text())["reruns"], 1)
+        self.assertEqual(json.loads((out / "intermediate-attempt1.json").read_text())["reruns"], 0)
         self.assertFalse((self.run / "intermediate" / "result.json").exists())
         self.assertEqual(runfacts.invalid(self.run)["reason"], "intermediate feature not verified")
         self.assertTrue(runfacts.is_finished(self.run, two_sessions=True))
@@ -169,8 +172,47 @@ class Intermediate(unittest.TestCase):
                 mock.patch.object(runfacts, "CLAUDE_PROJECTS", Path(self.root.name) / "claude"):
             with self.assertRaises(SystemExit):
                 run_carryover.run_modes(args, self.run, self.project, arm(), self.first, {}, ["intermediate"])
-        self.assertEqual(self.seen, ["middle"])
+        self.assertEqual(self.seen, ["middle", "middle"])
         self.assertEqual(runfacts.invalid(self.run)["reason"], "worker failure")
+
+    def test_a_rerun_that_holds_gives_a_valid_run_with_the_count(self):
+        attempts = []
+
+        def flaky(project, arm_, prompt, model, timeout, resume, effort):
+            self.seen.append(prompt)
+            attempts.append(prompt)
+            failing = prompt == "middle" and attempts.count("middle") == 1
+            return {"arm": "bare", "seconds": 1, "timedOut": False, "isError": failing, "report": "API Error: 500",
+                    "sessionId": None, "sessionIds": []}
+
+        args = argparse.Namespace(run="r1", build=None, reuse=None, model=None, timeout=60, effort=None)
+        with mock.patch.object(run_carryover, "run_session", flaky), \
+                mock.patch.object(run_carryover, "verify_intermediate", lambda project, mode: None), \
+                mock.patch.object(runfacts, "CLAUDE_PROJECTS", Path(self.root.name) / "claude"):
+            run_carryover.run_modes(args, self.run, self.project, arm(), self.first, {}, ["intermediate"])
+        self.assertEqual(self.seen, ["middle", "middle", "second"])
+        out = self.run / "intermediate"
+        self.assertIsNone(runfacts.invalid(self.run))
+        self.assertEqual(json.loads((out / "intermediate.json").read_text())["reruns"], 1)
+        self.assertTrue(json.loads((out / "intermediate-attempt1.json").read_text())["isError"])
+        self.assertEqual(json.loads((out / "result.json").read_text())["intermediateReruns"], 1)
+        self.assertEqual([label for label, _ in runfacts.sessions(self.run)],
+                         ["intermediate intermediate", "intermediate"])
+
+    def test_a_usage_limit_is_not_rerun(self):
+        def limited(project, arm_, prompt, model, timeout, resume, effort):
+            self.seen.append(prompt)
+            return {"arm": "bare", "seconds": 1, "timedOut": False, "isError": True,
+                    "report": "You've hit your session limit"}
+
+        args = argparse.Namespace(run="r1", build=None, reuse=None, model=None, timeout=60, effort=None)
+        with mock.patch.object(run_carryover, "run_session", limited), \
+                mock.patch.object(runfacts, "CLAUDE_PROJECTS", Path(self.root.name) / "claude"):
+            with self.assertRaises(SystemExit):
+                run_carryover.run_modes(args, self.run, self.project, arm(), self.first, {}, ["intermediate"])
+        self.assertEqual(self.seen, ["middle"])
+        self.assertEqual(runfacts.invalid(self.run)["reason"], "usage limit")
+        self.assertEqual(run_carryover.MAX_INTERMEDIATE_RERUNS, 1)
 
     def test_every_mode_starts_from_session_ones_memory(self):
         self.run_modes(["intermediate", "fresh"], memory="auto")
@@ -191,11 +233,92 @@ class Intermediate(unittest.TestCase):
         self.assertFalse((self.run / "memory").exists())
         self.assertFalse((self.run / "intermediate" / "memory").exists())
 
+    def test_a_non_intermediate_mode_records_no_rerun_count(self):
+        self.run_modes(["fresh"])
+        self.assertNotIn("intermediateReruns", json.loads((self.run / "fresh" / "result.json").read_text()))
+
     def test_planned_sessions_and_the_batch_mode(self):
         self.assertEqual(run_carryover.planned_sessions("intermediate"), ["intermediate request", "second request"])
         self.assertEqual(run_carryover.planned_sessions("fresh"), ["second request"])
         self.assertEqual(run_carryover.batch_mode("archive-carryover-raised"), "intermediate")
         self.assertEqual(run_carryover.batch_mode("sheet-carryover"), "fresh")
+
+
+class Recall(unittest.TestCase):
+    """What recall_facts reads from a VISP project's state."""
+
+    def setUp(self):
+        self.root = tempfile.TemporaryDirectory()
+        self.project = Path(self.root.name)
+        self.features = self.project / ".visp" / "features"
+        self.state = self.project / ".visp" / "state"
+        self.state.mkdir(parents=True)
+        self.add_feature("001-archiving", {"sourceBrief": "3. Items hold at most 10000 units."})
+
+    def tearDown(self):
+        self.root.cleanup()
+
+    def add_feature(self, name, intent=None, memories=None):
+        (self.features / name).mkdir(parents=True)
+        (self.features / name / "intent.json").write_text(json.dumps(intent or {"goal": name}))
+        if memories is not None:
+            (self.features / name / "project-memory.json").write_text(json.dumps({"version": 1, "memories": memories}))
+
+    def test_no_new_feature_means_the_session_never_ran_visp_feature(self):
+        facts = run_carryover.recall_facts(self.project, ["001-archiving"])
+        self.assertFalse(facts["ranFeature"])
+        self.assertTrue(facts["earlierBriefHoldsCap"])
+        self.assertFalse(facts["recallReturned"] or facts["storeHoldsCap"])
+
+    def test_recall_that_returned_the_cap_note(self):
+        self.add_feature("002-bundles", memories=["Items hold at most 10000 units."])
+        (self.state / "request-history.json").write_text(json.dumps(
+            {"version": 1, "requests": [{"feature": "001-archiving", "goal": "g",
+                                         "notes": ["Items hold at most 10000 units.", "Archived items 409."]}]}))
+        facts = run_carryover.recall_facts(self.project, ["001-archiving"])
+        self.assertEqual((facts["ranFeature"], facts["newFeatures"]), (True, ["002-bundles"]))
+        self.assertEqual((facts["storeNotes"], facts["storeHoldsCap"], facts["storeCapValues"]), (2, True, ["10000"]))
+        self.assertEqual((facts["recallReturned"], facts["recallMemories"], facts["recallMentionsCap"]),
+                         (True, 1, True))
+
+    def test_recall_that_returned_nothing_leaves_no_memory_file(self):
+        self.add_feature("002-bundles")
+        facts = run_carryover.recall_facts(self.project, ["001-archiving"])
+        self.assertEqual((facts["ranFeature"], facts["recallReturned"], facts["recallMemories"]), (True, False, 0))
+
+    def test_memories_that_miss_the_cap_and_a_comma_written_value(self):
+        self.add_feature("002-bundles", memories=["Archived items are refused in bundles."])
+        facts = run_carryover.recall_facts(self.project, ["001-archiving"])
+        self.assertEqual((facts["recallReturned"], facts["recallMentionsCap"]), (True, False))
+        self.assertEqual(run_carryover.cap_values(["limit is 50,000 now", "was 10 000"]), ["10000", "50000"])
+
+    def test_the_second_result_of_a_visp_arm_carries_recall_and_a_bare_arm_does_not(self):
+        run = self.project / "run"
+        (run / "session1").mkdir(parents=True)
+        shutil.copytree(self.project / ".visp", run / "snap" / ".visp")
+        with tarfile.open(run / "session1" / "snapshot.tar", "w") as archive:
+            archive.add(run / "snap" / ".visp", arcname=".visp")
+        run_carryover.snapshot_memory(run / "project", run / "session1" / "memory.tar")
+        (run / "prompt2.txt").write_text("second")
+        for name, expect in (("visp:develop", True), ("bare", False)):
+            shutil.rmtree(run / "project", ignore_errors=True)
+            shutil.rmtree(run / "fresh", ignore_errors=True)
+
+            def session(project, arm_, prompt, model, timeout, resume, effort):
+                (project / ".visp" / "features" / "002-new").mkdir(parents=True)
+                (project / ".visp" / "features" / "002-new" / "project-memory.json").write_text(
+                    json.dumps({"version": 1, "memories": ["cap 10000"]}))
+                return {"arm": arm_["arm"], "seconds": 1, "timedOut": False, "isError": False}
+
+            args = argparse.Namespace(run="r", build=None, reuse=None, model=None, timeout=60, effort=None)
+            with mock.patch.object(run_carryover, "run_session", session):
+                run_carryover.run_modes(args, run, run / "project", {"task": "archive-carryover", "arm": name,
+                                                                      "shim": None}, run / "session1", {}, ["fresh"])
+            recorded = json.loads((run / "fresh" / "result.json").read_text())
+            self.assertEqual("recall" in recorded, expect)
+            if expect:
+                self.assertEqual((recorded["recall"]["ranFeature"], recorded["recall"]["recallMentionsCap"]),
+                                 (True, True))
 
 
 if __name__ == "__main__":

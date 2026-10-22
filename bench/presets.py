@@ -61,6 +61,9 @@ VISP_MODES = {
     # The reviewer and tester off (src/config/critic.ts criticModeSchema: auto | manual | both | off).
     # Everything else stays as the arm's other modes and the preset set it.
     "nocritic": {"critic.mode": "off"},
+    # No recall: VISP records requests but its model passes no earlier decisions to a new feature
+    # (src/config/schema.ts memorySchema.recall). Attributes a carryover gain to recall or to the rest.
+    "norecall": {"memory.recall": False},
 }
 
 

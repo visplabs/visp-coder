@@ -1,7 +1,7 @@
 """Run a benchmark batch: tasks x arms x repetitions under one preset, several runs at a time.
 
 Usage: batch.py --batch <name> --tasks a,b,c --arms visp:visp-base,visp:visp-cand [--reps 3] [--jobs 4]
-                [--preset quality-2026-10] [--dry-run] [--rerun-invalid]
+                [--preset quality-2026-10] [--dry-run] [--rerun-invalid] [--spend-cap USD]
 
 An arm is anything setup_arm.py accepts, optionally labelled as label=arm; the label defaults to
 the build name for VISP arms (visp:visp-base -> visp-base, visp-codex:x -> codex-x) and to the
@@ -25,8 +25,14 @@ exit); such a run gets invalid.json and is never scored. After a usage limit no 
 start, since the limit applies to every run. --rerun-invalid moves invalid runs to discarded/ and
 redoes them. --dry-run prints the queue and what would happen to each run, and changes nothing.
 
-Writes $VISP_BENCH_RUNS/batches/<name>/manifest.json (preset, arms, tasks, the planned runs) and
-batch.log. report.py reads the manifest.
+--spend-cap USD starts spend_guard.py as a child: it sums the cost every run's claude-calls.jsonl
+logs and, above the cap, sends this driver SIGTERM and writes batches/<name>/stopped-by-spend-guard.json.
+The guard finds the driver by the pid recorded in the manifest ("driverPid", written here at the start of
+every pass) and checked against /proc, so a stale pid is never signalled. A restart moves an earlier stop
+record aside and counts the money already spent toward the cap.
+
+Writes $VISP_BENCH_RUNS/batches/<name>/manifest.json (preset, arms, tasks, the planned runs, driverPid)
+and batch.log. report.py reads the manifest.
 """
 import argparse
 import concurrent.futures
@@ -52,6 +58,7 @@ TIMEOUTS = {"visual": 2700, "game": 3600, "carryover": 2700, "chain": 2700, "cod
 log_lock = threading.Lock()
 stop = threading.Event()
 active, active_lock = set(), threading.Lock()
+guard = None
 
 
 def kind(task):
@@ -217,10 +224,29 @@ def on_signal(directory, lock_path):
             runs = list(active)
         for run in runs:
             log(directory, f"{run.name}: stopped {stop_recorded(run)} on signal {number}")
+        stop_guard()
         lock_path.unlink(missing_ok=True)
         os._exit(128 + number)
     for number in (signal.SIGTERM, signal.SIGHUP):
         signal.signal(number, handle)
+
+
+def start_guard(directory, args):
+    """The spend guard as a child process. An earlier stop record is moved aside so the new one is clear."""
+    global guard
+    earlier = directory / "stopped-by-spend-guard.json"
+    if earlier.exists():
+        moved = earlier.rename(directory / f"stopped-by-spend-guard-{time.strftime('%Y%m%d-%H%M%S')}.json")
+        log(directory, f"an earlier spend-guard stop moved to {moved.name}")
+    guard = subprocess.Popen([sys.executable, str(BENCH / "spend_guard.py"), args.batch, "--cap", str(args.spend_cap),
+                              "--interval", str(args.spend_interval)])
+    log(directory, f"spend guard {guard.pid}: stops this batch above ${args.spend_cap:.2f}, "
+                   f"looking every {args.spend_interval:g} s")
+
+
+def stop_guard():
+    if guard and guard.poll() is None:
+        guard.terminate()
 
 
 def main():
@@ -233,6 +259,9 @@ def main():
     parser.add_argument("--preset", default="default")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--rerun-invalid", action="store_true")
+    parser.add_argument("--spend-cap", type=float, metavar="USD",
+                        help="stop the batch above this total cost (spend_guard.py); counts runs already made")
+    parser.add_argument("--spend-interval", type=float, default=60, help="seconds between the guard's looks")
     args = parser.parse_args()
     settings = preset(args.preset)
     tasks, arms, runs = plan(args)
@@ -251,6 +280,8 @@ def main():
     if args.dry_run:
         print(f"batch {args.batch}, preset {args.preset} (worker {settings['worker']['model']}"
               f" {settings['worker']['effort'] or 'default effort'}), {len(runs)} runs, {args.jobs} at a time")
+        if args.spend_cap is not None:
+            print(f"spend guard: stops the batch above ${args.spend_cap:.2f}, looking every {args.spend_interval:g} s")
         for entry in runs:
             sessions = f" x{1 + len(planned_sessions(entry['mode']))} sessions" if entry["twoSessions"] else ""
             if entry["kind"] == "chain":
@@ -267,9 +298,11 @@ def main():
         manifest = {"batch": args.batch, "preset": args.preset, "settings": settings, "tasks": tasks,
                     "arms": [{"label": name, "arm": arm} for name, arm in arms], "reps": args.reps,
                     "created": (previous or {}).get("created") or time.strftime("%Y-%m-%dT%H:%M:%S"),
-                    "runs": runs + kept}
+                    "driverPid": os.getpid(), "spendCap": args.spend_cap, "runs": runs + kept}
         manifest_path.write_text(json.dumps(manifest, indent=2))
         log(directory, f"batch {args.batch}: {len(runs)} runs, preset {args.preset}, {args.jobs} at a time")
+        if args.spend_cap is not None:
+            start_guard(directory, args)
         outcomes = {}
         with concurrent.futures.ThreadPoolExecutor(args.jobs) as pool:
             futures = [pool.submit(execute, entry, args, directory) for entry in runs]
@@ -282,6 +315,7 @@ def main():
             log(directory, "stopped early: a usage limit was hit; run again with --rerun-invalid after it resets")
         log(directory, "batch pass finished")
     finally:
+        stop_guard()
         lock_path.unlink(missing_ok=True)
 
 
