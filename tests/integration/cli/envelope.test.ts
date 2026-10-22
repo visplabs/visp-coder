@@ -84,12 +84,12 @@ describe("the command surface", () => {
       "pr",
       "next",
       "status",
-      "handoff",
       "doctor",
       "report",
     ]) {
       expect(help, `${command} is missing from --help`).toContain(command);
     }
+    expect(help).not.toMatch(/^\s+handoff\b/m);
   });
 
   it("reports its SemVer version, including prereleases", () => {

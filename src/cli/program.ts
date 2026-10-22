@@ -15,7 +15,6 @@ import {
   briefCommand,
   doneCommand,
   featureCommand,
-  handoffCommand,
   migrateCommand,
   nextCommand,
   prCommand,
@@ -72,7 +71,6 @@ export function buildProgram(
   program.addCommand(prCommand());
   program.addCommand(nextCommand());
   program.addCommand(statusCommand());
-  program.addCommand(handoffCommand());
   program.addCommand(doctorCommand());
   program.addCommand(rulesCommand());
   program.addCommand(trailCommand());
