@@ -2,7 +2,8 @@
 
 Usage: setup_arm.py <task> <arm> <run_name> [--skill <id>]... [--preset default]
 arm: bare | speckit | bmad | visp:<build> (Claude Code worker) | visp-codex:<build> (Codex worker)
-<build> is a name given to build_visp.sh; `visp:<build>+lean` adds a workflow mode from presets.py. --skill seeds and admits a bundled VISP skill, so an
+<build> is a name given to build_visp.sh; `visp:<build>+lean+nocritic` adds modes from presets.py,
+each a set of visp.yml keys. arm.json records them and the settings `visp doctor --settings` reports. --skill seeds and admits a bundled VISP skill, so an
 arm with it differs from one without only by that skill. --preset (presets.py) sets VISP's
 reviewer and tester and is recorded in arm.json, where the runners read the worker model.
 
@@ -29,7 +30,7 @@ import subprocess
 
 from chains import step_files
 from common import RUNS
-from presets import critic_yaml, preset, visp_build, workflow_yaml
+from presets import arm_record, config_yaml, critic_yaml, effective_settings, preset, visp_build
 from scope_env import PREAMBLE, install_shims, is_scope_task, load_scenario, materialize, rule_sentence, worker_env
 from scope_env import finish as finish_scope
 
@@ -66,6 +67,7 @@ else:
     task = (task_dir / "task.md").read_text()
 env = dict(os.environ)
 shim_dir = None
+arm_mode = None
 
 
 def sh(argv):
@@ -121,6 +123,7 @@ elif arm.startswith("visp:") or arm.startswith("visp-codex:"):
     # visp-codex installs the Codex instructions for a Codex worker; the reviewer is Codex either way.
     host = "codex" if arm.startswith("visp-codex:") else "claude-code"
     build, mode = visp_build(arm)
+    arm_mode = mode
     shim = RUNS / "shims" / build
     shim_dir = str(shim)
     env["PATH"] = f"{shim}:{env['PATH']}"
@@ -131,7 +134,7 @@ elif arm.startswith("visp:") or arm.startswith("visp-codex:"):
     config = config.replace("critic:\n  harness: claude-code", critic)
     if args.preset != "default" and critic not in config:
         raise SystemExit(f"setup failed: visp.yml has no critic block to replace for preset {args.preset}")
-    (root / "visp.yml").write_text(workflow_yaml(config, mode))
+    (root / "visp.yml").write_text(config_yaml(config, mode))
     sh(["visp", "install", "--harness", host, "--json"])
     for skill in args.skill:
         sh(["visp", "skill", "seed", skill, "--by", "bench"])
@@ -151,6 +154,9 @@ extra = {}
 if scenario:
     finish_scope(scenario, root.parent)
     extra = {"extraPath": [install_shims(root.parent)], "env": worker_env(root.parent), "scope": scenario["id"]}
+# What VISP reports for the project's config (after the commit, so it cannot change the scaffold),
+# recorded beside the keys the arm's modes set, so a report can check each arm ran as named.
+arm_config = arm_record(arm_mode, effective_settings(root, env)) if shim_dir else {}
 prompt = f"{workflow}\n\n{COMMON}\n\nTask:\n\n{task}".lstrip()
 (root.parent / "prompt.txt").write_text(prompt)
 if sessions:
@@ -162,5 +168,5 @@ for number, step in enumerate(steps, start=1):
     (root.parent / f"prompt-step{number}.txt").write_text(f"{workflow}\n\n{COMMON}\n\nTask:\n\n{step.read_text()}")
 # The headless runner puts the arm's VISP build on PATH so installed hooks find it.
 (root.parent / "arm.json").write_text(json.dumps({"task": task_name, "arm": arm, "shim": shim_dir, "skills": args.skill,
-                                                 "preset": args.preset, "settings": settings, **extra}))
+                                                 "preset": args.preset, "settings": settings, **arm_config, **extra}))
 print(json.dumps({"root": str(root), "prompt": str(root.parent / "prompt.txt")}))
