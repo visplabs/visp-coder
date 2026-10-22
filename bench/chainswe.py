@@ -59,7 +59,7 @@ import time
 
 from chains import summarize
 from common import RUNS, stop_recorded
-from presets import critic_yaml, preset, visp_build, workflow_yaml
+from presets import arm_record, config_yaml, critic_yaml, effective_settings, preset, visp_build
 from run_claude import run_session
 from runfacts import mark_if_invalid
 from swe_tests import PRIORITY, canonical_test_id, members, parse_test_results, passes
@@ -182,7 +182,7 @@ def install_arm(root, arm, settings, preset_name, env):
     config = config.replace("critic:\n  harness: claude-code", critic)
     if preset_name != "default" and critic not in config:
         raise SystemExit(f"setup failed: visp.yml has no critic block to replace for preset {preset_name}")
-    (root / "visp.yml").write_text(workflow_yaml(config, mode))
+    (root / "visp.yml").write_text(config_yaml(config, mode))
     sh(["visp", "install", "--harness", "claude-code", "--json"], cwd=root, env=env)
     return ("This project uses VISP. Read CLAUDE.md and the VISP instructions it references before starting, "
             f"and follow them. Run every command with `export PATH={shim}:$PATH` first so `visp` is the "
@@ -238,9 +238,11 @@ def setup(run, chain, arm, preset_name):
     sh(["git", "-c", "core.hooksPath=/dev/null", "commit", "-q", "-m", "Benchmark scaffold"], cwd=root)
     for number, bug in enumerate(chain["bug_fixes"], start=1):
         (run / f"prompt-step{number}.txt").write_text(prompt(chain, bug, workflow, root))
+    arm_config = arm_record(visp_build(arm)[1], effective_settings(root, env)) if shim else {}
     (run / "arm.json").write_text(json.dumps({
         "task": chain["label"], "chain": chain["continuous_id"], "image": chain["docker_image"], "arm": arm,
-        "shim": shim, "extraPath": [install_python(run)], "skills": [], "preset": preset_name, "settings": settings}))
+        "shim": shim, "extraPath": [install_python(run)], "skills": [], "preset": preset_name, "settings": settings,
+        **arm_config}))
 
 
 # ---------------------------------------------------------------- scoring

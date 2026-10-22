@@ -192,7 +192,8 @@ class ReportTests(unittest.TestCase):
         return [base]
 
     def test_probes_are_a_separate_column_and_never_change_hidden(self):
-        manifest = {"batch": "b", "preset": "p", "settings": {"worker": {"model": "m", "effort": None}}}
+        manifest = {"batch": "b", "preset": "p", "settings": {"worker": {"model": "m", "effort": None}},
+                    "arms": [{"label": "bare", "arm": "bare"}]}
         for probes, expect in (((0.5, "2/4", 0.25, "1/4"), True), ((None, None, None, None), False)):
             rows = self.rows(probes)
             groups = {("reservations-bundles", "bare"): report.summarize(rows, ["hidden"])}
