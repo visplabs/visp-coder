@@ -33,6 +33,8 @@ def worker_env(arm):
     # A task's own tools, such as chainswe.py's python that runs tests in the task's image.
     for directory in reversed(arm.get("extraPath") or []):
         env["PATH"] = f"{directory}:{env['PATH']}"
+    # Environment a task sets for the worker, such as run_scope.py's fake HOME.
+    env.update(arm.get("env") or {})
     # Claude Code's own auto memory lives outside the project and would carry knowledge
     # between sessions of one run; only what the workflow keeps in the project may carry.
     env["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] = "1"

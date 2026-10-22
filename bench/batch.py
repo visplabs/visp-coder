@@ -11,7 +11,9 @@ The queue goes repetition by repetition, and within one through every task with 
 order that rotates per task, so machine load and a partial batch fall on every arm alike. A
 two-session task (session1.md) runs with run_carryover.py in fresh mode: the second session
 starts on the project the first left, notes kept. A chain task (steps/) runs with run_chain.py:
-each step is a fresh session on the project the previous step left. Timeouts per session: games
+each step is a fresh session on the project the previous step left. A scope task (scope-<scenario id>,
+scope_env.py) runs with run_scope.py, 1200 s; `--tasks 'scope-*'` (or any glob) expands to the scenarios it
+matches, and its arms are bare, bare-rule and visp:<build>. Timeouts per session: games
 3600 s, every other task 2700 s (per step for a chain). A visp-codex arm runs with run_codex.py; every other arm with run_claude.py.
 
 Restartable: a finished run is skipped; a run left unfinished by an interrupted batch is moved
@@ -29,6 +31,7 @@ batch.log. report.py reads the manifest.
 """
 import argparse
 import concurrent.futures
+import fnmatch
 import json
 import os
 import pathlib
@@ -43,16 +46,19 @@ from chains import is_chain, step_files
 from common import RUNS, stop_recorded
 from judge import CHECKLISTS, GAMES
 from presets import preset, visp_build
+from scope_env import is_scope_task, scope_tasks
 from runfacts import invalid, invalidity, is_finished, mark_if_invalid
 
 BENCH = pathlib.Path(__file__).resolve().parent
-TIMEOUTS = {"visual": 2700, "game": 3600, "carryover": 2700, "chain": 2700, "code": 2700}
+TIMEOUTS = {"visual": 2700, "game": 3600, "carryover": 2700, "chain": 2700, "code": 2700, "scope": 1200}
 log_lock = threading.Lock()
 stop = threading.Event()
 active, active_lock = set(), threading.Lock()
 
 
 def kind(task):
+    if is_scope_task(task):
+        return "scope"
     task_dir = BENCH / "tasks" / task
     if not task_dir.is_dir():
         raise SystemExit(f"unknown task {task}")
@@ -78,8 +84,22 @@ def label(spec):
     return spec, spec
 
 
+def expand(spec):
+    """The task names a --tasks list names; a glob such as scope-credentials-* matches scope scenarios."""
+    tasks = []
+    for name in spec.split(","):
+        if any(char in name for char in "*?["):
+            found = [task for task in scope_tasks() if fnmatch.fnmatchcase(task, name)]
+            if not found:
+                raise SystemExit(f"no scope scenario matches {name}")
+            tasks += found
+        else:
+            tasks.append(name)
+    return tasks
+
+
 def plan(args):
-    tasks = args.tasks.split(",")
+    tasks = expand(args.tasks)
     arms = [label(spec) for spec in args.arms.split(",")]
     if len({name for name, _ in arms}) != len(arms):
         raise SystemExit("two arms share a label; name them as label=arm")
@@ -87,6 +107,11 @@ def plan(args):
     for rep in range(1, args.reps + 1):
         for index, task in enumerate(tasks):
             task_kind = kind(task)
+            if task_kind != "scope" and any(arm == "bare-rule" for _, arm in arms):
+                raise SystemExit("the bare-rule arm applies only to scope tasks")
+            if task_kind == "scope" and any(not (arm in ("bare", "bare-rule") or arm.startswith("visp:"))
+                                            for _, arm in arms):
+                raise SystemExit("a scope task takes the arms bare, bare-rule and visp:<build>")
             if task_kind in ("carryover", "chain") and any(arm.startswith("visp-codex:") for _, arm in arms):
                 raise SystemExit(f"{task} has several sessions, which {task_kind} runs make with Claude Code only")
             shift = (rep - 1 + index) % len(arms)
@@ -155,6 +180,8 @@ def execute(entry, args, directory):
         argv = [str(BENCH / "run_carryover.py"), name, "--modes", "fresh", "--timeout", timeout]
     elif entry["kind"] == "chain":
         argv = [str(BENCH / "run_chain.py"), name, "--timeout", timeout]
+    elif entry["kind"] == "scope":
+        argv = [str(BENCH / "run_scope.py"), name, "--timeout", timeout]
     elif entry["arm"].startswith("visp-codex:"):
         argv = [str(BENCH / "run_codex.py"), name, "--timeout", timeout]
     else:
