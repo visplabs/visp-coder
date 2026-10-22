@@ -22,7 +22,6 @@ import {
   type ProductReviewerContext,
   type ProductSlice,
 } from "../model.js";
-import { observationSequence } from "../observation-preview.js";
 import { profileSettings } from "../profile.js";
 import { withRules } from "../project-rules.js";
 import { hasRequiredFindings, productRefinement } from "../refinement.js";
@@ -84,10 +83,7 @@ export function assembleReviewBundle(input: ReviewBundleInput): ProductReviewBun
     gaps.push("Refinement budget exhausted; unresolved required outcomes remain incomplete");
   return {
     policyVersion: PRODUCT_REVIEW_POLICY,
-    ...(workspace.config.workflow.reviewMode === "observation-preview"
-      ? { observationSequence: observationSequence(record, subject, slice) }
-      : {}),
-    feedbackPlan: productFeedbackPlan(record, subject, slice, workspace.config.workflow.reviewMode),
+    feedbackPlan: productFeedbackPlan(record, subject, slice),
     feature: record.brief.feature,
     ...(slice ? { task: slice.id } : {}),
     subjectDigest: subject,
@@ -172,7 +168,6 @@ function reviewInstructions(
 ) {
   return productReviewInstructions({
     visual: imageCount > 0 || needsBrowser(record.brief, slice),
-    observationFirst: workspace.config.workflow.reviewMode === "observation-preview",
     requestGaps: profileSettings(workspace, record).requestGaps === "required",
   });
 }

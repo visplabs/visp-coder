@@ -40,16 +40,10 @@ export async function buildProductContext(
       ),
     ).values(),
   ];
-  const feedbackPlan = productFeedbackPlan(
-    record,
-    subject.value,
-    slice,
-    workspace.config.workflow.reviewMode,
-    {
-      reviewer: await reviewerPointer(workspace, brief.feature, subject.value, slice.id),
-      requiredOnly: profileSettings(workspace, record).requestGaps === "required",
-    },
-  );
+  const feedbackPlan = productFeedbackPlan(record, subject.value, slice, {
+    reviewer: await reviewerPointer(workspace, brief.feature, subject.value, slice.id),
+    requiredOnly: profileSettings(workspace, record).requestGaps === "required",
+  });
   const question = [
     feedbackPlan.trace.question,
     feedbackPlan.research?.question ?? "",

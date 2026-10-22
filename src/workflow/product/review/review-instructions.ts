@@ -51,14 +51,10 @@ ${REVIEW_RESPONSE}
 Return assessments:[] and resolutions:[]. Source advice cannot approve the product or close earlier findings. ${SOURCE_ADVICE_LIMITATION}
 ${REVIEW_BOUNDARIES}`;
 
-export const OBSERVATION_REVIEW_INSTRUCTIONS =
-  "Start with the original request and actual images, before reading test summaries. Describe visible states, object relationships and layout. Look for contradictions with the intended experience. Labels and an attractive theme are not proof of correct behavior. Name the image, region and next useful observation for a visible problem. Do not invent defects or infer missing states.";
-
 export function productReviewInstructions(
-  options: { visual?: boolean; observationFirst?: boolean; requestGaps?: boolean } = {},
+  options: { visual?: boolean; requestGaps?: boolean } = {},
 ): string {
   return [
-    options.observationFirst && OBSERVATION_REVIEW_INSTRUCTIONS,
     CRITIC_INSTRUCTIONS,
     options.visual && VISUAL_REVIEW_INSTRUCTIONS,
     options.requestGaps && REQUEST_GAP_INSTRUCTIONS,

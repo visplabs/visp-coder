@@ -75,6 +75,8 @@ function removedSettingMessage(section: string, key: string, critic: boolean): s
     return "Remove this setting: project skills were removed; no context pack carries them";
   if (section === "memory" && key === "service")
     return "Remove this setting: the Visp Memory service was removed; memory.recall selects earlier decisions with the reviewer's model";
+  if (section === "workflow" && key === "reviewMode")
+    return "Remove this setting: the observation-preview review mode was removed; review always uses the current mode";
   if (section === "workflow" && key === "requireTests")
     return "Remove this setting: the legacy gate is retired; declared product checks and outcome evidence govern current closure and acceptance";
   return "Unknown setting";

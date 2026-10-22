@@ -197,7 +197,6 @@ it("reports declared viewports without available current captures", async () => 
   });
   const record = { brief, briefText: "", stateText: "", state: initialProductState(brief, "now") };
   const workspace = {
-    config: { workflow: { reviewMode: "current" } },
     files: { readBytesIfExists: async () => ok(bytes) },
   } as unknown as WorkspaceState;
   const result = await inspectSelectedImages(
@@ -246,7 +245,6 @@ it("keeps declared viewport gaps in packets for functional browser checks", asyn
   });
   const record = { brief, briefText: "", stateText: "", state: initialProductState(brief, "now") };
   const workspace = {
-    config: { workflow: { reviewMode: "current" } },
     files: { readBytesIfExists: async () => ok(undefined) },
   } as unknown as WorkspaceState;
   const result = await inspectSelectedImages(workspace, record, {}, digest, undefined, [], []);

@@ -71,7 +71,7 @@ describe("MCP configured host feedback", () => {
     const review = mcpProductFeedbackHost(server).review;
     if (!review) throw new Error("Missing sampling adapter");
     const request = {
-      instructions: productReviewInstructions({ visual: true, observationFirst: true }),
+      instructions: productReviewInstructions({ visual: true }),
       images: [{ data: "actual-image-bytes", mimeType: "image/png" }],
       originalRequest: "Preserved goal",
     } as unknown as Parameters<typeof review>[0];

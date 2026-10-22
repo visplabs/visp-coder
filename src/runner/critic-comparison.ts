@@ -7,7 +7,6 @@ import {
   criticConfigSchema,
   UNDERSTANDING_CRITIC_INSTRUCTIONS,
 } from "../workflow/product/critic/critic-model.js";
-import { OBSERVATION_REVIEW_INSTRUCTIONS } from "../workflow/product/observation-preview.js";
 import { VISUAL_REVIEW_INSTRUCTIONS } from "../workflow/product/review/review-instructions.js";
 import {
   COMPARISON_POLICY,
@@ -116,8 +115,7 @@ async function prepareFeedbackPolicyComparison(
     ...(
       [
         ["integration-current-2", "current", 2],
-        ["observation-preview-2", "observation-preview", 2],
-        ["observation-preview-3", "observation-preview", 3],
+        ["integration-current-3", "current", 3],
       ] as const
     ).map(([id, reviewMode, maxCalls]) => ({
       id,
@@ -159,14 +157,8 @@ async function prepareFeedbackPolicyComparison(
           "The complete engineering treatment improves delivery and reduces administration without worsening product quality; this contrast does not isolate critic effectiveness.",
       },
       {
-        id: "observation",
-        arms: ["integration-current-2", "observation-preview-2"],
-        hypothesis:
-          "Observation-first review improves supported corrections with the same model, code and two-call allowance.",
-      },
-      {
         id: "repair-opportunity",
-        arms: ["observation-preview-2", "observation-preview-3"],
+        arms: ["integration-current-2", "integration-current-3"],
         hypothesis:
           "A third focused repair review improves net correction enough to justify its measured cost.",
       },
@@ -205,7 +197,6 @@ function reviewPromptPins() {
     criticInstructions: pin(CRITIC_INSTRUCTIONS),
     visualInstructions: pin(VISUAL_REVIEW_INSTRUCTIONS),
     understandingInstructions: pin(UNDERSTANDING_CRITIC_INSTRUCTIONS),
-    previewInstructions: pin(`${OBSERVATION_REVIEW_INSTRUCTIONS}\n${CRITIC_INSTRUCTIONS}`),
   };
 }
 
