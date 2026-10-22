@@ -5,7 +5,7 @@ Usage: batch.py --batch <name> --tasks a,b,c --arms visp:visp-base,visp:visp-can
 
 An arm is anything setup_arm.py accepts, optionally labelled as label=arm; the label defaults to
 the build name for VISP arms (visp:visp-base -> visp-base, visp-codex:x -> codex-x) and to the
-arm itself otherwise. Runs are named <batch>-<task>-<label>-<rep> under $VISP_BENCH_RUNS/runs.
+arm itself otherwise; a mode joins the label with a dash (visp:cand+lean+nocritic -> cand-lean-nocritic). Runs are named <batch>-<task>-<label>-<rep> under $VISP_BENCH_RUNS/runs.
 
 The queue goes repetition by repetition, and within one through every task with the arms in an
 order that rotates per task, so machine load and a partial batch fall on every arm alike. A
@@ -255,7 +255,7 @@ def main():
             sessions = f" x{1 + len(planned_sessions(entry['mode']))} sessions" if entry["twoSessions"] else ""
             if entry["kind"] == "chain":
                 sessions = f" x{len(step_files(entry['task']))} steps"
-            print(f"{state(entry, args.rerun_invalid, record=False):13} {entry['name']:60} {entry['arm']:24} "
+            print(f"{state(entry, args.rerun_invalid, record=False):13} {entry['name']:60} {entry['arm']:30} "
                   f"{entry['kind']:9} {entry['timeout']} s{sessions}")
         return
     directory.mkdir(parents=True, exist_ok=True)

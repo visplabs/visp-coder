@@ -199,7 +199,7 @@ In the first batch the lean reviewer, at high effort, took most of the time insi
 | Haiku 5.5 low | 14/32 (44%) | 2/32 | 0/960 | $0.04 |
 | Haiku 4.5 | 14/32 (44%) | 4/32 | 0 (one step broke an existing test) | $2.89 |
 
-The accuracy drop ChainSWE reports with chain length comes, for these workers, from issues left unresolved (the issue's own failing tests still fail), not from breaking earlier fixes. A regression gate (`workflow.regressionGate`) therefore stays off by default; its test selection was fixed for Python projects (#67). Whether the evidence record helps a reviewer is being measured in a separate study.
+The accuracy drop ChainSWE reports with chain length comes, for these workers, from issues left unresolved (the issue's own failing tests still fail), not from breaking earlier fixes. A regression gate therefore should not block by default: `workflow.regressionGate` defaults to `advise`, which reports and never blocks, and `gate` is opt-in. That default is not measured yet. On both profiles every `done` whose checks pass runs the gate (up to 12 commands and 180 s). Its test selection was fixed for Python projects (#67). Whether the evidence record helps a reviewer is being measured in a separate study.
 
 ## What made the difference
 
