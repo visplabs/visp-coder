@@ -28,12 +28,12 @@ name: visp
 description: Use for any code change in this project. Keeps edits inside a declared scope and backed by evidence. Trigger when asked to add a feature, fix a bug, or refactor.
 ---
 
-This project uses `visp`. Run `visp next`; use `visp work` before editing.
+This project uses `visp`. Start a new request with `visp feature`, resume one with `visp next`; use `visp work` before editing.
 
 | When | Command |
 |---|---|
-| Start or resume | `visp next` |
 | New request | `visp feature "<goal>" --check "<test command>" --source-brief -` |
+| Resume a feature in progress | `visp next` |
 | Plan or revise a decision | `visp brief --template` |
 | Implement a slice | `visp work --check "<test command>"` |
 | An ownership/caller/test question | `visp query search "<symbol or behavior>"` |
@@ -1067,12 +1067,12 @@ process.stdout.write(JSON.stringify(deny(reason)));
 
 === AGENTS.md
 <!-- visp:instructions:start -->
-Follow the VISP project instructions in [AGENTS.visp.md](AGENTS.visp.md). The package is visp-coder; the executable is `visp`. Use VISP MCP tools when connected: `visp_next({})`, then `visp_<command>` schemas; otherwise use CLI `visp next`.
+Follow the VISP project instructions in [AGENTS.visp.md](AGENTS.visp.md). The package is visp-coder; the executable is `visp`. Use VISP MCP tools when connected (`visp_<command>` schemas), otherwise the CLI. A new request starts with `visp feature`; `visp next` resumes one in progress.
 
 | When | Command |
 |---|---|
-| Start or resume | `visp next` |
 | New request | `visp feature "<goal>" --check "<test command>" --source-brief -` |
+| Resume a feature in progress | `visp next` |
 | Plan or revise a decision | `visp brief --template` |
 | Implement a slice | `visp work --check "<test command>"` |
 | An ownership/caller/test question | `visp query search "<symbol or behavior>"` |
@@ -1089,7 +1089,7 @@ Research relevant uncertainties with host tools; apply conclusions in the brief.
 
 VISP supplies relevant context, scoped execution and product feedback.
 
-Use VISP MCP tools when connected: `visp_next({})`, then `visp_<command>` schemas; otherwise use CLI `visp next`.
+Use VISP MCP tools when connected (`visp_<command>` schemas), otherwise the CLI. A new request starts with `visp feature`; `visp next` resumes one in progress.
 
 ## The loop
 
@@ -1146,8 +1146,8 @@ The executable is `visp`; the package is `visp-coder`. Commands accept `--help`.
 
 | When | Command | Next |
 |---|---|---|
-| Start or resume | `visp next` | Read-only routing: follow the returned action; unresolved is not complete. |
 | New request | `visp feature "<goal>" --check "<test command>" --source-brief -` | Pass the request with a quoted heredoc and the host's maximum timeout. --check also works all of it as one slice (the visp work --check step). On the lean profile (the default) it returns in seconds: run it in the foreground. Only when visp.yml sets workflow.profile: full or worker: weak does it keep running while VISP writes acceptance tests: on Codex keep its session open and poll it; on a blocking shell (Claude Code Bash) start it with run_in_background:true and read its output for the result. Once it prints, you have the slice (without --check, run visp work --feature <id> --check "<test command>" for one). Never start feature again: a repeat can create a second feature. After a kill or error, run visp work --feature <id>; add --retry-tests only when work reports the acceptance tests failed or stopped. Use brief --template for several usable slices. |
+| Resume a feature in progress | `visp next` | Read-only routing: follow the returned action; unresolved is not complete. |
 | Plan or revise a decision | `visp brief --template` | Prefer --patch - for changed fields; keep the first slice to one usable behavior. |
 | Implement a slice | `visp work --check "<test command>"` | Read relevant outcomes/code, then edit only the authorized scope. --inspect reads without authorizing. |
 | An ownership/caller/test question | `visp query search "<symbol or behavior>"` | Use callers, testsFor or impact with the returned entity; inspect source. |

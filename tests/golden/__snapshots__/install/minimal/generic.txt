@@ -215,8 +215,8 @@ The executable is `visp`; the package is `visp-coder`. Commands accept `--help`.
 
 | When | Command | Next |
 |---|---|---|
-| Start or resume | `visp next` | Read-only routing: follow the returned action; unresolved is not complete. |
 | New request | `visp feature "<goal>" --check "<test command>" --source-brief -` | Pass the request with a quoted heredoc and the host's maximum timeout. --check also works all of it as one slice (the visp work --check step). On the lean profile (the default) it returns in seconds: run it in the foreground. Only when visp.yml sets workflow.profile: full or worker: weak does it keep running while VISP writes acceptance tests: on Codex keep its session open and poll it; on a blocking shell (Claude Code Bash) start it with run_in_background:true and read its output for the result. Once it prints, you have the slice (without --check, run visp work --feature <id> --check "<test command>" for one). Never start feature again: a repeat can create a second feature. After a kill or error, run visp work --feature <id>; add --retry-tests only when work reports the acceptance tests failed or stopped. Use brief --template for several usable slices. |
+| Resume a feature in progress | `visp next` | Read-only routing: follow the returned action; unresolved is not complete. |
 | Plan or revise a decision | `visp brief --template` | Prefer --patch - for changed fields; keep the first slice to one usable behavior. |
 | Implement a slice | `visp work --check "<test command>"` | Read relevant outcomes/code, then edit only the authorized scope. --inspect reads without authorizing. |
 | An ownership/caller/test question | `visp query search "<symbol or behavior>"` | Use callers, testsFor or impact with the returned entity; inspect source. |

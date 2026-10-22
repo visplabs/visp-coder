@@ -16,6 +16,9 @@ ${ACTIVATION_END}`;
 // Exact generated command-map v1; frozen bytes are covered by the activation upgrade test.
 const PREVIOUS_COMMAND_MAP_HASH =
   "1cb3135422cd7fa12e7925cdac49a2e9f6b9f74bd0ff8ecfba9d416c022b3fac";
+/** The tool-access line of the blocks generated before `feature` started a new request. */
+const PREVIOUS_TOOL_ACCESS_GUIDANCE =
+  "Use VISP MCP tools when connected: `visp_next({})`, then `visp_<command>` schemas; otherwise use CLI `visp next`.";
 const ACTIVATION_BODY = `${ACTIVATION_START}
 Follow the VISP project instructions in [AGENTS.visp.md](AGENTS.visp.md). The package is visp-coder; the executable is \`visp\`. ${TOOL_ACCESS_GUIDANCE}
 
@@ -140,7 +143,7 @@ function ownedActivationBlock(block: string) {
     block === ACTIVATION_BODY ||
     block === LEGACY_ACTIVATION_BODY ||
     block ===
-      `${ACTIVATION_START}\nFollow the VISP project instructions in [AGENTS.visp.md](AGENTS.visp.md). ${TOOL_ACCESS_GUIDANCE} Follow the next action before editing.\n${ACTIVATION_END}` ||
+      `${ACTIVATION_START}\nFollow the VISP project instructions in [AGENTS.visp.md](AGENTS.visp.md). ${PREVIOUS_TOOL_ACCESS_GUIDANCE} Follow the next action before editing.\n${ACTIVATION_END}` ||
     block === ACTIVATION_BODY.replace(` ${TOOL_ACCESS_GUIDANCE}`, "") ||
     [
       PREVIOUS_COMMAND_MAP_HASH,
@@ -148,6 +151,9 @@ function ownedActivationBlock(block: string) {
       "c5f5d4d6e9ff08bbea8ec26bd112c3ea45bcf6fa71146f801db1686b3527f4cd",
       "8270cf288cf35ad035eeec2a5fa0691fe81f28c270e72fda34e1c444f2c796ed",
       "f3f9b71090c28f68ffb29fefaa393d4957698bccaba931b00a1d53a6a800f2a3",
+      // `feature` without --check and no `pr` row; then `feature --check`, `pr` and "Start or resume".
+      "19516859011879ec1dc1a83964654fdfa55376051de457aace36d94e5199f477",
+      "4a0469d78adddc10b8aeec1e8fe539998dfc067eec82748eae497f0c3fe2a7e0",
     ].includes(sha256(block))
   );
 }

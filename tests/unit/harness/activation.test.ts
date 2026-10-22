@@ -100,8 +100,10 @@ describe("project instruction activation", () => {
     const upgrade = planAgentActivation("codex", source, false);
     expect(upgrade).toMatchObject({ ok: true, value: { status: "replaced" } });
     if (upgrade.ok) {
-      expect(upgrade.value.content).toContain("Use VISP MCP tools when connected: `visp_next({})`");
-      expect(upgrade.value.content).toContain("otherwise use CLI `visp next`");
+      expect(upgrade.value.content).toContain("Use VISP MCP tools when connected");
+      expect(upgrade.value.content).toContain(
+        "A new request starts with `visp feature`; `visp next` resumes one in progress.",
+      );
       expect(upgrade.value.content).toMatch(/^before\n[\s\S]*\nafter\n$/);
     }
     expect(planAgentDeactivation(source)).toEqual({
@@ -258,6 +260,21 @@ it("upgrades the pre-independent-review command map without changing surrounding
   if (!plan.ok) return;
   expect(plan.value.status).toBe("replaced");
   expect(plan.value.content).toBe(prefix + expectedActivationBlock + suffix);
+});
+
+it("upgrades the block that started every request with visp next", async () => {
+  const old = await readFile(
+    new URL("../../fixtures/harness/activation-before-feature-first.md", import.meta.url),
+    "utf8",
+  );
+  expect(old).toContain("| Start or resume | `visp next` |");
+  const result = planAgentActivation("claude-code", `${old}\n`, false);
+  expect(result).toMatchObject({
+    ok: true,
+    value: { status: "replaced", content: `${expectedActivationBlock}\n` },
+  });
+  expect(expectedActivationBlock).toContain("| Resume a feature in progress | `visp next` |");
+  expect(planAgentDeactivation(`${old}\n`)).toEqual({ status: "removed", content: "" });
 });
 
 it("upgrades the previous full command map while preserving edited blocks and user bytes", async () => {

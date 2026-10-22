@@ -30,7 +30,7 @@ describe("planFor", () => {
       (asset) => asset.path === "AGENTS.visp.md",
     )?.content;
     expect(guide).toContain("MCP tools when connected");
-    expect(guide).toContain("otherwise use CLI `visp next`");
+    expect(guide).toContain("otherwise the CLI");
   });
 
   it("uses each harness's own convention", () => {

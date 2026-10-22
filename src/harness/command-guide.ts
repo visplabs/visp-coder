@@ -23,16 +23,18 @@ Prefer --patch - --reason "<decision>" for changed fields (arrays merge by ID); 
 /** One discoverability catalogue for generated host instructions and their examples. */
 export const VISP_COMMANDS = [
   {
-    command: "next",
-    when: "Start or resume",
-    example: "visp next",
-    next: "Read-only routing: follow the returned action; unresolved is not complete.",
-  },
-  {
     command: "feature",
     when: "New request",
     example: 'visp feature "<goal>" --check "<test command>" --source-brief -',
     next: 'Pass the request with a quoted heredoc and the host\'s maximum timeout. --check also works all of it as one slice (the visp work --check step). On the lean profile (the default) it returns in seconds: run it in the foreground. Only when visp.yml sets workflow.profile: full or worker: weak does it keep running while VISP writes acceptance tests: on Codex keep its session open and poll it; on a blocking shell (Claude Code Bash) start it with run_in_background:true and read its output for the result. Once it prints, you have the slice (without --check, run visp work --feature <id> --check "<test command>" for one). Never start feature again: a repeat can create a second feature. After a kill or error, run visp work --feature <id>; add --retry-tests only when work reports the acceptance tests failed or stopped. Use brief --template for several usable slices.',
+  },
+  {
+    command: "next",
+    // "Start or resume" sent workers to `next` before a new request, which always answered
+    // "run visp feature" (4 of 6 lean runs in batch leandef2).
+    when: "Resume a feature in progress",
+    example: "visp next",
+    next: "Read-only routing: follow the returned action; unresolved is not complete.",
   },
   {
     command: "brief",

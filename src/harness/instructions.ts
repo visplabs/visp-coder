@@ -2,8 +2,12 @@ import { PRODUCT_NAME } from "../core/constants.js";
 import { SOURCE_DELIVERY_GUIDANCE } from "../workflow/delivery-guidance.js";
 import { commandMap } from "./command-guide.js";
 
+/**
+ * A new request starts with `feature`. Sending every worker to `next` first cost a turn that
+ * always answered "run visp feature" (leandef2: 4 of 6 lean runs).
+ */
 export const TOOL_ACCESS_GUIDANCE =
-  "Use VISP MCP tools when connected: `visp_next({})`, then `visp_<command>` schemas; otherwise use CLI `visp next`.";
+  "Use VISP MCP tools when connected (`visp_<command>` schemas), otherwise the CLI. A new request starts with `visp feature`; `visp next` resumes one in progress.";
 
 const COMPACT_RULES = `- Keep request with --source-brief; preserve outcomes, expectations and scope.allowed.
 - Edit only what the request needs; never push, install packages or delete unrelated files.
@@ -65,7 +69,7 @@ Read \`visp.yml\` for project settings; obtain authorization before changing pro
 }
 
 export function renderPointerGuide(fullGuide: string): string {
-  return `This project uses \`visp\`. Run \`${PRODUCT_NAME} next\`; use \`${PRODUCT_NAME} work\` before editing.
+  return `This project uses \`visp\`. Start a new request with \`${PRODUCT_NAME} feature\`, resume one with \`${PRODUCT_NAME} next\`; use \`${PRODUCT_NAME} work\` before editing.
 
 ${commandMap(false)}
 
