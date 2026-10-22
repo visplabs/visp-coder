@@ -1,4 +1,4 @@
-$ codex exec --ephemeral --ignore-user-config --skip-git-repo-check --sandbox read-only --cd <PROJECT> --model gpt-5.6-sol --config 'model_reasoning_effort="low"' --config 'web_search="live"' --json --output-schema <TMP>/visp-critic-<RAND>/schema.json --output-last-message <TMP>/visp-critic-<RAND>/response.json -
+$ codex exec --ephemeral --ignore-user-config --skip-git-repo-check --sandbox read-only --cd <PROJECT> --model gpt-5.6-sol --config 'model_reasoning_effort="medium"' --config 'web_search="live"' --json --output-schema <TMP>/visp-critic-<RAND>/schema.json --output-last-message <TMP>/visp-critic-<RAND>/response.json -
 --- prompt (reviewer)
 You are an independent reviewer. You did not write this code. Follow `instructions` and answer `question` in the JSON packet below.
 Inspect the repository in the current directory read-only where it helps. Do not modify files.

@@ -111,11 +111,10 @@ export function changeEscalation(
  */
 export function leanCriticConfig(workspace: WorkspaceState, config: CriticConfig): CriticConfig {
   const critic = workspace.config.critic;
-  const model =
-    critic?.leanModel ?? (config.harness === "claude-code" ? CLAUDE_LEAN_REVIEWER : config.model);
-  return {
-    ...config,
-    model,
-    reasoningEffort: critic?.leanReasoningEffort ?? LEAN_REVIEW_EFFORT,
-  };
+  const haiku = !critic?.leanModel && config.harness === "claude-code";
+  const model = critic?.leanModel ?? (haiku ? CLAUDE_LEAN_REVIEWER : config.model);
+  // Low effort is the Haiku reviewer's fix; other hosts keep the effort they pinned (Codex: medium).
+  const reasoningEffort =
+    critic?.leanReasoningEffort ?? (haiku ? LEAN_REVIEW_EFFORT : config.reasoningEffort);
+  return { ...config, model, ...(reasoningEffort ? { reasoningEffort } : {}) };
 }

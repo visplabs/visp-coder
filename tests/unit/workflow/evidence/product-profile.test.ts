@@ -125,12 +125,17 @@ describe("leanCriticConfig", () => {
         .reasoningEffort,
     ).toBe("medium");
   });
-  it("uses critic.leanModel when set, and the configured model on other hosts", () => {
+  it("uses critic.leanModel when set, and the configured model and effort on other hosts", () => {
     expect(
       leanCriticConfig(workspace({ critic: { leanModel: "claude-sonnet-5-5" } }), config).model,
     ).toBe("claude-sonnet-5-5");
-    expect(leanCriticConfig(workspace(), { ...config, harness: "codex", model: "gpt" }).model).toBe(
-      "gpt",
-    );
+    expect(
+      leanCriticConfig(workspace(), {
+        ...config,
+        harness: "codex",
+        model: "gpt-5.6-sol",
+        reasoningEffort: "medium",
+      }),
+    ).toMatchObject({ model: "gpt-5.6-sol", reasoningEffort: "medium" });
   });
 });

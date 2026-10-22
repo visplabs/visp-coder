@@ -59,7 +59,7 @@ telemetry:
 | `critic` | Reviewer host, launch mode (`host`, `codex-exec`, `claude-exec`), feedback mode, model and budgets. See [the critic guide](critic.md). |
 | `critic.webSearch` | With `launch: codex-exec`, lets the reviewer search the web for public documentation; every query is logged and listed by `visp pr`. |
 | `critic.leanModel` | The reviewer model of a lean feature, pinned when the feature starts. Unset: `claude-haiku-5-5` under `critic.harness: claude-code`; other hosts use `critic.model`. `critic.model` reviews full features. |
-| `critic.leanReasoningEffort` | The lean reviewer's reasoning effort (`low`, `medium`, `high`, `xhigh`); default `low`. `critic.reasoningEffort` applies to full features. |
+| `critic.leanReasoningEffort` | The lean reviewer's reasoning effort (`low`, `medium`, `high`, `xhigh`). Unset: `low` for the default Haiku reviewer under `claude-code`; otherwise `critic.reasoningEffort`, which also applies to full features. |
 | `critic.existingCodeTests` | Experimental. With `launch: codex-exec`, also runs the independent tester on existing codebases, in a disposable copy with network access. See [the critic guide](critic.md#independent-acceptance-tests). |
 | `workflow.strictness` | Default rule strictness until a policy is recorded; afterwards use `visp policy set-strictness <mode>`. `locked` is `strict` with overrides refused. |
 | `workflow.reviewMode` | `observation-preview` is an opt-in review mode; see [product review](product-review.md). |
