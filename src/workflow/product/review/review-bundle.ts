@@ -23,6 +23,7 @@ import {
   type ProductSlice,
 } from "../model.js";
 import { observationSequence } from "../observation-preview.js";
+import { profileSettings } from "../profile.js";
 import { withRules } from "../project-rules.js";
 import { hasRequiredFindings, productRefinement } from "../refinement.js";
 import { reproductionContextDigest } from "../reproduction-bindings.js";
@@ -172,7 +173,7 @@ function reviewInstructions(
   return productReviewInstructions({
     visual: imageCount > 0 || needsBrowser(record.brief, slice),
     observationFirst: workspace.config.workflow.reviewMode === "observation-preview",
-    requestGaps: workspace.config.workflow.requestGaps === "required",
+    requestGaps: profileSettings(workspace, record).requestGaps === "required",
   });
 }
 

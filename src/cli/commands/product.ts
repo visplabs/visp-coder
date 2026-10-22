@@ -85,6 +85,7 @@ interface ProductOptions extends GlobalOptions {
   session?: string;
   group?: string[];
   dispute?: string[];
+  account?: string[];
 }
 
 type Operation = (state: WorkspaceState, opts: ProductOptions) => Promise<Result<unknown>>;
@@ -404,13 +405,17 @@ export const statusCommand = () =>
 export const verifyCommand = () =>
   command("verify", "Run the selected slice's behavior checks", true, runProductVerify);
 const DISPUTE_HELP = `\nA pinned acceptance test that fails and contradicts the request can be disputed instead of edited: --dispute "<test name>" --reason "<quote the request sentence + why>". The independent reviewer rules; only failing tests can be disputed, and a rejected dispute needs a product change before it is filed again. When critic.launch is codex-exec or claude-exec, VISP starts the independent reviewer during the command; you never delegate it.`;
-const disputeOptions = (operation: Command) =>
+const closeoutOptions = (operation: Command) =>
   operation
     .option("--dispute <tests...>", "Dispute failing pinned acceptance tests by name")
     .option("--reason <text>", "Why the disputed test contradicts the request (with --dispute)")
+    .option(
+      "--account <entries...>",
+      'Account for listed requirements: R001=<passing check id> [test name], or "R001=not done: <reason>"',
+    )
     .addHelpText("after", DISPUTE_HELP);
 export const doneCommand = () =>
-  disputeOptions(
+  closeoutOptions(
     command("done", "Check, review and close the selected slice", true, (state, opts) =>
       runProductDoneReviewed(
         state,
@@ -421,7 +426,7 @@ export const doneCommand = () =>
     ),
   );
 export const acceptCommand = () =>
-  disputeOptions(
+  closeoutOptions(
     command(
       "accept",
       "Check the assembled product against preserved outcomes",

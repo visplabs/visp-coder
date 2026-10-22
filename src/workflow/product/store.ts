@@ -30,6 +30,8 @@ export interface ProductSelection {
   /** `done` and `accept` only: failing pinned tests the worker disputes, with one shared reason. */
   readonly dispute?: readonly string[];
   readonly disputeReason?: string;
+  /** `done` and `accept` only: the worker's account of listed requirements (`R001=C001`). */
+  readonly account?: readonly string[];
   readonly feature?: string;
   readonly task?: string;
   /** Mutating work/check operations only; does not change host permissions. */

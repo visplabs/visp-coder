@@ -1,6 +1,6 @@
 $ visp feature 'Draw a PS5 controller' --source-brief 'Create an SVG of a PS5 controller in controller.svg.'
 --- stdout
-feature: {"feature":"001-draw-a-ps5-controller","incomplete":false,"outcomes":[],"examples":[],"checks":[],"slices":[]}
+feature: {"feature":"001-draw-a-ps5-controller","incomplete":false,"outcomes":[],"examples":[],"checks":[],"slices":[],"profile":{"name":"lean"}}
 Note: A picture request: visp work --feature 001-draw-a-ps5-controller authorizes the whole request at once. Draft the whole picture before any test, brief or slice plan.
 Next: visp work --feature 001-draw-a-ps5-controller
 Read the full brief with visp brief --feature 001-draw-a-ps5-controller.

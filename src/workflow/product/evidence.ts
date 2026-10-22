@@ -1,5 +1,5 @@
 import { vispError } from "../../core/errors.js";
-import type { FileMutation } from "../../core/file-transaction.js";
+import { applyFileTransaction, type FileMutation } from "../../core/file-transaction.js";
 import { err, ok, type Result } from "../../core/result.js";
 import { CHECK_OUTPUT_GUIDANCE } from "../product-output-guidance.js";
 import type { WorkspaceState } from "../state.js";
@@ -9,6 +9,7 @@ import {
   outcomeStatuses,
   type ProductOutcomeStatus,
   productEvidenceGaps,
+  requirementStatus,
 } from "./assessment.js";
 import { checkBehaviorChanges } from "./behavior-changes.js";
 import { pinnedAcceptanceChecks } from "./check/acceptance-checks.js";
@@ -37,12 +38,18 @@ import {
   type ProductSlice,
   type ProductState,
 } from "./model.js";
+import { changeEscalation, featureProfile, profileSettings } from "./profile.js";
 import { runRegressionGate } from "./regression/regression-gate.js";
 import {
   type RegressionGateReport,
   type RegressionGateSummary,
   regressionGateCloseout,
 } from "./regression/regression-report.js";
+import {
+  accountedRequirements,
+  parseRequirementAccounts,
+  requirementAccountMutation,
+} from "./requirements.js";
 import {
   type PreparedResultImages,
   prepareResultImages,
@@ -171,6 +178,7 @@ async function execute(
       close,
       accept,
       prepared.value.committedChanges,
+      prepared.value.changed,
       pictures,
       gate,
       options.signal,
@@ -202,6 +210,7 @@ async function finishExecution(
   close: boolean,
   accept: boolean,
   committedChanges: string[],
+  changed: readonly string[],
   prepared: PreparedResultImages,
   gate: RegressionGateReport | undefined,
   signal?: AbortSignal,
@@ -213,12 +222,14 @@ async function finishExecution(
   const timestamp = new Date().toISOString();
   // Pictures the product made reach the reviewer as images of the version the checks passed.
   const pictures = await publishResultImages(workspace, record, prepared, after.value);
+  const escalation = changeEscalation(workspace, record, changed);
   const next = {
     ...record.state,
     pendingVerification: undefined,
     updatedAt: timestamp,
     executions: record.state.executions,
     captures: [...record.state.captures, ...pictures.captures],
+    ...(escalation ? { profileEscalation: escalation } : {}),
   };
   const current: ProductRecord = { ...record, state: next };
   const gaps = await executionGaps(workspace, current, slice, after.value, commands, executions);
@@ -290,6 +301,7 @@ async function finishExecution(
     ...(close ? { closed: passed } : {}),
     executions,
     ...regression.reply,
+    ...(await profileReply(workspace, current, slice, close || accept)),
     outcomes: outcomeStatuses(current, after.value, slice),
     gaps: [...new Set(gaps)],
     journeyFeedback: currentJourneyFeedback(
@@ -314,6 +326,21 @@ async function finishExecution(
   });
 }
 
+/** The profile once the feature left lean, and where each listed requirement stands at closure. */
+async function profileReply(
+  workspace: WorkspaceState,
+  record: ProductRecord,
+  slice: ProductSlice | undefined,
+  closing: boolean,
+) {
+  const profile = featureProfile(workspace, record);
+  const requirements = closing ? await requirementStatus(workspace, record, slice) : [];
+  return {
+    ...(profile.name === "full" ? { profile } : {}),
+    ...(requirements.length ? { requirements } : {}),
+  };
+}
+
 /** One scheduler serves verify/done, status and next, including critic-owned assessments. */
 async function verificationProgress(
   workspace: WorkspaceState,
@@ -329,7 +356,7 @@ async function verificationProgress(
     workspace.config.workflow.reviewMode,
     {
       reviewer: await reviewerPointer(workspace, record.brief.feature, subject, slice?.id),
-      requiredOnly: workspace.config.workflow.requestGaps === "required",
+      requiredOnly: profileSettings(workspace, record).requestGaps === "required",
     },
   );
   return {
@@ -383,6 +410,8 @@ function deliveryResult(
 
 interface PreparedExecution {
   committedChanges: string[];
+  /** Files the slice changed since its authorization, when it is being closed. */
+  changed: string[];
   record: ProductRecord;
   slice?: ProductSlice;
   source: string;
@@ -416,7 +445,10 @@ async function prepareExecution(
         { recovery: `visp next --feature ${record.brief.feature}` },
       ),
     );
+  const accounted = await recordRequirementAccounts(workspace, record, options.account);
+  if (!accounted.ok) return accounted;
   let committedChanges: string[] = [];
+  let changed: string[] = [];
   if (slice && !closedSlice(record.state.slices[slice.id]?.status)) {
     const scope = await checkProductScope(workspace, record, slice);
     if (!scope.ok)
@@ -430,6 +462,7 @@ async function prepareExecution(
         },
       });
     committedChanges = scope.value.committedChanges;
+    changed = scope.value.changed;
   }
   const snapshot = await productSourceSnapshot(workspace, record.brief);
   if (!snapshot.ok) return snapshot;
@@ -443,7 +476,31 @@ async function prepareExecution(
     snapshot: snapshot.value,
     commands,
     committedChanges,
+    changed: close ? changed : [],
   });
+}
+
+/** Records the worker's account of listed requirements before the checks it cites run. */
+async function recordRequirementAccounts(
+  workspace: WorkspaceState,
+  record: ProductRecord,
+  entries: readonly string[] | undefined,
+): Promise<Result<void>> {
+  if (!entries?.length) return ok(undefined);
+  const parsed = parseRequirementAccounts(entries);
+  if (!parsed.ok) return parsed;
+  const listed = accountedRequirements(record.brief.originalRequest);
+  const mutation = await requirementAccountMutation(
+    workspace,
+    record.brief.feature,
+    listed,
+    parsed.value,
+  );
+  if (!mutation.ok || !mutation.value) return mutation.ok ? ok(undefined) : mutation;
+  const saved = await applyFileTransaction(workspace.paths.root, "requirement-accounts", [
+    mutation.value,
+  ]);
+  return saved.ok ? ok(undefined) : saved;
 }
 
 function closeoutAvailability(

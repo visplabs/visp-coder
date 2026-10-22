@@ -4,6 +4,7 @@ import {
   CODEX,
   DISPUTE,
   DISPUTED_SUITE,
+  FULL,
   GOAL,
   GoldenProject,
   REQUEST,
@@ -24,7 +25,7 @@ afterEach(async () => {
 });
 
 it("waives a disputed pinned test the reviewer upholds", async () => {
-  project = await GoldenProject.create(CODEX);
+  project = await GoldenProject.create({ ...CODEX, workflow: FULL });
   await models.plan({ tester: DISPUTED_SUITE, reviews: ["satisfied"], ruling: "upheld" });
   const run = new Recorder(project, "reviewer/dispute-upheld");
   await run.cli("01-feature", ["feature", GOAL, "--source-brief", REQUEST]);

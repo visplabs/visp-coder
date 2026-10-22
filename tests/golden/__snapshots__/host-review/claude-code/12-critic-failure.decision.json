@@ -1,11 +1,11 @@
 {
-  "exitCode": 0,
+  "exitCode": 1,
   "next": {
     "action": "refine",
     "command": "visp review --handoff --feature 001-return-two-from-the-public",
     "mayEdit": false,
     "evidence": 1,
-    "critic": "unavailable"
+    "critic": "suggested"
   },
   "product": {
     "status": "active",

@@ -15,9 +15,5 @@
       "required": 0,
       "advisory": 0
     }
-  },
-  "independentTests": {
-    "status": "declined",
-    "disputes": []
   }
 }

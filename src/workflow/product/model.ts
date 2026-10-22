@@ -651,6 +651,11 @@ export const productStateSchema = z
           .strict(),
       )
       .default([]),
+    /** Why a lean feature moved to the full profile, when a later step decided it. */
+    profileEscalation: z
+      .object({ reason: z.string().min(1), createdAt: z.string() })
+      .strict()
+      .optional(),
     acceptedSubject: z.string().optional(),
     acceptedContract: z.string().optional(),
     acceptedReviewPolicy: z

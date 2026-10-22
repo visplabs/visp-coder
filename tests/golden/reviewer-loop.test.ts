@@ -1,6 +1,6 @@
 import { afterEach, it, vi } from "vitest";
 import { FakeModels, testerSuite } from "./support/fake-models.js";
-import { CODEX, GOAL, GoldenProject, REQUEST, Recorder } from "./support/project.js";
+import { CODEX, FULL, GOAL, GoldenProject, REQUEST, Recorder } from "./support/project.js";
 
 /**
  * The loop as `visp init` sets it up for Codex: VISP launches its own tester when the feature
@@ -17,7 +17,7 @@ afterEach(async () => {
 });
 
 it("tests, reviews, repairs and accepts with VISP's own models", async () => {
-  project = await GoldenProject.create(CODEX);
+  project = await GoldenProject.create({ ...CODEX, workflow: FULL });
   await models.plan({
     tester: testerSuite([["value is two", "value === 2"]]),
     reviews: ["failed", "satisfied"],

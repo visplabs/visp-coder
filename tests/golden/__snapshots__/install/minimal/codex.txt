@@ -1072,6 +1072,7 @@ First: `visp feature "<goal>" --source-brief - <<'REQUEST'` (request, then REQUE
 Loop: `visp work` → implement → `visp done` → `visp next`. Run `visp accept` only when `visp next` directs it.
 
 - Keep request with --source-brief; preserve outcomes, expectations and scope.allowed.
+- Edit only what the request needs; never push, install packages or delete unrelated files.
 - Before editing run visp work; build runnable behavior. Functional outcomes need tests or kind:"browser-journey" with real input. Browser journeys must not mutate VISP state. Source strings and screenshots alone do not prove behavior.
 - Stateful: act, settle, repeat; test failure/restart.
 - If the request has a UI, show status, counts, errors as word-labeled text (`Score: 1500`, `Stone: 2`), not only canvas/icons.
@@ -1207,6 +1208,8 @@ workflow:
     - .git
   validationCommands: []
   flipCheck: auto
+  profile: lean
+  worker: strong
 graph:
   languages:
     - typescript

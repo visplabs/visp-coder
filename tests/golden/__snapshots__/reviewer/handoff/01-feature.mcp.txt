@@ -1,6 +1,6 @@
 > visp_feature {"goal":"Return two from the public value module","sourceBrief":"Make the public value module return two instead of one."}
 --- text
-visp_feature: {"feature":"001-return-two-from-the-public","incomplete":false,"outcomes":[],"examples":[],"checks":[],"slices":[]}
+visp_feature: {"feature":"001-return-two-from-the-public","incomplete":false,"outcomes":[],"examples":[],"checks":[],"slices":[],"profile":{"name":"lean"}}
 Next: visp_work {feature:"001-return-two-from-the-public", check:"<command that runs your tests>"} works the whole request as one slice. Only for several independently usable parts, plan slices: visp_brief {feature:"001-return-two-from-the-public", template:true}
 Read the full brief with visp_brief {feature:"001-return-two-from-the-public"}.
 --- isError false

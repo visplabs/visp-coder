@@ -79,6 +79,12 @@ const disputeFields = {
     .string()
     .optional()
     .describe("With dispute: quote the request sentence the test contradicts, and why"),
+  account: z
+    .array(z.string())
+    .optional()
+    .describe(
+      'Account for each requirement the request states: "R001=<passing check id> [test name]" or "R001=not done: <reason>"',
+    ),
 };
 
 export function registerEvidenceTools(server: McpServer, root: string): void {

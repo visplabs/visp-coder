@@ -26,6 +26,9 @@
       "riskLevel": "low",
       "acceptanceBaseline": [],
       "branch": "main"
+    },
+    "profile": {
+      "name": "lean"
     }
   }
 }

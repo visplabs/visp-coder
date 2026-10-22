@@ -123,6 +123,9 @@ export const CLAUDE: ProjectOptions = {
   critic: { enabled: true, harness: "claude-code", launch: "claude-exec" },
 };
 
+/** The full profile: the independent loop of tester, per-slice review and review budget. */
+export const FULL = { profile: "full" };
+
 /** A pinned suite with one test the request contradicts: two is not odd. */
 export const DISPUTED_SUITE = testerSuite([
   ["value is two", "value === 2"],
@@ -159,7 +162,7 @@ export class GoldenProject {
       async () => {
         const built = await TestWorkspace.create(
           { ...FILES, ...options.files },
-          { critic: !!options.critic },
+          { critic: !!options.critic, productDefaults: true },
         );
         const config = parse(await readFile(join(built.root, "visp.yml"), "utf8"));
         if (options.harness) config.harness = options.harness;

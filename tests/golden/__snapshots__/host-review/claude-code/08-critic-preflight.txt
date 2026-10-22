@@ -6,8 +6,8 @@ $ visp critic --preflight
   "hostSetup": {
     "dispatch": {
       "method": "native-handoff",
-      "model": "claude-sonnet-5",
-      "reasoningEffort": "high",
+      "model": "claude-haiku-5-5",
+      "reasoningEffort": "low",
       "steps": [
         "Inspect the host's available delegation tools and restrictions; unreported capability is setup-needed, not a refusal.",
         "Pipe the actual capability JSON to critic --preflight --capabilities -; no setup file is needed.",
@@ -24,8 +24,8 @@ $ visp critic --preflight
     "delegation": {
       "reviewer": {
         "harness": "claude-code",
-        "model": "claude-sonnet-5",
-        "reasoningEffort": "high"
+        "model": "claude-haiku-5-5",
+        "reasoningEffort": "low"
       },
       "provider": "host-configured; not resolved by VISP",
       "payload": {
@@ -40,8 +40,8 @@ $ visp critic --preflight
     "beforePrepare": "Confirm the actual host can delegate this packet and images with the configured model, effort and restricted tools, and that delegation is authorized. If refused, report delegationAllowed:false; do not reserve or bypass the refusal.",
     "capabilitiesExample": {
       "harness": "claude-code",
-      "model": "claude-sonnet-5",
-      "reasoningEffort": "high",
+      "model": "claude-haiku-5-5",
+      "reasoningEffort": "low",
       "freshContext": true,
       "readOnly": true,
       "images": false,
@@ -53,8 +53,8 @@ $ visp critic --preflight
   "sourceOnly": false,
   "prepareCommand": "visp critic --feature 001-return-two-from-the-public --task T001 --phase product --prepare --capabilities -",
   "config": {
-    "model": "claude-sonnet-5",
-    "reasoningEffort": "high",
+    "model": "claude-haiku-5-5",
+    "reasoningEffort": "low",
     "transport": "native",
     "harness": "claude-code",
     "maxCalls": 3,

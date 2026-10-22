@@ -288,7 +288,8 @@ async function reviewLimitations(
   const pictures = await picturesWithoutImage(workspace, record, snapshot, subject);
   const limitations = [
     ...(regression.limitations ?? []),
-    ...(gate ? [regressionGateLimitation(gate)] : []),
+    // A gate that ran nothing gives the reviewer nothing to judge.
+    ...(gate?.results.length ? [regressionGateLimitation(gate)] : []),
     ...pictures.map(pictureWithoutImageNote),
   ];
   return limitations.length ? { limitations } : {};

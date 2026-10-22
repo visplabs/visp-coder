@@ -1,9 +1,10 @@
 import { cliCommand } from "../next-action.js";
 import type { WorkspaceState } from "../state.js";
 import { checksFor, type ProductBrief, type ProductSlice } from "./model.js";
+import { profileSettings } from "./profile.js";
 
 /**
- * Lean mode's draft-first start (`workflow.draftFirst: visual`). In October picture runs with a
+ * The lean profile's draft-first start (`workflow.draftFirst: visual`). In October picture runs with a
  * Haiku 5.5 worker, VISP's first drafts were about half the size of bare drafts (pagoda
  * generators 244 vs 357 lines), VISP commands took 43% of worker turns, and bare work won the
  * pairwise comparison 9–4. A picture request therefore gets one whole-request slice and edit
@@ -22,7 +23,10 @@ export function visualRequest(request: string): boolean {
 }
 
 function draftFirstRequest(workspace: WorkspaceState, brief: ProductBrief): boolean {
-  return workspace.config.workflow.draftFirst === "visual" && visualRequest(brief.originalRequest);
+  return (
+    profileSettings(workspace, { brief }).draftFirst === "visual" &&
+    visualRequest(brief.originalRequest)
+  );
 }
 
 /** A picture feature with no slices yet: bare `visp work` starts the draft. */

@@ -41,12 +41,14 @@ import {
   type ProductState,
   parseProductBrief,
 } from "./model.js";
+import { featureProfile, leanCriticConfig } from "./profile.js";
 import {
   mergeProjectRules,
   type ProjectRule,
   projectRulesMutation,
   readProjectRules,
 } from "./project-rules.js";
+import { accountedRequirements } from "./requirements.js";
 import { withProductMutation } from "./runtime.js";
 import { json, recordMutations, statusMutation } from "./store.js";
 
@@ -190,8 +192,13 @@ async function createProductFeatureLocked(
   });
   if (!parsed.ok) return parsed;
   const brief = parsed.value;
-  const critic = await resolveCriticPolicy(workspace.config.harness, workspace.config.critic);
-  if (!critic.ok) return critic;
+  const resolved = await resolveCriticPolicy(workspace.config.harness, workspace.config.critic);
+  if (!resolved.ok) return resolved;
+  const profile = featureProfile(workspace, { brief });
+  const critic =
+    profile.name === "lean" && resolved.value.config
+      ? { ...resolved.value, config: leanCriticConfig(workspace, resolved.value.config) }
+      : resolved.value;
   const featureMetadata = await createFeatureMetadata(workspace, brief, options, timestamp);
   const { intent, branchCreated, branchWarning } = featureMetadata;
   const local = await localStateMutations(workspace, feature, inherited);
@@ -199,7 +206,7 @@ async function createProductFeatureLocked(
   const saved = await applyFileTransaction(workspace.paths.root, "create-product-feature", [
     ...recordMutations(workspace, undefined, brief, {
       ...initialProductState(brief, timestamp),
-      ...criticStateFields(critic.value),
+      ...criticStateFields(critic),
     }),
     {
       kind: "write",
@@ -217,6 +224,8 @@ async function createProductFeatureLocked(
     ? ok({
         brief,
         intent,
+        profile,
+        ...requirementsOutcome(brief),
         ...rules.value.reported,
         ...memory.reported,
         redactionNotice: featureRedactionNotice(request.redacted, goal, options.goal),
@@ -226,6 +235,16 @@ async function createProductFeatureLocked(
         ...hooksWarning(workspace, host),
       })
     : saved;
+}
+
+/** The requirements the request states, which the worker accounts for at `visp done`. */
+function requirementsOutcome(brief: ProductBrief) {
+  const listed = accountedRequirements(brief.originalRequest);
+  if (!listed.length) return {};
+  return {
+    requirements: listed.map((entry) => `${entry.id}: ${entry.statement}`),
+    requirementsNote: `The request states ${listed.length} requirement${listed.length === 1 ? "" : "s"} (${listed[0]?.id}${listed.length > 1 ? `–${listed.at(-1)?.id}` : ""}), parallel branches listed separately. Deliver every one. The visp done that completes the feature asks for an account of each: --account ${listed[0]?.id}=<passing check id> [test name], or --account "${listed[0]?.id}=not done: <reason>".`,
+  };
 }
 
 /** A new feature id, or the earlier feature a concurrent create of this request already made. */

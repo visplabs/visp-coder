@@ -171,6 +171,20 @@
         "output": "value is 2"
       }
     ],
+    "regressionGate": {
+      "mode": "advise",
+      "status": "unchecked",
+      "ran": [],
+      "selected": {
+        "linked": 0,
+        "earlierWork": 0,
+        "unlinked": 0
+      },
+      "leftOut": [
+        "no existing test reaches src/value.mjs",
+        "no existing test covers this change"
+      ]
+    },
     "outcomes": [
       {
         "id": "O001",

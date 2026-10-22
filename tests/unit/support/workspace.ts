@@ -33,7 +33,13 @@ export class TestWorkspace {
 
   static async create(
     files: Record<string, string | Uint8Array> = {},
-    options: { critic?: boolean; flip?: boolean } = {},
+    options: {
+      critic?: boolean;
+      flip?: boolean;
+      profile?: "lean" | "full";
+      /** Keep the workflow `visp init` writes: the golden suite pins the product defaults. */
+      productDefaults?: boolean;
+    } = {},
   ): Promise<TestWorkspace> {
     const root = await realpath(await mkdtemp(join(tmpdir(), "visp-workspace-")));
     const workspace = new TestWorkspace(root, await writeShim());
@@ -51,12 +57,18 @@ export class TestWorkspace {
     // Baseline tests deliberately opt out of model review; critic tests opt into its default.
     // The flip check reruns every passing check on the reverted source, so a workspace whose
     // tests do not look at flip results can turn it off (`flip: false`) and halve the check time.
-    if (!options.critic || options.flip === false) {
-      const config = parse(await readFile(join(root, "visp.yml"), "utf8"));
-      if (!options.critic) config.critic = { ...config.critic, enabled: false };
-      if (options.flip === false) config.workflow = { ...config.workflow, flipCheck: "off" };
-      await workspace.write("visp.yml", stringify(config));
-    }
+    // Unit tests exercise the full loop without the regression gate, as before the lean
+    // default; lean behaviour opts in (`profile: "lean"`) and the golden suite pins the default.
+    const config = parse(await readFile(join(root, "visp.yml"), "utf8"));
+    if (!options.critic) config.critic = { ...config.critic, enabled: false };
+    config.workflow = {
+      ...config.workflow,
+      ...(options.productDefaults
+        ? {}
+        : { profile: options.profile ?? "full", regressionGate: "off" }),
+      ...(options.flip === false ? { flipCheck: "off" } : {}),
+    };
+    await workspace.write("visp.yml", stringify(config));
 
     // init writes visp.yml and a .gitignore block. A user commits those before
     // starting work; leaving them dirty would make every verify report the

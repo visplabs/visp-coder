@@ -36,26 +36,38 @@ const workflowSchema = z
      */
     flipCheck: z.enum(["off", "auto", "on"]).default("auto"),
     /**
-     * Lean mode. `visual`: a picture request is authorized as one slice at `visp work` without a
-     * check, so the worker drafts the whole picture before declaring its check.
+     * `lean`: one slice, a draft before any check for a picture, one review at the end by a
+     * cheaper reviewer, at most two rounds, no tester on a new project. `full`: the independent
+     * loop (a review per slice by `critic.model`, the tester, up to `critic.maxCalls` reviews).
+     * A lean feature moves to full on its own; see `workflow.worker` and docs/workflow.md.
      */
-    draftFirst: z.enum(["off", "visual"]).default("off"),
+    profile: z.enum(["lean", "full"]).default("lean"),
+    /** `weak`: the worker's model needs the full loop, so every feature runs the full profile. */
+    worker: z.enum(["strong", "weak"]).default("strong"),
     /**
-     * Lean mode. `feature`: only the slice that completes the feature is reviewed, and a review
-     * after the second runs only while required findings remain open.
+     * `visual`: a picture request is authorized as one slice at `visp work` without a check, so
+     * the worker drafts the whole picture before declaring its check. Unset follows the profile
+     * (lean: visual; full: off).
      */
-    reviewCadence: z.enum(["slice", "feature"]).default("slice"),
+    draftFirst: z.enum(["off", "visual"]).optional(),
     /**
-     * Lean mode. `required`: a reviewer finding tagged as a gap against the request is required;
-     * other findings reach the worker as notes it is not asked to act on.
+     * `feature`: only the slice that completes the feature is reviewed, at most twice, and the
+     * second time only while a required finding is open. Unset follows the profile (lean:
+     * feature; full: slice).
      */
-    requestGaps: z.enum(["reviewer", "required"]).default("reviewer"),
+    reviewCadence: z.enum(["slice", "feature"]).optional(),
+    /**
+     * `required`: a reviewer finding tagged as a gap against the request is required; other
+     * findings reach the worker as notes it is not asked to act on. Unset follows the profile
+     * (lean: required; full: reviewer).
+     */
+    requestGaps: z.enum(["reviewer", "required"]).optional(),
     /**
      * At `done` and `accept`, run the existing tests the change reaches and earlier work's checks,
      * and compare failures with the old code. `advise` reports; `gate` also blocks on a test that
-     * passed before and fails now. Off by default.
+     * passed before and fails now.
      */
-    regressionGate: z.enum(["off", "advise", "gate"]).default("off"),
+    regressionGate: z.enum(["off", "advise", "gate"]).default("advise"),
   })
   .strict()
   .default({});

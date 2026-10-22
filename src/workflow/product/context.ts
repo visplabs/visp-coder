@@ -14,6 +14,7 @@ import { currentJourneyFailures, currentJourneyFeedback } from "./evidence-refer
 import { productFeedbackPlan } from "./feedback.js";
 import { productInputWarnings } from "./input-warnings.js";
 import { checksFor, type ProductSlice } from "./model.js";
+import { profileSettings } from "./profile.js";
 import { type ProjectRule, readProjectRules } from "./project-rules.js";
 import { reviewExcerpt } from "./review/review-excerpts.js";
 import { briefPath, type ProductRecord, productStatePath } from "./store.js";
@@ -46,7 +47,7 @@ export async function buildProductContext(
     workspace.config.workflow.reviewMode,
     {
       reviewer: await reviewerPointer(workspace, brief.feature, subject.value, slice.id),
-      requiredOnly: workspace.config.workflow.requestGaps === "required",
+      requiredOnly: profileSettings(workspace, record).requestGaps === "required",
     },
   );
   const question = [

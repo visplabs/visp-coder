@@ -71,6 +71,13 @@ ${DEFAULT_BLOCKED_PATHS.map((path) => `    - "${path}"`).join("\n")}
   # auto checks changes to existing implementation; on also checks added files.
   flipCheck: auto
 
+  # lean: one slice, one review at the end by a cheaper reviewer, no tester on a new
+  # project. full: the independent loop. A lean feature moves to full when a check fails
+  # on two versions, the change is large, or the request lists many requirements.
+  profile: lean
+  # weak runs every feature with the full profile.
+  worker: strong
+
 graph:
   # Languages the repository index extracts from.
   languages:

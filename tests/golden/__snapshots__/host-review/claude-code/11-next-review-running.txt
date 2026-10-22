@@ -1,9 +1,9 @@
 $ visp next
 --- stdout
-next: {"feature":"001-return-two-from-the-public","action":"wait","objective":"Independent review is still running. Run the command again to wait for its findings; editing pauses until it returns.","command":"visp next --feature 001-return-two-from-the-public","mayEdit":false}
+next: {"feature":"001-return-two-from-the-public","action":"refine","objective":"Review the assembled product against every mandatory outcome and retained expectation","command":"visp review --handoff --feature 001-return-two-from-the-public","mayEdit":false,"evidence":{"entries":["O001: final goal assessment unassessed; review the current product against the original request"],"remaining":0},"critic":{"status":"suggested","command":"visp critic --feature 001-return-two-from-the-public --preflight","guidance":"Ask the independent critic for useful feedback on this candidate. If unavailable, use the baseline host review of actual behavior and images; disclose the missing independent review."}}
 Full result: add --json.
 
-Next: visp next --feature 001-return-two-from-the-public
+Next: visp review --handoff --feature 001-return-two-from-the-public
 
 --- stderr
 

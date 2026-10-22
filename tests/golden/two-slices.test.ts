@@ -1,6 +1,6 @@
 import { afterEach, it, vi } from "vitest";
 import { FakeModels, testerSuite } from "./support/fake-models.js";
-import { BRIEF, CODEX, GOAL, GoldenProject, REQUEST, Recorder } from "./support/project.js";
+import { BRIEF, CODEX, FULL, GOAL, GoldenProject, REQUEST, Recorder } from "./support/project.js";
 
 /**
  * A feature in two slices with one review call: the first slice closes while the pinned tests
@@ -51,7 +51,11 @@ afterEach(async () => {
 });
 
 it("closes the first slice without review and reviews the completing one", async () => {
-  project = await GoldenProject.create({ ...CODEX, critic: { ...CODEX.critic, maxCalls: 1 } });
+  project = await GoldenProject.create({
+    ...CODEX,
+    critic: { ...CODEX.critic, maxCalls: 1 },
+    workflow: FULL,
+  });
   await models.plan({
     tester: testerSuite([
       ["value is two", "value === 2"],

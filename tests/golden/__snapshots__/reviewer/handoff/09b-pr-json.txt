@@ -5,7 +5,7 @@ $ visp pr --json
   "ok": true,
   "data": {
     "feature": "001-return-two-from-the-public",
-    "markdown": "# Evidence record: Return two from the public value module\n\n`001-return-two-from-the-public` (active) · 1 of 1 requirement shown by checks VISP ran on this version · 2 items not verified.\n\n## Not verified (2)\n\n- **Blocking:** Required reviewer finding (functional): The module has no default export Consequence: Callers that import the module's default value receive undefined, not two (`FB-<HEX-1>`)\n- The independent tester's tests were not pinned (declined): The tester wrote no file: The request states one value; the worker's own check covers it.\n\n## Asked\n\n> Make the public value module return two instead of one.\n\n- **O001** (must) The public value is two\n\n## Done\n\n| Requirement | Evidence | Result | Rerun |\n| --- | --- | --- | --- |\n| O001 | C001 (worker's check) | passed (exit 0, <TIME>) | `node checks/value.check.mjs` |\n\nResults are commands VISP ran. `stale` runs were on an earlier version and show nothing about this one. Reviewer verdicts are a model's judgment, not a run.\n\n## Changed\n\n1 file, +2 −1, from `HEAD` (the current commit) to the working tree.\n\n- modified `src/value.mjs` +2 −1 (T001)\n\nScope declared: T001 may edit `src/value.mjs`, `checks/value.check.mjs`. Touched outside it: nothing. Edits the hooks refused are not recorded.\n\n## Regressions\n\nNot run: `workflow.regressionGate` is off.\n\n## Cost\n\n- Time: <DURATION> from `visp feature` to the last record; checks ran <DURATION> over 2 runs.\n- Model calls: 1 independent review recorded, 1 reviewer call launched by VISP, 1 tester session; worker calls not measured. Models: gpt-5.6-sol.\n\n## Next\n\nThe independent review budget is spent. Run visp pr; the remaining findings go to a human reviewer\n\n`visp pr --feature 001-return-two-from-the-public`\n\nDetail: `visp pr --full --feature 001-return-two-from-the-public` adds the full handoff document; `--json` gives this record as data; `visp ui` shows it under Evidence; raw records are in `.visp/features/001-return-two-from-the-public/`.\n",
+    "markdown": "# Evidence record: Return two from the public value module\n\n`001-return-two-from-the-public` (active) · 1 of 1 requirement shown by checks VISP ran on this version · 1 item not verified.\n\n## Not verified (1)\n\n- **Blocking:** Required reviewer finding (functional): The module has no default export Consequence: Callers that import the module's default value receive undefined, not two (`FB-<HEX-1>`)\n\n## Asked\n\n> Make the public value module return two instead of one.\n\n- **O001** (must) The public value is two\n\n## Done\n\n| Requirement | Evidence | Result | Rerun |\n| --- | --- | --- | --- |\n| O001 | C001 (worker's check) | passed (exit 0, <TIME>) | `node checks/value.check.mjs` |\n\nResults are commands VISP ran. `stale` runs were on an earlier version and show nothing about this one. Reviewer verdicts are a model's judgment, not a run.\n\n## Changed\n\n1 file, +2 −1, from `HEAD` (the current commit) to the working tree.\n\n- modified `src/value.mjs` +2 −1 (T001)\n\nScope declared: T001 may edit `src/value.mjs`, `checks/value.check.mjs`. Touched outside it: nothing. Edits the hooks refused are not recorded.\n\n## Regressions\n\nUnchecked (advise mode): 0 commands (0 linked to the change, 0 from earlier features, 0 unlinked).\n- 2 candidate commands left out\n\n## Cost\n\n- Time: <DURATION> from `visp feature` to the last record; checks ran <DURATION> over 2 runs; regression gate <DURATION>.\n- Model calls: 1 independent review recorded, 1 reviewer call launched by VISP, 0 tester sessions; worker calls not measured. Models: gpt-5.6-sol.\n\n## Next\n\nThe independent review budget is spent. Run visp pr; the remaining findings go to a human reviewer\n\n`visp pr --feature 001-return-two-from-the-public`\n\nDetail: `visp pr --full --feature 001-return-two-from-the-public` adds the full handoff document; `--json` gives this record as data; `visp ui` shows it under Evidence; raw records are in `.visp/features/001-return-two-from-the-public/`.\n",
     "record": {
       "version": 1,
       "feature": "001-return-two-from-the-public",
@@ -17,7 +17,7 @@ $ visp pr --json
         "judged": 0,
         "failed": 0,
         "unverified": 0,
-        "gaps": 2
+        "gaps": 1
       },
       "notVerified": [
         {
@@ -25,11 +25,6 @@ $ visp pr --json
           "severity": "blocking",
           "ref": "FB-<HEX-1>",
           "text": "Required reviewer finding (functional): The module has no default export\nConsequence: Callers that import the module's default value receive undefined, not two"
-        },
-        {
-          "kind": "independent-tests",
-          "severity": "attention",
-          "text": "The independent tester's tests were not pinned (declined): The tester wrote no file: The request states one value; the worker's own check covers it."
         }
       ],
       "asked": {
@@ -117,12 +112,19 @@ $ visp pr --json
         }
       },
       "regressions": {
-        "mode": "off",
-        "status": "not-run",
+        "mode": "advise",
+        "status": "unchecked",
+        "commands": 0,
+        "selection": {
+          "linked": 0,
+          "earlierWork": 0,
+          "unlinked": 0
+        },
         "regressions": [],
         "unchecked": [],
         "preExisting": 0,
-        "leftOut": 0
+        "leftOut": 2,
+        "durationMs": <N>
       },
       "cost": {
         "startedAt": "<TIME>",
@@ -130,10 +132,11 @@ $ visp pr --json
         "elapsedMs": <N>,
         "checkRuns": 2,
         "checkTimeMs": <N>,
+        "regressionGateMs": <N>,
         "modelCalls": {
           "reviewerLaunched": 1,
           "reviewsRecorded": 1,
-          "testerSessions": 1,
+          "testerSessions": 0,
           "worker": null
         },
         "models": [

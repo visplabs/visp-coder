@@ -35,11 +35,12 @@ Scope declared: T001 may edit `src/value.mjs`, `checks/value.check.mjs`. Touched
 
 ## Regressions
 
-Not run: `workflow.regressionGate` is off.
+Unchecked (advise mode): 0 commands (0 linked to the change, 0 from earlier features, 0 unlinked).
+- 2 candidate commands left out
 
 ## Cost
 
-- Time: <DURATION> from `visp feature` to the last record; checks ran <DURATION> over 3 runs.
+- Time: <DURATION> from `visp feature` to the last record; checks ran <DURATION> over 3 runs; regression gate <DURATION>.
 - Model calls: 0 independent reviews recorded, 0 reviewer calls launched by VISP, 0 tester sessions; worker calls not measured.
 
 ## Next

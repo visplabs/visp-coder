@@ -255,7 +255,7 @@ export async function checkProductScope(
   workspace: WorkspaceState,
   record: ProductRecord,
   slice: ProductSlice,
-): Promise<Result<{ committedChanges: string[] }>> {
+): Promise<Result<{ committedChanges: string[]; changed: string[] }>> {
   const auth = await readProductAuthorization(workspace, record);
   if (!auth.ok) return auth;
   if (!auth.value || auth.value.task !== slice.id)
@@ -348,7 +348,7 @@ export async function checkProductScope(
         },
       ),
     );
-  return ok({ committedChanges: committed.value });
+  return ok({ committedChanges: committed.value, changed: paths });
 }
 
 function scopeList(forbidden: readonly string[], outside: readonly string[]): string {
