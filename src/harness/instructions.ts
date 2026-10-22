@@ -16,7 +16,7 @@ const COMPACT_RULES = `- Keep request with --source-brief; preserve outcomes, ex
 - Run done/verify/accept/next/pr in the foreground, alone, with the host's maximum shell timeout: no run_in_background, loop or file redirect. done waits for VISP's reviewer and prints the result. Only feature may be backgrounded (leave it running on blocking hosts). When it prints, run visp work unless --check did; never rerun feature; after kill/error recover by id.
 - Sandbox denied? Rerun with escalation.
 - Missing product evidence stays unresolved. Report reviewer.context honestly. Do not force extra review rounds.
-- Before the final answer, run \`visp next\`; respect execution refusals.`;
+- Before the final answer, reach next action complete or a handoff in a done/accept/next reply (report what it lists as open); respect execution refusals.`;
 
 const RULES_FOR_AGENTS = `- The original request and independent acceptance expectations cannot be weakened by a method revision.
   An explicit intent change records the reason and provenance; it is not proof of human authorization.
@@ -47,7 +47,7 @@ ${TOOL_ACCESS_GUIDANCE}
 
 ## The loop
 
-Loop: \`visp work\` → implement → \`visp done\` → \`visp next\`, one slice at a time. Run \`visp accept\` only when \`visp next\` directs it.
+Loop: \`visp work\` → implement → \`visp done\` → its next step, one slice at a time. Run \`visp accept\` only when a next step directs it.
 Start: \`visp feature "<goal>" --check "<test command>" --source-brief -\` with a quoted heredoc for the request. It records the request and works all of it as one slice; without \`--check\`, run \`visp work --check "<test command>"\` next. Plan several slices with \`visp brief --template\` only for independently usable parts.
 
 ## Rules
@@ -77,7 +77,7 @@ export function renderMinimalGuide(): string {
   return `# visp
 
 First: \`visp feature "<goal>" --check "<test command>" --source-brief - <<'REQUEST'\` (request, then REQUEST): records the request and works it as one slice. \`visp brief --template\` for many slices.
-Loop: \`visp work\` → implement → \`visp done\` → \`visp next\`. Run \`visp accept\` only when \`visp next\` directs it.
+Loop: \`visp work\` → implement → \`visp done\` → its next step. Run \`visp accept\` only when a next step directs it.
 
 ${COMPACT_RULES}
 

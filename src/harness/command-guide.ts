@@ -80,7 +80,7 @@ export const VISP_COMMANDS = [
     command: "done",
     when: "The slice is usable",
     example: "visp done --task <id>",
-    next: 'Run it in the foreground, never with run_in_background or a redirect: it waits for VISP\'s reviewer (about 1-2 min) and prints the result, so there is nothing to poll. A feature that lists requirements takes one --account "R001=<check id> <test name>" per requirement (work prints the full command). Then follow its returned action and `visp next`.',
+    next: 'Run it in the foreground, never with run_in_background or a redirect: it waits for VISP\'s reviewer (about 1-2 min) and prints the result, so there is nothing to poll. A feature that lists requirements takes one --account "R001=<check id> <test name>" per requirement (work prints the full command). Then follow the next step it prints; a handoff or complete ends your loop.',
   },
   {
     command: "accept",

@@ -362,6 +362,9 @@ if (input?.hook_event_name === "Stop") {
     const now = Date.now();
     const kind =
       next.completion === "handoff" ? "handoff" : next.completion === "unresolved-environment" ? "environment" : "work";
+    // A handoff with nothing to run was printed, with what is open, by the done or next the
+    // worker read; blocking it only cost a second final answer.
+    if (kind === "handoff" && !next.command) process.exit(0);
     const limit = kind === "work" ? 2 : 1;
     // Ids and values change from call to call; the command's verb and flags name the step.
     const words = String(next.command ?? "").split(/\s+/).filter(Boolean);
@@ -413,9 +416,7 @@ if (input?.hook_event_name === "Stop") {
     const reason = !next.feature
       ? command ? `${objective}. Run: ${command}` : `${objective}.`
       : kind === "handoff"
-      ? command
-        ? `${objective}. Run: ${command} once, then say in your final message what is still open and that ${feature} needs the human reviewer.`
-        : `${objective}. Say in your final message what is still open and that ${feature} needs the human reviewer.`
+      ? `${objective}. Run: ${command} once, then say in your final message what is still open and that ${feature} needs the human reviewer.`
       : kind === "environment"
       ? `VISP cannot verify ${feature} until its execution environment works: ${objective}.${command ? ` Run: ${command} once.` : ""} If it is still unavailable, say in your final message which capability is missing and that ${feature} is not verified; do not retry it repeatedly.`
       : `VISP's next step for ${feature}: ${objective}.${command ? ` Run: ${command}.` : ""} If your own \`visp next\` shows a different step, follow that one. If you cannot finish, say in your final message what is left and why.`;
@@ -1054,7 +1055,7 @@ process.stdout.write(JSON.stringify(deny(reason)));
 # visp
 
 First: `visp feature "<goal>" --check "<test command>" --source-brief - <<'REQUEST'` (request, then REQUEST): records the request and works it as one slice. `visp brief --template` for many slices.
-Loop: `visp work` → implement → `visp done` → `visp next`. Run `visp accept` only when `visp next` directs it.
+Loop: `visp work` → implement → `visp done` → its next step. Run `visp accept` only when a next step directs it.
 
 - Keep request with --source-brief; preserve outcomes, expectations and scope.allowed.
 - Edit only what the request needs; never push, install packages or delete unrelated files.
@@ -1067,7 +1068,7 @@ Loop: `visp work` → implement → `visp done` → `visp next`. Run `visp accep
 - Run done/verify/accept/next/pr in the foreground, alone, with the host's maximum shell timeout: no run_in_background, loop or file redirect. done waits for VISP's reviewer and prints the result. Only feature may be backgrounded (leave it running on blocking hosts). When it prints, run visp work unless --check did; never rerun feature; after kill/error recover by id.
 - Sandbox denied? Rerun with escalation.
 - Missing product evidence stays unresolved. Report reviewer.context honestly. Do not force extra review rounds.
-- Before the final answer, run `visp next`; respect execution refusals.
+- Before the final answer, reach next action complete or a handoff in a done/accept/next reply (report what it lists as open); respect execution refusals.
 
 VISP generates records; see VISP.commands.md.
 
@@ -1108,7 +1109,7 @@ The executable is `visp`; the package is `visp-coder`. Commands accept `--help`.
 | Only when `visp next` prints a critic command | `visp critic --preflight` | Host-delegated review only (with VISP's own reviewer `visp done` runs it). Setup-needed: inspect capabilities; ready: prepare, delegate, submit, or dispatch through an attached adapter. |
 | Only when `visp next` shows a manual-feedback request | `visp critic feedback --ask "What should I improve in this version?"` | Ask the user with the host's question tool only if it exists and questions are allowed; otherwise `--id <request-id> --defer`. Continue unrelated work. |
 | Only when `visp next` prints a review command | `visp review --task <id> --prepare` | Pause edits until it returns. Read packetPath and images; submit with --session <id> --from -. |
-| The slice is usable | `visp done --task <id>` | Run it in the foreground, never with run_in_background or a redirect: it waits for VISP's reviewer (about 1-2 min) and prints the result, so there is nothing to poll. A feature that lists requirements takes one --account "R001=<check id> <test name>" per requirement (work prints the full command). Then follow its returned action and `visp next`. |
+| The slice is usable | `visp done --task <id>` | Run it in the foreground, never with run_in_background or a redirect: it waits for VISP's reviewer (about 1-2 min) and prints the result, so there is nothing to poll. A feature that lists requirements takes one --account "R001=<check id> <test name>" per requirement (work prints the full command). Then follow the next step it prints; a handoff or complete ends your loop. |
 | Next directs final acceptance | `visp accept --feature <id>` | Run the final product checks and report accepted status or remaining gaps. |
 | Only when `visp next` prints it | `visp pr --feature <id>` | Prints the evidence record and what is still open for the human reviewer. It reads recorded state; it changes and pushes nothing. |
 

@@ -4,7 +4,7 @@
   "data": {
     "delivery": {
       "status": "slice-closed",
-      "summary": "This slice is closed. Run visp next before reporting the feature complete."
+      "summary": "This slice is closed. Follow the next step before reporting the feature complete."
     },
     "nextCommand": "visp review --handoff --feature 001-return-two-from-the-public",
     "checkpoint": {

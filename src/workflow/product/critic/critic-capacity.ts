@@ -1,5 +1,4 @@
 import { CRITIC_CALL_TIMEOUT_MS, CRITIC_MAX_CALLS } from "../../../config/critic.js";
-import { cliCommand } from "../../next-action.js";
 import type { WorkspaceState } from "../../state.js";
 import { reviewRoundGap } from "../review/review-cadence.js";
 import { reviewerRules } from "../tester/pinned-dispute-model.js";
@@ -96,7 +95,13 @@ async function recordedCapacity(
   };
 }
 
-/** The step when VISP's reviewer cannot run again: hand what remains to the human reviewer. */
+/**
+ * The step when VISP's reviewer cannot run again: hand what remains to the human reviewer. It
+ * names no command: its evidence lists what is open, in the `done` or `next` reply the worker
+ * already read. In batch leandef2 a `visp pr` step cost 2–5 more turns (`next`, `pr`,
+ * `pr --help`, a second final answer from the Stop hook), most above the 100k-token price tier
+ * on the larger task.
+ */
 export function reviewerHandoff(
   feature: string,
   capacity: ReviewerCapacity,
@@ -105,8 +110,7 @@ export function reviewerHandoff(
   return {
     action: "fix" as const,
     completion: "handoff" as const,
-    command: cliCommand("pr", { feature }),
-    objective: `${capacity.reason ?? "VISP's independent reviewer cannot run again."} Run visp pr (it prints the evidence record and changes and pushes nothing); the remaining ${remaining} go to a human reviewer`,
+    objective: `${capacity.reason ?? "VISP's independent reviewer cannot run again."} Run nothing more for it: in your final answer, list the remaining ${remaining} shown here and say that ${feature} needs a human reviewer`,
   };
 }
 

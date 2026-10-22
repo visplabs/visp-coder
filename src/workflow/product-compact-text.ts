@@ -300,12 +300,25 @@ function compactVerificationText(
     pinnedTests: Object.keys(pinned).length ? bounded(pinned) : undefined,
     critic: data.critic ? bounded(data.critic) : undefined,
     nextProbe: plan.nextProbe ? bounded(object(plan.nextProbe).question) : undefined,
-    next: data.next
-      ? { action: next.action, objective: next.objective, command: next.command }
-      : undefined,
+    next: data.next ? nextSummary(next) : undefined,
   };
   const hintLine = typeof hint === "string" && hint ? `\n${hint}` : "";
   return `${name}: ${JSON.stringify(summary)}${hintLine}\n${WORDING[channel].detail} Tool success does not imply product acceptance.`;
+}
+
+/**
+ * The next step. A handoff is the end of the worker's loop, so it carries what is still open:
+ * the worker reports it from this reply instead of running `visp next` and `visp pr` for it.
+ */
+function nextSummary(next: Record<string, unknown>) {
+  const step = { action: next.action, objective: next.objective, command: next.command };
+  if (next.completion !== "handoff") return step;
+  const evidence = Array.isArray(next.evidence) ? [...new Set(next.evidence)] : [];
+  return {
+    ...step,
+    completion: next.completion,
+    ...(evidence.length ? { open: boundedRows(evidence) } : {}),
+  };
 }
 
 /** Gaps repeat outcome statuses first; the actionable environment or scope reason comes last. */

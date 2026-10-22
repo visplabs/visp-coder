@@ -295,9 +295,11 @@ describe("VISP's reviewer capacity", () => {
       expect(handoff).toMatchObject({
         action: "fix",
         completion: "handoff",
-        command: `visp pr --feature ${setup.brief.feature}`,
       });
-      expect(handoff.objective).toContain("remaining findings go to a human reviewer");
+      // The handoff ends the worker's loop: its evidence is the report, with nothing to run.
+      expect(handoff.command).toBeUndefined();
+      expect(handoff.objective).toContain("list the remaining findings shown here");
+      expect(handoff.objective).toContain("needs a human reviewer");
       expect(handoff.objective).not.toContain("Fix what you can");
       const record = await readProductRecord(await setup.workspace.state(), {
         feature: setup.brief.feature,
@@ -442,7 +444,6 @@ describe("VISP's reviewer capacity", () => {
       }
       expect(await nextStep()).toMatchObject({
         completion: "handoff",
-        command: `visp pr --feature ${setup.brief.feature}`,
       });
       return route;
     }
@@ -510,8 +511,8 @@ describe("VISP's reviewer capacity", () => {
       const stuck = await next();
       expect(stuck).toMatchObject({
         completion: "handoff",
-        command: expect.stringContaining("visp pr"),
       });
+      expect(stuck.command).toBeUndefined();
       expect(stuck.objective).toContain("failed twice on this source");
       await edit("changed again");
       const again = await next();
@@ -566,7 +567,6 @@ describe("VISP's reviewer capacity", () => {
       expect(await next()).toMatchObject({
         action: "fix",
         completion: "handoff",
-        command: `visp pr --feature ${setup.brief.feature}`,
       });
     });
 
@@ -585,8 +585,8 @@ describe("VISP's reviewer capacity", () => {
         action: "fix",
         completion: "handoff",
         mayEdit: false,
-        command: expect.stringContaining("visp pr"),
       });
+      expect(step.command).toBeUndefined();
       expect(step.objective).toContain("remaining assessment");
     });
 

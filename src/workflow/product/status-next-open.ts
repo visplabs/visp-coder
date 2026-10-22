@@ -109,7 +109,7 @@ export async function nextOpenSlice(
       ...base,
       action: "fix",
       objective: route.objective,
-      command: route.command,
+      ...("command" in route ? { command: route.command } : {}),
       evidence: [
         ...findings.map((finding) => `${finding.problem}. Next check: ${finding.nextCheck}`),
         ...missingReproduction.map(

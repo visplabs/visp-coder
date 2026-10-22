@@ -203,7 +203,10 @@ describe("the minimal profile", () => {
     // 475 -> 525: done, verify, accept, next and pr run in the foreground, alone (16 of 18 lean
     // runs in batches leandef1 and leandef2 backgrounded done and were refused by the hook), and
     // the first command is `feature --check`.
-    expect(guide.length / 4).toBeLessThanOrEqual(525);
+    // 525 -> 545: the loop ends at a complete or handoff step in the done/accept reply the
+    // worker already has, not at one more `visp next` and `visp pr` (2–5 tail turns per lean
+    // run in batch leandef2).
+    expect(guide.length / 4).toBeLessThanOrEqual(545);
     expect(guide).toContain("Edit only what the request needs");
     expect(guide).toContain("run visp work unless --check did");
     expect(guide).toContain(
@@ -320,7 +323,7 @@ describe("generated workflow routing", () => {
       expect(guide).toContain("visp done");
       expect(guide).toContain("visp next");
       expect(guide).toContain("visp accept");
-      expect(guide).toContain("Run `visp accept` only when `visp next` directs it");
+      expect(guide).toContain("Run `visp accept` only when a next step directs it");
       expect(guide).toContain("Missing product evidence stays unresolved");
     },
   );

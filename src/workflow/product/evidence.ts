@@ -394,7 +394,8 @@ function deliveryResult(
         : close
           ? {
               status: "slice-closed",
-              summary: "This slice is closed. Run visp next before reporting the feature complete.",
+              summary:
+                "This slice is closed. Follow the next step before reporting the feature complete.",
             }
           : {
               status: "checks-passed",
