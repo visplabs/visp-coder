@@ -1,6 +1,6 @@
 > .visp/hooks/codex-hooks.mjs {"session_id":"golden-session","cwd":"<PROJECT>","hook_event_name":"Stop"}
 --- stdout
-{"decision":"block","reason":"The independent review budget is spent. Run visp pr; the remaining findings go to a human reviewer. Run: visp pr --feature 001-return-two-from-the-public once, then say in your final message what is still open and that 001-return-two-from-the-public needs the human reviewer."}
+{"decision":"block","reason":"The independent review budget is spent. Run visp pr (it prints the evidence record and changes and pushes nothing); the remaining findings go to a human reviewer. Run: visp pr --feature 001-return-two-from-the-public once, then say in your final message what is still open and that 001-return-two-from-the-public needs the human reviewer."}
 --- stderr
 
 --- exit 0

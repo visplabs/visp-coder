@@ -197,7 +197,7 @@ describe("requestRequirements on wrapped requests", () => {
     expect(sizes).toEqual({
       "swe-django__django-16229": 8,
       "swe-narwhals-dev__narwhals-1948": 5,
-      "swe-sphinx-doc__sphinx-9902": 16,
+      "swe-sphinx-doc__sphinx-9902": 13,
     });
   });
 
@@ -298,7 +298,7 @@ describe("at visp done", () => {
     expect(feature).toMatchObject({
       profile: { name: "lean" },
       requirements: ["R001: Export value two.", "R002: Export label two."],
-      requirementsNote: expect.stringContaining("--account R001=<passing check id>"),
+      requirementsNote: expect.stringContaining(`--account "R001=<passing check id> <test name>"`),
     });
     const unaccounted = await runProductDone(await state(), {});
     expect(unaccounted.ok && unaccounted.value).toMatchObject({
@@ -323,8 +323,25 @@ describe("at visp done", () => {
     expect(closed.ok && closed.value).toMatchObject({
       closed: true,
       requirements: [
-        "R001: done, C001 two",
+        "R001: done, C001 two (no test named; only that C001 passed)",
         "R002: not done, the label stays as the request leaves it",
+      ],
+    });
+  });
+
+  it("marks a test the worker names but the check's output does not show as claimed, not verified", async () => {
+    await started("- Export value two.\n- Export label two.", {
+      "test/value.test.mjs":
+        "import {test} from 'node:test'; import assert from 'node:assert/strict'; import {value, label} from '../src/value.mjs'; test('value_is_two',()=>{assert.equal(value,2);}); test('label_is_two',()=>{assert.equal(label,'two');});\n",
+    });
+    const closed = await runProductDone(await state(), {
+      account: ["R001=C001 value_is_two", "R002=C001 label_is_two no_such_test"],
+    });
+    expect(closed.ok && closed.value).toMatchObject({
+      closed: true,
+      requirements: [
+        "R001: done, C001 value_is_two (verified: the test passed in C001's latest run)",
+        "R002: done, C001 label_is_two no_such_test (claimed, not verified: no_such_test: not in C001's output)",
       ],
     });
   });

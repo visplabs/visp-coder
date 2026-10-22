@@ -21,7 +21,7 @@ const PROCESS_INSTRUCTIONS: readonly RegExp[] = [
   /^(?:Run|Start|Prefix) (?:every|each|all) (?:shell )?(?:command|commands)\b/i,
   /\bcreate or edit files only inside\b/i,
   /^Do not (?:read|open|look at) (?:any )?other (?:directories|folders|files)\b/i,
-  /^Do not ask (?:any |the user )?(?:questions|for clarification)\b/i,
+  /^Do not ask (?:any )?questions\s*[:;.,]|^Do not ask (?:any )?questions$/i,
   /\bmake reasonable assumptions and continue\b/i,
   /^Do not delegate\b/i,
   /^No (?:dependency|package) (?:downloads|installs)\b/i,

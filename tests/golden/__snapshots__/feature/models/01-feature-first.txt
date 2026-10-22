@@ -1,7 +1,7 @@
 $ visp feature 'Export the value one'
 --- stdout
 feature: {"feature":"001-export-the-value-one","incomplete":false,"outcomes":[],"examples":[],"checks":[],"slices":[],"profile":{"name":"lean"}}
-Note: The request states 2 requirements (R001–R002), parallel branches listed separately. Deliver every one. The visp done that completes the feature asks for an account of each: --account R001=<passing check id> [test name], or --account "R001=not done: <reason>".
+Note: The request states 2 requirements (R001–R002), parallel branches listed separately. Deliver every one. The visp done that completes the feature asks for an account of each, all in that one command: --account "R001=<passing check id> <test name>" "R002=…", or "R001=not done: <reason>". Name the tests exactly as the check prints them; VISP looks them up in its output. visp work prints the full command.
 Requirements:
 - R001: Values in this project are whole numbers from 0 to 9.
 - R002: Make the module export the value one.

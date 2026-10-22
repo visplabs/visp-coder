@@ -1,5 +1,6 @@
 import type {
   CheckEvidence,
+  EvidenceAccount,
   EvidenceChanges,
   EvidenceCost,
   EvidenceFile,
@@ -26,6 +27,7 @@ export function renderEvidenceRecord(record: EvidenceRecord, title?: string): st
     ...notVerifiedSection(record),
     ...askedSection(record),
     ...doneSection(record),
+    ...accountsSection(record),
     ...changedSection(record.changed),
     ...regressionsSection(record.regressions),
     ...costSection(record.cost),
@@ -130,6 +132,46 @@ function doneSection(record: EvidenceRecord): string[] {
     "Results are commands VISP ran. `stale` runs were on an earlier version and show nothing about this one. Reviewer verdicts are a model's judgment, not a run.",
     "",
   ];
+}
+
+const ACCOUNT_STATEMENT_CHARS = 70;
+
+/**
+ * The requirements `visp feature` listed (R001…), the worker's account of each and what VISP
+ * could confirm of it. The account is the worker's claim; only the last column is VISP's.
+ */
+function accountsSection(record: EvidenceRecord): string[] {
+  if (!record.accounts?.length) return [];
+  return [
+    "## Worker's account of the listed requirements",
+    "",
+    "| Requirement | Worker's account | VISP checked |",
+    "| --- | --- | --- |",
+    ...record.accounts.map(
+      (entry) =>
+        `| **${entry.requirement}** ${cell(shorten(entry.statement))} | ${accountCell(entry)} | ${verificationCell(entry)} |`,
+    ),
+    "",
+    'The account is what the worker said at `visp done`. VISP confirms only that the cited check passed, and that a test the worker names is in that check\'s latest output as passed (and failed on the old code, where a comparison ran). A name it cannot find stays "claimed, not verified".',
+    "",
+  ];
+}
+
+function shorten(text: string): string {
+  return text.length > ACCOUNT_STATEMENT_CHARS
+    ? `${text.slice(0, ACCOUNT_STATEMENT_CHARS - 1)}…`
+    : text;
+}
+
+function accountCell(entry: EvidenceAccount): string {
+  if (entry.account === "open") return "none";
+  if (entry.account === "not-done") return `not done: ${cell(entry.reason ?? "")}`;
+  return cell(`${entry.check ?? ""}${entry.note ? ` ${entry.note}` : ""}`);
+}
+
+function verificationCell(entry: EvidenceAccount): string {
+  if (entry.account !== "done") return "—";
+  return cell(entry.detail ?? "—");
 }
 
 function requirementRows(entry: RequirementEvidence): string[] {

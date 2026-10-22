@@ -3,6 +3,7 @@ import { vispError } from "../../core/errors.js";
 import { type FileMutation, filePrecondition } from "../../core/file-transaction.js";
 import { err, ok, type Result } from "../../core/result.js";
 import type { WorkspaceState } from "../state.js";
+import type { AccountVerification } from "./account-verification.js";
 import { dumpLineIndexes, isPastedLine, isProcessInstruction } from "./requirement-noise.js";
 
 /**
@@ -270,11 +271,26 @@ export async function requirementAccountMutation(
   });
 }
 
+/** The command `done` runs as, and a check of the slice to cite in the example entries. */
+export interface AccountCommand {
+  readonly done: string;
+  readonly check: string;
+}
+
+/** The one command that accounts for what is open: workers read `--help` for its shape otherwise. */
+function accountCommandText(open: readonly string[], command: AccountCommand | undefined): string {
+  const entry = (id: string) => `"${id}=${command?.check ?? "<check id>"} <test name>"`;
+  const examples = open.slice(0, 2).map(entry).join(" ");
+  const more = open.length > 2 ? " …" : "";
+  return `${command?.done ?? "visp done"} --account ${examples}${more}, one entry per requirement; for one that is not done: "${open[0]}=not done: <reason>"`;
+}
+
 /** What still needs an account: none, or a check that has not passed on the current version. */
 export function requirementGaps(
   listed: readonly ListedRequirement[],
   accounts: readonly StoredAccount[],
   passedChecks: ReadonlySet<string>,
+  command?: AccountCommand,
 ): string[] {
   const byId = new Map(accounts.map((entry) => [entry.id, entry]));
   const gaps: string[] = [];
@@ -289,7 +305,7 @@ export function requirementGaps(
   }
   if (open.length)
     gaps.unshift(
-      `Requirements not accounted for: ${open.join(", ")}. At visp done, give each its passing check (--account ${open[0]}=<check id> [test name]) or say why it is not done (--account "${open[0]}=not done: <reason>")`,
+      `Requirements not accounted for: ${open.join(", ")}. At visp done, give each its passing check and a test it runs, or say why it is not done: ${accountCommandText(open, command)}`,
     );
   return gaps;
 }
@@ -298,13 +314,14 @@ export function requirementGaps(
 export function requirementSummary(
   listed: readonly ListedRequirement[],
   accounts: readonly StoredAccount[],
+  verified: ReadonlyMap<string, AccountVerification> = new Map(),
 ): string[] {
   const byId = new Map(accounts.map((entry) => [entry.id, entry]));
   return listed.map((requirement) => {
     const account = byId.get(requirement.id);
     if (!account) return `${requirement.id}: open`;
-    return account.status === "done"
-      ? `${requirement.id}: done, ${account.check}${account.note ? ` ${account.note}` : ""}`
-      : `${requirement.id}: not done, ${account.reason}`;
+    if (account.status !== "done") return `${requirement.id}: not done, ${account.reason}`;
+    const checked = verified.get(requirement.id);
+    return `${requirement.id}: done, ${account.check}${account.note ? ` ${account.note}` : ""}${checked ? ` (${checked.summary})` : ""}`;
   });
 }

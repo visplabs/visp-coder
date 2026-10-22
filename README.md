@@ -31,8 +31,8 @@ To take VISP out again, run `visp uninstall --dry-run`, then `visp uninstall` (a
 ## Quick start
 
 ```sh
-visp feature "Add a retry button to the failed-save banner"
-visp work --check "npm test"                  # one slice for the whole request, checked by your tests
+visp feature "Add a retry button to the failed-save banner" --check "npm test"
+                                              # records the request, then works all of it as one slice, checked by your tests
 # ...implement...
 visp done                                     # run checks; independent review
 visp next                                     # findings or the next step
@@ -48,7 +48,7 @@ When supplying the original request explicitly, use `--source-brief -` with a qu
 ## The loop
 
 1. **`visp feature "<request>"`** starts a feature and preserves the request with credential patterns and local paths masked. Under Claude Code and Codex, VISP takes it from the user's recorded prompt, so a paraphrase cannot replace it.
-2. **`visp work --check "<test command>"`** (the light path, which the default [lean profile](docs/workflow.md#profiles) uses) works the whole request as one slice checked by that command. For several independently usable parts, write a brief instead: **`visp brief`** reads or updates `.visp/features/<id>/brief.yaml` (outcomes, behavior examples, decisions, checks and slices), and **`visp work`** authorizes one slice at a time. `work` delivers the relevant outcomes, source excerpts, findings and recalled project decisions, allows edits only inside the slice's scope, and refuses a slice with a functional outcome that no declared check exercises.
+2. **`visp work --check "<test command>"`**, or `visp feature --check "<test command>"` to do it in the same command (the light path, which the default [lean profile](docs/workflow.md#profiles) uses), works the whole request as one slice checked by that command. For several independently usable parts, write a brief instead: **`visp brief`** reads or updates `.visp/features/<id>/brief.yaml` (outcomes, behavior examples, decisions, checks and slices), and **`visp work`** authorizes one slice at a time. `work` delivers the relevant outcomes, source excerpts, findings and recalled project decisions, allows edits only inside the slice's scope, and refuses a slice with a functional outcome that no declared check exercises.
 3. **Independent tests.** Under the [full profile](docs/workflow.md#profiles), with `critic.launch: codex-exec` and `critic.harness: codex`, or `critic.launch: claude-exec` and `critic.harness: claude-code`, an independent tester started by `visp feature` writes acceptance tests from the request alone while the worker proceeds (new projects by default). VISP pins them only if they fail before implementation, and the worker cannot quietly change them.
 4. **Implement** within the authorized files.
 5. **`visp done`** runs the slice's checks (plus any `workflow.validationCommands`, and the pinned tests on the last slice). If every check passes and `codex-exec` or `claude-exec` is configured, VISP runs the independent reviewer and returns its findings as the next repair step. The `done` that completes the feature also asks the worker to account for each requirement `visp feature` listed: the passing check that shows it, or why it is not done.

@@ -255,6 +255,32 @@ function productCommandMode(name: string, opts: ProductOptions): Result<void> {
   return { ok: true, value: undefined };
 }
 
+/**
+ * The light path in the same command: `visp work --check` for the feature just recorded. When it
+ * fails the feature stays recorded and the reply says how to start the slice by hand.
+ */
+async function withFirstSlice<T extends { duplicateOf?: string; brief: { feature: string } }>(
+  state: WorkspaceState,
+  recorded: T,
+  check: string | undefined,
+  starter: ReturnType<typeof configuredTestsStarter>,
+): Promise<T | (T & { work: unknown }) | (T & { workNote: string })> {
+  if (!check?.trim()) return recorded;
+  const feature = recorded.duplicateOf ?? recorded.brief.feature;
+  const worked = await runProductWork(
+    state,
+    { feature, check },
+    starter,
+    testsWaitMs(state, "cli"),
+  );
+  if (worked.ok) return { ...recorded, work: worked.value };
+  const command = `visp work --feature ${feature} --check "${check.replaceAll('"', '\\"')}"`;
+  return {
+    ...recorded,
+    workNote: `The request is recorded, but starting its slice failed: ${worked.error.message} Run ${command} to start it.`,
+  };
+}
+
 export function featureCommand(): Command {
   return new Command("feature")
     .description("Start a product brief from the original request")
@@ -263,6 +289,10 @@ export function featureCommand(): Command {
     .option("--risk <level>", "Project risk: low, medium, high, critical", "low")
     .option("--branch", "Create a feature branch")
     .option("--workflow <mode>", "Deprecated full/compact option; both use the product loop")
+    .option(
+      "--check <command>",
+      "Test command: after recording the request, work all of it as one slice (visp work --check)",
+    )
     .action(async (goal: string, _flags: unknown, cmd: Command) => {
       const opts = options<
         ProductOptions & {
@@ -306,10 +336,11 @@ export function featureCommand(): Command {
           if (!created.ok) return created;
           const started = await beginFeatureTester(state, created.value, starter);
           finished = started.finished;
-          return ok({
+          const feature = {
             ...created.value,
             ...(started.testsNote ? { testsNote: started.testsNote } : {}),
-          });
+          };
+          return ok(await withFirstSlice(state, feature, opts.check, starter));
         },
         () => finished ?? Promise.resolve(),
       );

@@ -13,7 +13,7 @@ const COMPACT_RULES = `- Keep request with --source-brief; preserve outcomes, ex
 - Image-file result (render, chart, SVG): give its brief check \`images: [out.png]\` (a PNG or SVG it writes; keep the requested format too) and an experience outcome naming what the picture must show.
 - UI previews (aim line, predicted path): use the real action's function and start point; check with real input. Do not delete or shrink requested content to pass a check.
 - If visp done runs VISP's reviewer, run or delegate no review; visp next waits. Fix findings, rerun done. Run visp critic/review only when visp next prints it.
-- Run feature/done/verify/accept/next with the host's maximum shell timeout. Leave feature running; background it on blocking hosts. At its id, run visp work; never rerun feature; after kill/error recover by id.
+- Run done/verify/accept/next/pr in the foreground, alone, with the host's maximum shell timeout: no run_in_background, loop or file redirect. done waits for VISP's reviewer and prints the result. Only feature may be backgrounded (leave it running on blocking hosts). When it prints, run visp work unless --check did; never rerun feature; after kill/error recover by id.
 - Sandbox denied? Rerun with escalation.
 - Missing product evidence stays unresolved. Report reviewer.context honestly. Do not force extra review rounds.
 - Before the final answer, run \`visp next\`; respect execution refusals.`;
@@ -21,7 +21,7 @@ const COMPACT_RULES = `- Keep request with --source-brief; preserve outcomes, ex
 const RULES_FOR_AGENTS = `- The original request and independent acceptance expectations cannot be weakened by a method revision.
   An explicit intent change records the reason and provenance; it is not proof of human authorization.
 - Use at least 10 minutes for feature/done/verify/accept/next when the host supports it.
-  Wait on done/verify/accept handles until they return; completed checks are saved for retry after interruption.
+  Wait on done/verify/accept until they return, in the foreground; completed checks are saved for retry after interruption.
   Inspect sandbox denials before using supported escalation.
 - Write Given/When/Then examples and counterexamples for stateful behavior. Check downstream results,
   boundaries, failure, and recovery. Preview and runtime should share a model or a consistency check,
@@ -48,7 +48,7 @@ ${TOOL_ACCESS_GUIDANCE}
 ## The loop
 
 Loop: \`visp work\` → implement → \`visp done\` → \`visp next\`, one slice at a time. Run \`visp accept\` only when \`visp next\` directs it.
-Start: \`visp feature "<goal>" --source-brief -\` with a quoted heredoc for the request, then \`visp work --check "<test command>"\` to work the request as one slice; plan several slices with \`visp brief --template\` only for independently usable parts.
+Start: \`visp feature "<goal>" --check "<test command>" --source-brief -\` with a quoted heredoc for the request. It records the request and works all of it as one slice; without \`--check\`, run \`visp work --check "<test command>"\` next. Plan several slices with \`visp brief --template\` only for independently usable parts.
 
 ## Rules
 
@@ -76,7 +76,7 @@ Command examples and recovery: VISP.commands.md. Full guide: ${fullGuide}
 export function renderMinimalGuide(): string {
   return `# visp
 
-First: \`visp feature "<goal>" --source-brief - <<'REQUEST'\` (request, then REQUEST). \`visp work --check "<test command>"\`; \`visp brief --template\` for many slices.
+First: \`visp feature "<goal>" --check "<test command>" --source-brief - <<'REQUEST'\` (request, then REQUEST): records the request and works it as one slice. \`visp brief --template\` for many slices.
 Loop: \`visp work\` → implement → \`visp done\` → \`visp next\`. Run \`visp accept\` only when \`visp next\` directs it.
 
 ${COMPACT_RULES}
@@ -100,7 +100,7 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
   {
     name: "visp-feature",
     description: "Start a feature from the original goal",
-    body: `Use \`${PRODUCT_NAME} feature\` for $ARGUMENTS and pass the verbatim original request with \`--source-brief -\` and a quoted heredoc. Then run \`${PRODUCT_NAME} work --check "<test command>"\` for the first usable slice; use \`${PRODUCT_NAME} brief --template\` for several usable slices.`,
+    body: `Use \`${PRODUCT_NAME} feature\` for $ARGUMENTS and pass the verbatim original request with \`--source-brief -\` and a quoted heredoc, and \`--check "<test command>"\` to work it as the first usable slice at once; use \`${PRODUCT_NAME} brief --template\` for several usable slices.`,
   },
   {
     name: "visp-implement",

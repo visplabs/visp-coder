@@ -106,7 +106,7 @@ export function reviewerHandoff(
     action: "fix" as const,
     completion: "handoff" as const,
     command: cliCommand("pr", { feature }),
-    objective: `${capacity.reason ?? "VISP's independent reviewer cannot run again."} Run visp pr; the remaining ${remaining} go to a human reviewer`,
+    objective: `${capacity.reason ?? "VISP's independent reviewer cannot run again."} Run visp pr (it prints the evidence record and changes and pushes nothing); the remaining ${remaining} go to a human reviewer`,
   };
 }
 

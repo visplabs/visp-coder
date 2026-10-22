@@ -243,7 +243,7 @@ function requirementsOutcome(brief: ProductBrief) {
   if (!listed.length) return {};
   return {
     requirements: listed.map((entry) => `${entry.id}: ${entry.statement}`),
-    requirementsNote: `The request states ${listed.length} requirement${listed.length === 1 ? "" : "s"} (${listed[0]?.id}${listed.length > 1 ? `–${listed.at(-1)?.id}` : ""}), parallel branches listed separately. Deliver every one. The visp done that completes the feature asks for an account of each: --account ${listed[0]?.id}=<passing check id> [test name], or --account "${listed[0]?.id}=not done: <reason>".`,
+    requirementsNote: `The request states ${listed.length} requirement${listed.length === 1 ? "" : "s"} (${listed[0]?.id}${listed.length > 1 ? `–${listed.at(-1)?.id}` : ""}), parallel branches listed separately. Deliver every one. The visp done that completes the feature asks for an account of each, all in that one command: --account "${listed[0]?.id}=<passing check id> <test name>" "${listed[1]?.id}=…", or "${listed[0]?.id}=not done: <reason>". Name the tests exactly as the check prints them; VISP looks them up in its output. visp work prints the full command.`,
   };
 }
 

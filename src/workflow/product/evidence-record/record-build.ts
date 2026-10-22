@@ -12,10 +12,12 @@ import type { RegressionGateReport } from "../regression/regression-report.js";
 import type { ProductNext } from "../status.js";
 import type { ProductRecord } from "../store.js";
 import type { IndependentTestsRecord } from "../tester/independent-tests-model.js";
+import { accountGaps } from "./record-accounts.js";
 import { checkEvidence } from "./record-checks.js";
 import { regressionGaps, regressionsFrom } from "./record-regressions.js";
 import type {
   CheckEvidence,
+  EvidenceAccount,
   EvidenceChanges,
   EvidenceCost,
   EvidenceGap,
@@ -38,6 +40,8 @@ export interface EvidenceInputs {
   /** VISP-launched reviewer calls and tester sessions, from their activity logs. */
   readonly activity: { readonly reviewerLaunched: number; readonly testerSessions: number };
   readonly outsideAccess: EvidenceOutsideAccess;
+  /** The listed requirements and the worker's accounts of them; empty for a request with fewer than two. */
+  readonly accounts?: readonly EvidenceAccount[];
   readonly readAt: string;
 }
 
@@ -66,6 +70,7 @@ export function buildEvidenceRecord(inputs: EvidenceInputs): EvidenceRecord {
   const regressions = regressionsFrom(inputs.gate, subject);
   const notVerified = ordered([
     ...done.flatMap((entry) => requirementGaps(entry, inputs.outcomes)),
+    ...accountGaps(inputs.accounts),
     ...suites.flatMap(suiteGap),
     ...[...done.flatMap((entry) => entry.checks), ...suites].flatMap(vacuousGap),
     ...regressionGaps(regressions),
@@ -117,6 +122,7 @@ export function buildEvidenceRecord(inputs: EvidenceInputs): EvidenceRecord {
         })),
     },
     done,
+    ...(inputs.accounts?.length ? { accounts: inputs.accounts } : {}),
     suites,
     changed: inputs.changes,
     regressions,

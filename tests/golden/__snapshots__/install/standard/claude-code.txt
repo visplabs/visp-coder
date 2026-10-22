@@ -250,7 +250,7 @@ Run `visp done`. Address failures or scheduled review using actual product evide
 description: Start a feature from the original goal
 ---
 
-Use `visp feature` for $ARGUMENTS and pass the verbatim original request with `--source-brief -` and a quoted heredoc. Then run `visp work --check "<test command>"` for the first usable slice; use `visp brief --template` for several usable slices.
+Use `visp feature` for $ARGUMENTS and pass the verbatim original request with `--source-brief -` and a quoted heredoc, and `--check "<test command>"` to work it as the first usable slice at once; use `visp brief --template` for several usable slices.
 
 === .claude/commands/visp-implement.md
 ---
@@ -742,9 +742,9 @@ if (input?.tool_name === "Bash") {
       JSON.stringify(
         deny(
           background
-            ? "Run `" + workflow.command + "` by itself in the foreground, not in a loop: repeat it without run_in_background and with timeout 600000. " +
-                "It prints its result and the next step; while a review runs, `visp next` waits for it. " +
-                "If the host moves the command to the background, wait for its completion notice, then run `visp next`; do not poll with pgrep, tail -f or sleep loops."
+            ? "Run `" + workflow.command + "` again with the same arguments, by itself in the foreground: no run_in_background, no loop, no redirect to a file, timeout 600000. " +
+                "It waits for VISP's reviewer (1-2 min) and prints its result and the next step; while a review runs, `visp next` waits for it. " +
+                "If the host moves the command to the background anyway, wait for its completion notice, then run `visp next`; do not poll with pgrep, tail -f or sleep loops."
             : "Run `" + workflow.command + "` by itself, not in a loop, with the host's maximum shell timeout. " +
                 "It prints its result and the next step; while a review runs, `visp next` waits for it. " +
                 "Do not poll with pgrep, tail -f or sleep loops.",
@@ -1317,7 +1317,7 @@ Use VISP MCP tools when connected: `visp_next({})`, then `visp_<command>` schema
 ## The loop
 
 Loop: `visp work` → implement → `visp done` → `visp next`, one slice at a time. Run `visp accept` only when `visp next` directs it.
-Start: `visp feature "<goal>" --source-brief -` with a quoted heredoc for the request, then `visp work --check "<test command>"` to work the request as one slice; plan several slices with `visp brief --template` only for independently usable parts.
+Start: `visp feature "<goal>" --check "<test command>" --source-brief -` with a quoted heredoc for the request. It records the request and works all of it as one slice; without `--check`, run `visp work --check "<test command>"` next. Plan several slices with `visp brief --template` only for independently usable parts.
 
 ## Rules
 
@@ -1329,14 +1329,14 @@ Start: `visp feature "<goal>" --source-brief -` with a quoted heredoc for the re
 - Image-file result (render, chart, SVG): give its brief check `images: [out.png]` (a PNG or SVG it writes; keep the requested format too) and an experience outcome naming what the picture must show.
 - UI previews (aim line, predicted path): use the real action's function and start point; check with real input. Do not delete or shrink requested content to pass a check.
 - If visp done runs VISP's reviewer, run or delegate no review; visp next waits. Fix findings, rerun done. Run visp critic/review only when visp next prints it.
-- Run feature/done/verify/accept/next with the host's maximum shell timeout. Leave feature running; background it on blocking hosts. At its id, run visp work; never rerun feature; after kill/error recover by id.
+- Run done/verify/accept/next/pr in the foreground, alone, with the host's maximum shell timeout: no run_in_background, loop or file redirect. done waits for VISP's reviewer and prints the result. Only feature may be backgrounded (leave it running on blocking hosts). When it prints, run visp work unless --check did; never rerun feature; after kill/error recover by id.
 - Sandbox denied? Rerun with escalation.
 - Missing product evidence stays unresolved. Report reviewer.context honestly. Do not force extra review rounds.
 - Before the final answer, run `visp next`; respect execution refusals.
 - The original request and independent acceptance expectations cannot be weakened by a method revision.
   An explicit intent change records the reason and provenance; it is not proof of human authorization.
 - Use at least 10 minutes for feature/done/verify/accept/next when the host supports it.
-  Wait on done/verify/accept handles until they return; completed checks are saved for retry after interruption.
+  Wait on done/verify/accept until they return, in the foreground; completed checks are saved for retry after interruption.
   Inspect sandbox denials before using supported escalation.
 - Write Given/When/Then examples and counterexamples for stateful behavior. Check downstream results,
   boundaries, failure, and recovery. Preview and runtime should share a model or a consistency check,
@@ -1367,13 +1367,14 @@ Follow the VISP project instructions in [AGENTS.visp.md](AGENTS.visp.md). The pa
 | When | Command |
 |---|---|
 | Start or resume | `visp next` |
-| New request | `visp feature "<goal>" --source-brief -` |
+| New request | `visp feature "<goal>" --check "<test command>" --source-brief -` |
 | Plan or revise a decision | `visp brief --template` |
 | Implement a slice | `visp work --check "<test command>"` |
 | An ownership/caller/test question | `visp query search "<symbol or behavior>"` |
 | Observe a browser interaction | `visp capture --task <id> --from -` |
 | The slice is usable | `visp done --task <id>` |
 | Next directs final acceptance | `visp accept --feature <id>` |
+| Only when `visp next` prints it | `visp pr --feature <id>` |
 
 Research relevant uncertainties with host tools; apply conclusions in the brief. Read [VISP.commands.md](VISP.commands.md) for input examples, critic dispatch and recovery. No custom skill is needed. Reviewer configuration is not proof of invocation or quality.
 <!-- visp:instructions:end -->
@@ -1388,7 +1389,7 @@ The executable is `visp`; the package is `visp-coder`. Commands accept `--help`.
 | When | Command | Next |
 |---|---|---|
 | Start or resume | `visp next` | Read-only routing: follow the returned action; unresolved is not complete. |
-| New request | `visp feature "<goal>" --source-brief -` | Pass the request with a quoted heredoc and the host's maximum timeout. It keeps running while VISP writes acceptance tests: on Codex keep its session open and poll it; on a blocking shell (Claude Code Bash) start it with run_in_background:true and read its output for the id; if the host can do neither, wait for it. Once it prints the feature id, run visp work --feature <id> --check "<test command>" for one slice. Never start feature again: a repeat can create a second feature. After a kill or error, run visp work --feature <id>; add --retry-tests only when work reports the acceptance tests failed or stopped. Use brief --template for several usable slices. |
+| New request | `visp feature "<goal>" --check "<test command>" --source-brief -` | Pass the request with a quoted heredoc and the host's maximum timeout. --check also works all of it as one slice (the visp work --check step). It keeps running while VISP writes acceptance tests: on Codex keep its session open and poll it; on a blocking shell (Claude Code Bash) start it with run_in_background:true and read its output for the result; if the host can do neither, wait for it. Once it prints, you have the slice (without --check, run visp work --feature <id> --check "<test command>" for one). Never start feature again: a repeat can create a second feature. After a kill or error, run visp work --feature <id>; add --retry-tests only when work reports the acceptance tests failed or stopped. Use brief --template for several usable slices. |
 | Plan or revise a decision | `visp brief --template` | Prefer --patch - for changed fields; keep the first slice to one usable behavior. |
 | Implement a slice | `visp work --check "<test command>"` | Read relevant outcomes/code, then edit only the authorized scope. --inspect reads without authorizing. |
 | An ownership/caller/test question | `visp query search "<symbol or behavior>"` | Use callers, testsFor or impact with the returned entity; inspect source. |
@@ -1396,17 +1397,19 @@ The executable is `visp`; the package is `visp-coder`. Commands accept `--help`.
 | Only when `visp next` prints a critic command | `visp critic --preflight` | Host-delegated review only (with VISP's own reviewer `visp done` runs it). Setup-needed: inspect capabilities; ready: prepare, delegate, submit, or dispatch through an attached adapter. |
 | Only when `visp next` shows a manual-feedback request | `visp critic feedback --ask "What should I improve in this version?"` | Ask the user with the host's question tool only if it exists and questions are allowed; otherwise `--id <request-id> --defer`. Continue unrelated work. |
 | Only when `visp next` prints a review command | `visp review --task <id> --prepare` | Pause edits until it returns. Read packetPath and images; submit with --session <id> --from -. |
-| The slice is usable | `visp done --task <id>` | Follow its returned action. It may run VISP's reviewer (about 1-2 min): wait, then `visp next`. |
+| The slice is usable | `visp done --task <id>` | Run it in the foreground, never with run_in_background or a redirect: it waits for VISP's reviewer (about 1-2 min) and prints the result, so there is nothing to poll. A feature that lists requirements takes one --account "R001=<check id> <test name>" per requirement (work prints the full command). Then follow its returned action and `visp next`. |
 | Next directs final acceptance | `visp accept --feature <id>` | Run the final product checks and report accepted status or remaining gaps. |
+| Only when `visp next` prints it | `visp pr --feature <id>` | Prints the evidence record and what is still open for the human reviewer. It reads recorded state; it changes and pushes nothing. |
 
 For a literal request containing backticks, dollar signs or quotes, use a quoted heredoc:
 
 ```sh
-visp feature "<goal>" --source-brief - <<'REQUEST'
+visp feature "<goal>" --check "<test command>" --source-brief - <<'REQUEST'
 <verbatim request>
 REQUEST
-visp work --check "<test command>"
 ```
+
+`--check` makes `feature` also run `visp work --check "<test command>"`, so its reply holds the slice's context and the `visp done` to run next. Without it, run `visp work --check "<test command>"` after `feature`.
 
 A repeat `visp work` may pass `--known <contextId>` from an earlier reply still in view; that reply's unchanged excerpts are not repeated.
 
