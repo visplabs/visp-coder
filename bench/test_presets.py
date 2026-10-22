@@ -107,6 +107,33 @@ class ConfigYaml(unittest.TestCase):
         self.assertIn("critic:\n  mode: off\n  harness: claude-code\n  launch: claude-exec\n", text)
 
 
+class NoRecall(unittest.TestCase):
+    def test_the_mode_sets_memory_recall_false(self):
+        self.assertEqual(presets.mode_config("norecall"), {"memory.recall": False})
+        self.assertEqual(presets.mode_config("lean+norecall")["memory.recall"], False)
+
+    def test_the_key_is_a_real_visp_config_key(self):
+        schema = (pathlib.Path(__file__).resolve().parents[1] / "src" / "config" / "schema.ts").read_text()
+        block = schema[schema.index("const memorySchema"):]
+        self.assertIn("recall: z.boolean()", block[:block.index(".default({})")])
+
+    def test_it_lands_in_the_memory_block_as_a_lowercase_boolean(self):
+        config = "memory:\n  # Earlier-request recall.\n  enabled: true\n\ntelemetry:\n  enabled: true\n"
+        text = presets.config_yaml(config, "norecall")
+        self.assertIn("memory:\n  recall: false\n  # Earlier-request recall.\n  enabled: true\n", text)
+        self.assertEqual(text.count("recall: false"), 1)
+
+    def test_a_recall_key_already_set_is_replaced(self):
+        text = presets.config_yaml("memory:\n  recall: true\n", "norecall")
+        self.assertIn("memory:\n  recall: false", text)
+        self.assertNotIn("recall: true", text)
+
+    def test_the_arm_label_and_title(self):
+        self.assertEqual(presets.visp_build("visp:develop+norecall"), ("develop", "norecall"))
+        self.assertEqual(presets.arm_title("visp:develop+norecall"), "visp:develop+norecall")
+        self.assertEqual(presets.mode_difference(None, "norecall"), {"memory.recall": (None, False)})
+
+
 class ArmNames(unittest.TestCase):
     def test_titles_spell_build_and_modes(self):
         self.assertEqual(presets.arm_title("bare"), "bare")
