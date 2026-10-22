@@ -203,8 +203,6 @@ When an exploratory journey failed, the prepare response may include host-only r
 \`visp review --prepare\` returns session, packetPath and responsePath under .visp. Read the packet and inspect its actual images. Complete the packet's response schema: summary, outcome assessments with cited evidence, zero to three findings, limitations and any resolutions. No category declarations, example-coverage ledger or identity fields are needed; unknown remains unresolved. Submit that JSON with \`visp review --session <id> --from -\`, or --from responsePath. VISP supplies selection/hashes and links selected before/after images from cited execution IDs; these links establish observation, not quality. Do not create review inputs beside product source or edit generated state. The old --template and stdin interface remains supported. Submission returns a compact recording receipt; --detail returns the full result, neither establishes acceptance.
 
 An outside-session reference requires preparing a session with the relevant --group; it does not prove an image was never viewed. New captures do not invalidate an existing selection. Actual source/contract/environment changes require fresh applicable evidence. Passing commands and delivered images do not establish quality.
-
-Opt in to \`workflow.reviewMode: observation-preview\` in visp.yml to inspect original goals and representative states without worker judgments. Report visible contradictions, locations, consequences, corrections and next checks; zero to three findings, not forced criticism. This preview is unvalidated by live model comparisons. Optional style advice never blocks acceptance.
 `;
   return criticEnabled ? guide : (guide.split("## Reviewer execution")[0] ?? guide);
 }

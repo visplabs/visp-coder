@@ -71,7 +71,6 @@ export function renderSettings(report?: Awaited<ReturnType<typeof explainSetting
 }
 
 const operationNotes: Readonly<Record<string, string>> = {
-  "workflow.reviewMode": "Selects current review or experimental observation-preview guidance.",
   "workflow.maxChangedFiles":
     "Default scope ceiling; recorded policy.maxChangedFiles takes precedence (shown below).",
   "workflow.blockedPaths": "Blocks matching paths in product scope and source access.",
