@@ -176,6 +176,31 @@ The failure the rule targeted (one October run that shipped with a level unobser
 
 **SVG rendering for the reviewer** (#61). Headless Chrome started with the GPU on and fell back to slow software rendering on hosts without one, so renders timed out. Failures in a 15-run golden loop went from 10 to 0, and production renders from 25 of 32 failing to 0. On the bench machine, which has a GPU, 0 of 499 picture packets had lost their image. The fix matters on CI, VMs and containers.
 
+## The pivot and its measurements (October 21–22 2026)
+
+With Haiku 5.5 at the ceiling on every task above, VISP was refocused on what a stronger model does not supply by itself: the user's request tied to declared scope, runnable checks and an evidence record, at low cost. Features with no measured effect were removed: `visp learn` notes, the Visp Memory service, graph context in work packs, and skills. The default became a lean profile: one slice, one cheap review at the end of the feature, at most two review rounds, the requirements listed and accounted for at `done`, and the full tester-and-reviewer loop kept as an escalation.
+
+**Lean default against the earlier default and bare** (preset `quality-2026-10`, three runs per arm; batch leandef1 on four tasks, leandef2 on the two existing-code tasks after the lean reviewer was set to low effort):
+
+| Task | Cost per run: bare / earlier default / lean | Median wall: bare / earlier / lean | Quality |
+| --- | --- | --- | --- |
+| reservations-bundles (leandef2) | $0.02 / $0.24 / $0.08 | 104 / 196 / 310 s | hidden 100% and code 8 in all arms |
+| spreadsheet-extend (leandef2) | $0.15 / $0.66 / $0.33 | 416 / 501 / 551 s | hidden 99.5% / 100% / 99.5%, code 7.67 / 8 / 7.67 |
+| lighthouse-pixel (leandef1) | $0.04 / $0.51 / $0.08 | 212 / 358 / 290 s | judge 7.67 / 8 / 7.67 |
+| slingshot-game (leandef1) | $0.91 / $3.24 / $1.39 | 1041 / 2609 / 1830 s | hidden 100%, judge 8 / 7.33 / 8 |
+
+In the first batch the lean reviewer, at high effort, took most of the time inside VISP commands (883 s on spreadsheet-extend); at low effort it took 59 s. The lean default cut cost by half to two thirds against the earlier default at equal quality. It remains 1.5–4 times bare cost, and on reservations-bundles its median wall exceeds the earlier default's by 58% (more model time), an accepted exception recorded with #74.
+
+**Regressions on chained changes.** Two bench chains (`bench/tasks/*-chain`, 4–5 requests on one codebase with every earlier check kept) gave bare Haiku 5.5 0 broken earlier checks in 6 chains, after hardening. On real ChainSWE chains (7 chains, 32 issues from Django, Sphinx and pylint, scored in the official images), bare workers broke no earlier test:
+
+| Worker | Issues resolved at their step | Strictly sequential | Earlier tests broken | Cost per chain |
+| --- | --- | --- | --- | --- |
+| Haiku 5.5 high | 21/32 (66%) | 10/32 | 0/973 | $0.11 |
+| Haiku 5.5 low | 14/32 (44%) | 2/32 | 0/960 | $0.04 |
+| Haiku 4.5 | 14/32 (44%) | 4/32 | 0 (one step broke an existing test) | $2.89 |
+
+The accuracy drop ChainSWE reports with chain length comes, for these workers, from issues left unresolved (the issue's own failing tests still fail), not from breaking earlier fixes. A regression gate (`workflow.regressionGate`) therefore stays off by default; its test selection was fixed for Python projects (#67). Whether the evidence record helps a reviewer is being measured in a separate study.
+
 ## What made the difference
 
 **The harness must launch the critic itself.** In the first weak-agent pilot (Luna at low effort, a sentiment API with 36 hidden tests), bare coding scored 36 and both VISP arms 34: workers never ran a check that covered errors and never delegated review. A critic launched by VISP (`codex exec`, read-only) on the same code reported the two missing 405 responses, acceptance of `NaN` and a request that can hang without `Content-Length`, each with a next check. VISP now launches the reviewer after checks pass (`critic.launch: codex-exec`).

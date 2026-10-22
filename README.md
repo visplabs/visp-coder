@@ -1,6 +1,6 @@
 # visp
 
-VISP is a harness for AI coding agents. It runs an actor–critic loop around the agent's work: the agent (the actor) writes a short brief and builds one usable slice at a time inside an authorized file scope, VISP executes the checks the brief declares, and an independent reviewer (the critic) judges the result against the original request. Findings come back to the agent as the next repair step.
+VISP makes an AI coding agent's work verifiable. It ties the user's verbatim request to a declared file scope and runnable checks, enforces that scope with host hooks, a Git pre-commit hook and CI, and ends each feature with an evidence record (`visp pr`): what was asked, what ran and passed, what changed, and what was not verified. Project rules and earlier decisions carry across sessions. The default lean profile costs 1.5 to 4 times a bare agent run (about 2 times on average across the benchmark tasks). The full loop, with an independent tester and reviewer, is an escalation for weak or local models, failing checks and large requests.
 
 VISP works as a CLI (`visp`) and as an MCP server (`visp serve --mcp`). Both use the same workflow services.
 
@@ -48,7 +48,7 @@ When supplying the original request explicitly, use `--source-brief -` with a qu
 ## The loop
 
 1. **`visp feature "<request>"`** starts a feature and preserves the request with credential patterns and local paths masked. Under Claude Code and Codex, VISP takes it from the user's recorded prompt, so a paraphrase cannot replace it.
-2. **`visp work --check "<test command>"`** (the light path, which the default [lean profile](docs/workflow.md#profiles) uses) works the whole request as one slice checked by that command. For several independently usable parts, write a brief instead: **`visp brief`** reads or updates `.visp/features/<id>/brief.yaml` (outcomes, behavior examples, decisions, checks and slices), and **`visp work`** authorizes one slice at a time. `work` delivers the relevant outcomes, source excerpts, graph context, findings and memory, allows edits only inside the slice's scope, and refuses a slice with a functional outcome that no declared check exercises.
+2. **`visp work --check "<test command>"`** (the light path, which the default [lean profile](docs/workflow.md#profiles) uses) works the whole request as one slice checked by that command. For several independently usable parts, write a brief instead: **`visp brief`** reads or updates `.visp/features/<id>/brief.yaml` (outcomes, behavior examples, decisions, checks and slices), and **`visp work`** authorizes one slice at a time. `work` delivers the relevant outcomes, source excerpts, findings and recalled project decisions, allows edits only inside the slice's scope, and refuses a slice with a functional outcome that no declared check exercises.
 3. **Independent tests.** Under the [full profile](docs/workflow.md#profiles), with `critic.launch: codex-exec` and `critic.harness: codex`, or `critic.launch: claude-exec` and `critic.harness: claude-code`, an independent tester started by `visp feature` writes acceptance tests from the request alone while the worker proceeds (new projects by default). VISP pins them only if they fail before implementation, and the worker cannot quietly change them.
 4. **Implement** within the authorized files.
 5. **`visp done`** runs the slice's checks (plus any `workflow.validationCommands`, and the pinned tests on the last slice). If every check passes and `codex-exec` or `claude-exec` is configured, VISP runs the independent reviewer and returns its findings as the next repair step. The `done` that completes the feature also asks the worker to account for each requirement `visp feature` listed: the passing check that shows it, or why it is not done.
@@ -141,7 +141,13 @@ The critic is a separate model session that receives the original request, curre
 
 ## Results
 
-On VISP's own benchmark (`bench/`: four tasks with hidden checks, Claude Haiku 4.5 as the coding agent, three runs per arm), VISP matched or beat every other arm on every task, most clearly on the larger ones: 35–37 of 38 on a spreadsheet engine against 26–35 for bare coding, Spec Kit and BMAD, and 56–63 of 63 over three rounds on extending an existing codebase against 41–59. It took about as long as Spec Kit (5–18 minutes) and longer than bare coding. With a stronger coding agent the gap was small. The runs are few and the tasks are VISP's own; see [the research summary](docs/research-summary.md) for every number and its limits.
+Measured on VISP's own benchmark (`bench/`) with Claude Haiku 5.5 as the coding agent; every number and its limits are in [the research summary](docs/research-summary.md).
+
+- A bare agent already passes the benchmark's hidden checks. VISP adds little measurable code quality for this model, and with Claude Haiku 4.5 it raised hidden-check scores more (35–37 of 38 against 26–35 on a spreadsheet engine).
+- Across sessions, VISP carried 62 of 62 earlier decisions into later work, against 58 of 62 for a bare agent (four tasks, two runs each).
+- The lean default halves the cost of the earlier default: $0.08 against $0.24 per run on one existing-code task and $0.33 against $0.66 on another (a bare agent: $0.02 and $0.15), with equal hidden-check results.
+- On real chains of issues (ChainSWE), bare agents broke no earlier tests; their failures were incomplete fixes. VISP's requirement listing targets that.
+- Outside evidence: stating the allowed scope took a coding agent's out-of-scope actions from 17.1% to 0.0% (OverEager-Bench, arXiv 2605.18583).
 
 ## Documentation
 
@@ -152,7 +158,7 @@ On VISP's own benchmark (`bench/`: four tasks with hidden checks, Claude Haiku 4
 - [Configuration](docs/configuration.md): `visp.yml`, the repository graph and `.visp/`
 - [Migration](docs/migration.md): upgrading saved history and the 0.5 removals
 - [Runner](docs/runner.md): the optional `visp-runner` experiment runner
-- [Internals](docs/internals.md): state integrity, learning records and prompt design
+- [Internals](docs/internals.md): state integrity and prompt design
 - [Research summary](docs/research-summary.md): what VISP's own experiments have shown
 - [Contributing](CONTRIBUTING.md), [code of conduct](CODE_OF_CONDUCT.md), [security policy](SECURITY.md) and [changelog](CHANGELOG.md)
 
