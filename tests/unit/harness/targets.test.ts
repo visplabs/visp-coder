@@ -206,14 +206,14 @@ describe("the minimal profile", () => {
     // 525 -> 545: the loop ends at a complete or handoff step in the done/accept reply the
     // worker already has, not at one more `visp next` and `visp pr` (2–5 tail turns per lean
     // run in batch leandef2).
-    expect(guide.length / 4).toBeLessThanOrEqual(545);
+    // 545 -> 552: feature runs in the foreground unless visp.yml forces the full profile (a lean
+    // feature ended in 4–9 s; the background advice cost a `sleep 20` in 4 of 6 leandef2 runs).
+    expect(guide.length / 4).toBeLessThanOrEqual(552);
     expect(guide).toContain("Edit only what the request needs");
     expect(guide).toContain("run visp work unless --check did");
+    expect(guide).toContain("If visp.yml sets profile full or worker weak, background feature");
     expect(guide).toContain(
-      "Only feature may be backgrounded (leave it running on blocking hosts)",
-    );
-    expect(guide).toContain(
-      "done/verify/accept/next/pr in the foreground, alone, with the host's maximum shell timeout",
+      "feature/done/verify/accept/next/pr in the foreground, alone, with the host's maximum shell timeout",
     );
     expect(guide).toContain("scope.allowed");
     expect(guide).toContain("runnable");
@@ -281,6 +281,7 @@ describe("generated workflow routing", () => {
     expect(guide).toContain("Only when `visp next` prints a review command");
     expect(guide).toContain("Only when `visp next` prints a critic command");
     expect(guide).not.toContain("--source-only");
+    expect(guide).toContain("On the lean profile (the default) it returns in seconds");
     expect(guide).toContain(
       "on a blocking shell (Claude Code Bash) start it with run_in_background:true and read its output for the result",
     );

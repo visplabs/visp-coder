@@ -13,7 +13,7 @@ const COMPACT_RULES = `- Keep request with --source-brief; preserve outcomes, ex
 - Image-file result (render, chart, SVG): give its brief check \`images: [out.png]\` (a PNG or SVG it writes; keep the requested format too) and an experience outcome naming what the picture must show.
 - UI previews (aim line, predicted path): use the real action's function and start point; check with real input. Do not delete or shrink requested content to pass a check.
 - If visp done runs VISP's reviewer, run or delegate no review; visp next waits. Fix findings, rerun done. Run visp critic/review only when visp next prints it.
-- Run done/verify/accept/next/pr in the foreground, alone, with the host's maximum shell timeout: no run_in_background, loop or file redirect. done waits for VISP's reviewer and prints the result. Only feature may be backgrounded (leave it running on blocking hosts). When it prints, run visp work unless --check did; never rerun feature; after kill/error recover by id.
+- Run feature/done/verify/accept/next/pr in the foreground, alone, with the host's maximum shell timeout: no run_in_background, loop or file redirect. done waits for VISP's reviewer and prints the result. If visp.yml sets profile full or worker weak, background feature on blocking hosts. When feature prints, run visp work unless --check did; never rerun feature; after kill/error recover by id.
 - Sandbox denied? Rerun with escalation.
 - Missing product evidence stays unresolved. Report reviewer.context honestly. Do not force extra review rounds.
 - Before the final answer, reach next action complete or a handoff in a done/accept/next reply (report what it lists as open); respect execution refusals.`;
