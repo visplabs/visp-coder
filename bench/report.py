@@ -55,6 +55,7 @@ from chains import is_chain, run_summary
 from common import RUNS
 from diffscope import run_scope
 from judge import CHECKLISTS, GAMES
+from presets import arm_title, mode_config, mode_difference, scalar, visp_build
 from runfacts import final_project, invalid, is_finished, mark_if_invalid, sessions, timing, transcripts
 
 BENCH = pathlib.Path(__file__).resolve().parent
@@ -188,6 +189,23 @@ def facts(entry):
     }
 
 
+def arm_config_problems(entry, arm):
+    """Where a VISP run's recorded config disagrees with its arm's modes (runs set up before the
+    record existed have none and are not checked)."""
+    if "modeConfig" not in arm or not entry["arm"].startswith(("visp:", "visp-codex:")):
+        return []
+    wanted = mode_config(visp_build(entry["arm"])[1])
+    problems = []
+    if arm["modeConfig"] != wanted:
+        problems.append(f"{entry['name']}: arm.json modes set {arm['modeConfig']}, arm {entry['arm']} sets {wanted}")
+    effective = arm.get("effectiveSettings")
+    for key, value in wanted.items():
+        if effective is not None and scalar(effective.get(key)) != scalar(value):
+            problems.append(f"{entry['name']}: VISP reports {key} = {effective.get(key)!r}, arm {entry['arm']} "
+                            f"sets {value!r}")
+    return problems
+
+
 def check_presets(manifest, entries):
     """Refuse runs made with another preset, worker or judge than the batch's."""
     wrong = []
@@ -199,6 +217,7 @@ def check_presets(manifest, entries):
         arm = load(run / "arm.json") or {}
         if arm.get("preset") != manifest["preset"]:
             wrong.append(f"{entry['name']}: arm.json preset {arm.get('preset')!r}")
+        wrong += arm_config_problems(entry, arm)
         for label, path in sessions(run):
             result = load(path) or {}
             if result.get("preset") != manifest["preset"]:
@@ -212,7 +231,7 @@ def check_presets(manifest, entries):
                 wrong.append(f"{entry['name']}: {name} judge {judged.get('judge')!r}, preset {want!r}")
     if wrong:
         raise SystemExit(f"refusing to report batch {manifest['batch']}: runs are not all preset "
-                         f"{manifest['preset']}:\n" + "\n".join(wrong))
+                         f"{manifest['preset']}, or a VISP arm's config differs from its name:\n" + "\n".join(wrong))
 
 
 def score_missing(entries, jobs):
@@ -324,6 +343,27 @@ def compare(base, cand, base_label, cand_label):
     return {"status": "pass" if all(check[-1] for check in checks) else "fail", "reasons": [], "checks": checks}
 
 
+def arm_specs(manifest):
+    """{label: arm} of a batch, as batch.py wrote it."""
+    return {entry["label"]: entry["arm"] for entry in manifest["arms"]}
+
+
+def is_visp(spec):
+    return spec.startswith(("visp:", "visp-codex:"))
+
+
+def pair_note(base, cand):
+    """What sets two arms apart, for the heading of their comparison."""
+    if is_visp(base) and is_visp(cand) and visp_build(base)[0] == visp_build(cand)[0]:
+        diff = mode_difference(visp_build(base)[1], visp_build(cand)[1])
+        if not diff:
+            return "same build and same config keys"
+        keys = ", ".join(f"{key} {'unset' if before is None else before} -> {'unset' if after is None else after}"
+                         for key, (before, after) in diff.items())
+        return f"same build, config differs only in: {keys}"
+    return "different builds or workflows"
+
+
 def fmt(value, metric=None):
     if value is None:
         return "–"
@@ -347,12 +387,22 @@ def markdown(manifest, rows, groups, comparisons, excluded, unfinished, show_run
                    f"{s['reviewed']}/{s['unavailable']} | {s['pictures']} | {s['refusals']} | {s['timeouts']} | "
                    f"{fmt(s['cost'])} ({fmt(s['criticCost'])}) |")
     out.append("")
+    specs = arm_specs(manifest)
+    out += ["| Label | Arm | Config keys its modes set |", "| --- | --- | --- |"]
+    for label, spec in specs.items():
+        keys = ", ".join(f"{key}: {value}" for key, value in mode_config(visp_build(spec)[1]).items()) \
+            if is_visp(spec) else ""
+        out.append(f"| {label} | {arm_title(spec)} | {keys or '–'} |")
+    out.append("")
     out.append("Scores are means over valid runs (– where a run has no score yet); times are medians (wall: all "
                "sessions; idle, model, VISP and own from the worker transcript; legacy idle: gaps over 240 s). Cost is "
                "the mean list-price cost the claude CLI reported for every call the run made (claude_shim), with "
                "VISP's reviewer and tester calls in brackets; – where the run predates the shim.")
     for cand, result in comparisons.items():
-        out += ["", f"### {cand} against {result['base']}: {'PASS' if result['passed'] else 'FAIL'}", "",
+        base_spec, cand_spec = specs[result["base"]], specs[cand]
+        out += ["", f"### {arm_title(cand_spec)} against {arm_title(base_spec)}: "
+                    f"{'PASS' if result['passed'] else 'FAIL'}", "",
+                f"Arms {cand} and {result['base']}; {pair_note(base_spec, cand_spec)}.", "",
                 "| Task | Metric | Base | Candidate | Delta | Rule | Result |", "| --- | --- | --- | --- | --- | --- | --- |"]
         for task, verdict in result["tasks"].items():
             for reason in verdict["reasons"]:
@@ -641,7 +691,11 @@ def main():
     if args.md:
         args.md.write_text(text)
     fields = ("metric", "base", "candidate", "delta", "rule", "passed")
-    report = {"batch": args.batch, "preset": manifest["preset"], "settings": manifest["settings"], "runs": rows,
+    report = {"batch": args.batch, "preset": manifest["preset"], "settings": manifest["settings"],
+              "arms": [{"label": label, "arm": spec, "title": arm_title(spec),
+                        "modeConfig": mode_config(visp_build(spec)[1]) if is_visp(spec) else {}}
+                       for label, spec in arm_specs(manifest).items()],
+              "runs": rows,
               "groups": [{"task": task, "arm": arm, **summary} for (task, arm), summary in groups.items()],
               "comparisons": {cand: {**result, "tasks": {
                   task: {**verdict, "checks": [dict(zip(fields, check)) for check in verdict["checks"]]}

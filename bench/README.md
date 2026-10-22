@@ -62,6 +62,18 @@ Without `--preset` a run uses `default`, the configuration of the published numb
 
 The two `-low` presets repeat the pair with Haiku 5.5 at low effort, a weaker worker: at high effort, bare Haiku 5.5 passed every hidden check in 14 of 16 calibration runs, so hidden checks left VISP no room.
 
+### VISP modes
+
+`visp:<build>+<mode>[+<mode>...]` sets visp.yml keys on top of the preset. A mode (`VISP_MODES` in `presets.py`) maps dotted keys to values, so it can set any key, and modes combine:
+
+| Mode | Sets |
+| --- | --- |
+| `lean` | `workflow.draftFirst: visual`, `workflow.reviewCadence: feature`, `workflow.requestGaps: required` |
+| `gate` | `workflow.regressionGate: gate` |
+| `nocritic` | `critic.mode: off` (no reviewer, no tester; `src/config/critic.ts`) |
+
+`setup_arm.py` records in `arm.json` the modes, the keys they set (`modeConfig`) and the settings `visp doctor --settings` reports (`effectiveSettings`, null if that call fails). Arms of one batch share the preset and may differ in build and modes: `report.py` names a VISP arm `visp:<build>+<modes>`, lists the keys each arm's modes set, notes under each comparison which keys differ, and refuses a run whose recorded config disagrees with its arm (a `nocritic` run whose critic mode is not `off`). Runs made under another preset are still refused.
+
 ### Batches
 
 ```bash
