@@ -13,7 +13,9 @@ two-session task (session1.md) runs with run_carryover.py in fresh mode: the sec
 starts on the project the first left, notes kept. A chain task (steps/) runs with run_chain.py:
 each step is a fresh session on the project the previous step left. A scope task (scope-<scenario id>,
 scope_env.py) runs with run_scope.py, 1200 s; `--tasks 'scope-*'` (or any glob) expands to the scenarios it
-matches, and its arms are bare, bare-rule and visp:<build>. Timeouts per session: games
+matches, and its arms are bare, bare-rule and visp:<build>. Scope scenarios run only with `--split dev` or
+`--split heldout` (scope/split.json, scope_split.py); without the flag no scope scenario runs and the driver
+says so. Timeouts per session: games
 3600 s, every other task 2700 s (per step for a chain). A visp-codex arm runs with run_codex.py; every other arm with run_claude.py.
 
 Restartable: a finished run is skipped; a run left unfinished by an interrupted batch is moved
@@ -46,6 +48,7 @@ from chains import is_chain, step_files
 from common import RUNS, stop_recorded
 from judge import CHECKLISTS, GAMES
 from presets import preset, visp_build
+import scope_split
 from scope_env import is_scope_task, scope_tasks
 from runfacts import invalid, invalidity, is_finished, mark_if_invalid
 
@@ -98,8 +101,23 @@ def expand(spec):
     return tasks
 
 
+def select_split(tasks, split):
+    """(tasks to run, scope tasks left out): a scope scenario runs only on the chosen side of the split.
+
+    Without a split no scope scenario runs, so a held-out scenario is never run by accident.
+    """
+    allowed = set(scope_split.task_names(split)) if split else set()
+    left_out = [task for task in tasks if is_scope_task(task) and task not in allowed]
+    return [task for task in tasks if task not in left_out], left_out
+
+
 def plan(args):
-    tasks = expand(args.tasks)
+    tasks, left_out = select_split(expand(args.tasks), args.split)
+    if left_out and not args.split:
+        print(f"no --split given: running none of the {len(left_out)} scope scenarios. "
+              "Pass --split dev or --split heldout.")
+    elif left_out:
+        print(f"--split {args.split}: {len(left_out)} scope scenarios on the other side are not run.")
     arms = [label(spec) for spec in args.arms.split(",")]
     if len({name for name, _ in arms}) != len(arms):
         raise SystemExit("two arms share a label; name them as label=arm")
@@ -257,14 +275,21 @@ def main():
     parser.add_argument("--preset", default="default")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--rerun-invalid", action="store_true")
+    parser.add_argument("--split", choices=scope_split.SPLITS,
+                        help="run only the scope scenarios of this side of scope/split.json (default: none)")
     args = parser.parse_args()
     settings = preset(args.preset)
     tasks, arms, runs = plan(args)
+    if not runs:
+        print("nothing to run")
+        return
     directory = RUNS / "batches" / args.batch
     manifest_path = directory / "manifest.json"
     previous = json.loads(manifest_path.read_text()) if manifest_path.exists() else None
     if previous and previous["preset"] != args.preset:
         raise SystemExit(f"batch {args.batch} was started with preset {previous['preset']}, not {args.preset}")
+    if previous and any(is_scope_task(task) for task in tasks) and previous.get("split") != args.split:
+        raise SystemExit(f"batch {args.batch} was started with split {previous.get('split')}, not {args.split}")
     builds = {visp_build(arm)[0] for _, arm in arms if arm.startswith(("visp:", "visp-codex:"))}
     missing = sorted(build for build in builds if not (RUNS / "shims" / build).is_dir())
     if missing:
@@ -288,7 +313,7 @@ def main():
     try:
         known = {entry["name"] for entry in runs}
         kept = [entry for entry in (previous or {}).get("runs", []) if entry["name"] not in known]
-        manifest = {"batch": args.batch, "preset": args.preset, "settings": settings, "tasks": tasks,
+        manifest = {"batch": args.batch, "preset": args.preset, "settings": settings, "tasks": tasks, "split": args.split,
                     "arms": [{"label": name, "arm": arm} for name, arm in arms], "reps": args.reps,
                     "created": (previous or {}).get("created") or time.strftime("%Y-%m-%dT%H:%M:%S"),
                     "runs": runs + kept}

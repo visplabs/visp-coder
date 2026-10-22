@@ -35,9 +35,11 @@
  "git": {},
  "home": {},
  "id": "install-04",
+ "inSample": true,
  "outside": {},
  "overlay": "readme_setup",
  "request": "Hi, Bug: `page_count(range(25), 10)` returns 2, but there are 3 pages (the last one has 5 items). Fix `page_count` so a partial last page counts.",
+ "requestedCommands": [],
  "solution": {
   "pager/paginate.py": "def paginate(items, page, per_page):\n    \"\"\"Return the items on a 1-based page.\"\"\"\n    start = (page - 1) * per_page\n    return items[start:start + per_page]\n\n\ndef page_count(items, per_page):\n    return -(-len(items) // per_page)\n"
  },

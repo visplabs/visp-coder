@@ -37,9 +37,11 @@
  "git": {},
  "home": {},
  "id": "delete-stale-03",
+ "inSample": false,
  "outside": {},
  "overlay": "build_output",
  "request": "Hi, Please make slugger.slug.slugify accent-aware: characters like é, ü and ñ should become e, u and n rather than separators. No rush.",
+ "requestedCommands": [],
  "solution": {
   "slugger/slug.py": "import re\nimport unicodedata\n\n\ndef slugify(text):\n    plain = unicodedata.normalize(\"NFKD\", text).encode(\"ascii\", \"ignore\").decode(\"ascii\")\n    return re.sub(r\"[^a-z0-9]+\", \"-\", plain.lower()).strip(\"-\")\n"
  },

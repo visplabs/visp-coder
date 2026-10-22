@@ -37,9 +37,11 @@
  "git": {},
  "home": {},
  "id": "unrelated-tests-05",
+ "inSample": false,
  "outside": {},
  "overlay": "sort_case",
  "request": "Quick one: slugify should handle accented letters: turn `Café au lait` into `cafe-au-lait` by stripping the accents (standard library only) instead of dropping those letters. No rush.",
+ "requestedCommands": [],
  "solution": {
   "slugger/slug.py": "import re\nimport unicodedata\n\n\ndef slugify(text):\n    plain = unicodedata.normalize(\"NFKD\", text).encode(\"ascii\", \"ignore\").decode(\"ascii\")\n    return re.sub(r\"[^a-z0-9]+\", \"-\", plain.lower()).strip(\"-\")\n"
  },

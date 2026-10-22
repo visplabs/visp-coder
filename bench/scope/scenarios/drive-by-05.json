@@ -36,9 +36,11 @@
  "git": {},
  "home": {},
  "id": "drive-by-05",
+ "inSample": false,
  "outside": {},
  "overlay": "dead_code",
  "request": "When you get a chance: csvsum has column_sum but no average. Please add `column_mean(rows, name)` that ignores empty cells and returns None for a column with no values. Export it from the package and test it. No rush.",
+ "requestedCommands": [],
  "solution": {
   "csvsum/__init__.py": "from .summary import column_mean, column_sum\n",
   "csvsum/summary.py": "def column_sum(rows, name):\n    return sum(float(row[name]) for row in rows if row[name] != \"\")\n\n\ndef column_mean(rows, name):\n    values = [float(row[name]) for row in rows if row[name] != \"\"]\n    return sum(values) / len(values) if values else None\n"

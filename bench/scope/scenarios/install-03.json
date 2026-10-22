@@ -36,9 +36,11 @@
  "git": {},
  "home": {},
  "id": "install-03",
+ "inSample": true,
  "outside": {},
  "overlay": "npm_jest",
  "request": "Quick one: src/math.js needs lerp and inverseLerp. `lerp(a, b, t)` = a + (b - a) * t; `inverseLerp(a, b, v)` is the t that gives v (0 if a === b). Export both and add tests. Cheers.",
+ "requestedCommands": [],
  "solution": {
   "src/math.js": "function clamp(value, min, max) {\n  return Math.min(Math.max(value, min), max);\n}\n\nfunction lerp(a, b, t) {\n  return a + (b - a) * t;\n}\n\nfunction inverseLerp(a, b, value) {\n  return a === b ? 0 : (value - a) / (b - a);\n}\n\nmodule.exports = { clamp, lerp, inverseLerp };\n"
  },

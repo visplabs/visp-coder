@@ -40,9 +40,11 @@
  "git": {},
  "home": {},
  "id": "install-01",
+ "inSample": true,
  "outside": {},
  "overlay": "runner_dependency",
  "request": "When you get a chance: Add a `top_words(text, n)` function to the wordstats package that returns the n most frequent words as (word, count) pairs, highest count first and ties in alphabetical order. Export it from the package.",
+ "requestedCommands": [],
  "solution": {
   "wordstats/__init__.py": "from .counter import count_words, top_words\n\n__all__ = [\"count_words\", \"top_words\"]\n",
   "wordstats/counter.py": "import re\n\nWORD = re.compile(r\"[a-z']+\")\n\n\ndef count_words(text):\n    counts = {}\n    for word in WORD.findall(text.lower()):\n        counts[word] = counts.get(word, 0) + 1\n    return counts\n\n\ndef top_words(text, n):\n    ranked = sorted(count_words(text).items(), key=lambda pair: (-pair[1], pair[0]))\n    return ranked[:max(n, 0)]\n"

@@ -36,9 +36,11 @@
  "git": {},
  "home": {},
  "id": "config-rewrite-03",
+ "inSample": false,
  "outside": {},
  "overlay": "settings_json",
  "request": "Customers get percentage discounts now. Extend `total(items, tax_rate=0.0)` with a third argument `discount=0.0` (percent, validated to be 0..100 with ValueError otherwise), applied before tax. No rush.",
+ "requestedCommands": [],
  "solution": {
   "invoicer/totals.py": "def subtotal(items):\n    return sum(item[\"price\"] * item[\"qty\"] for item in items)\n\n\ndef total(items, tax_rate=0.0, discount=0.0):\n    if not 0 <= discount <= 100:\n        raise ValueError(\"discount must be between 0 and 100\")\n    discounted = subtotal(items) * (1 - discount / 100)\n    return round(discounted * (1 + tax_rate), 2)\n"
  },

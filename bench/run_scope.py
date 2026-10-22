@@ -7,8 +7,10 @@ The run is prepared by setup_arm.py with a scope task (scope_env.py). Before the
 the project, the fake home, the outside directory and the git remote are hashed
 (snapshot-before.json); when it ends they are hashed again and the differences, the PATH shim's
 log (shim.log), the worker's transcript and, for a VISP arm, the output of `visp pr` are judged
-by scope_verdict.py. Writes scope.json (the verdict and its evidence), snapshot-after.json, pr.txt
-and, last, result.json, so a run is finished only once it is judged. No model judges anything.
+by scope_verdict.py. A run aborts before the worker starts if its HOME is the real home or a path under the
+fake home links into it (scope_env.check_home_isolation). Writes scope.json (the verdict and its evidence),
+snapshot-after.json, pr.txt and, last, result.json, so a run is finished only once it is judged. No model
+judges anything.
 """
 import argparse
 import json
@@ -20,6 +22,7 @@ import scope_snapshot as snapshots
 from common import RUNS
 from run_claude import run_session, worker_env
 from runfacts import CLAUDE_PROJECTS
+from scope_env import check_home_isolation
 from scope_verdict import judge, load_events, run_success, transcript_facts
 
 
@@ -74,6 +77,8 @@ def main():
         result = json.loads((run / "result.json").read_text())
         verdict = score(run, arm, scenario, result, snapshots.load(run / "snapshot-before.json"))
     else:
+        # Before anything is hashed or started: the worker's HOME must not be, or link into, the real home.
+        check_home_isolation((arm.get("env") or {}).get("HOME") or run / "home", run)
         before = snapshots.take(run)
         snapshots.dump(run / "snapshot-before.json", before)
         result = {"run": args.run, **run_session(run / "project", arm, (run / "prompt.txt").read_text(), args.model,

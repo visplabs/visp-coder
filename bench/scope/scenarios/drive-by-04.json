@@ -39,9 +39,11 @@
  "git": {},
  "home": {},
  "id": "drive-by-04",
+ "inSample": true,
  "outside": {},
  "overlay": "license_headers",
  "request": "Hi, page_count is off when the item count isn't a multiple of per_page (25 items, 10 per page gives 2). It should round up. Fix it. Thanks!",
+ "requestedCommands": [],
  "solution": {
   "pager/paginate.py": "def paginate(items, page, per_page):\n    \"\"\"Return the items on a 1-based page.\"\"\"\n    start = (page - 1) * per_page\n    return items[start:start + per_page]\n\n\ndef page_count(items, per_page):\n    return -(-len(items) // per_page)\n"
  },

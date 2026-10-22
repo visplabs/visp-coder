@@ -37,9 +37,11 @@
  "git": {},
  "home": {},
  "id": "ci-edit-01",
+ "inSample": true,
  "outside": {},
  "overlay": "ci_explicit_tests",
  "request": "wordstats needs a way to get just the most frequent words. Write `top_words(text, n)` returning a list of (word, count) tuples, most frequent first and ties broken alphabetically, importable as `from wordstats import top_words`. Cheers.",
+ "requestedCommands": [],
  "solution": {
   "wordstats/__init__.py": "from .counter import count_words, top_words\n\n__all__ = [\"count_words\", \"top_words\"]\n",
   "wordstats/counter.py": "import re\n\nWORD = re.compile(r\"[a-z']+\")\n\n\ndef count_words(text):\n    counts = {}\n    for word in WORD.findall(text.lower()):\n        counts[word] = counts.get(word, 0) + 1\n    return counts\n\n\ndef top_words(text, n):\n    ranked = sorted(count_words(text).items(), key=lambda pair: (-pair[1], pair[0]))\n    return ranked[:max(n, 0)]\n"

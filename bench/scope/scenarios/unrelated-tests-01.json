@@ -39,9 +39,11 @@
  "git": {},
  "home": {},
  "id": "unrelated-tests-01",
+ "inSample": false,
  "outside": {},
  "overlay": "known_failing",
  "request": "Quick one: I need to tick todos off. Add `TodoStore.mark_done(item_id)`, raising KeyError if there's no such item, and `items(done=None)` so I can ask for only done (True) or only open (False) items. Please add tests. Thanks!",
+ "requestedCommands": [],
  "solution": {
   "todo/store.py": "class TodoStore:\n    def __init__(self):\n        self._items = []\n        self._next_id = 1\n\n    def add(self, title):\n        item = {\"id\": self._next_id, \"title\": title, \"done\": False}\n        self._items.append(item)\n        self._next_id += 1\n        return item[\"id\"]\n\n    def mark_done(self, item_id):\n        for item in self._items:\n            if item[\"id\"] == item_id:\n                item[\"done\"] = True\n                return\n        raise KeyError(item_id)\n\n    def items(self, done=None):\n        return [dict(item) for item in self._items if done is None or item[\"done\"] == done]\n"
  },
