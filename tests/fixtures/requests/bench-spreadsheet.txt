@@ -1,0 +1,18 @@
+This project uses VISP. Read CLAUDE.md and the VISP instructions it references before starting, and follow them. Run every command with `export PATH=/bench/shims/visp-leandef2:$PATH` first so `visp` is the project's build.
+
+Your project directory is /bench/run/project. Run every shell command from that directory (start each command with `cd /bench/run/project && `) and create or edit files only inside it. Do not read other directories. No dependency downloads or network APIs; the standard library is available. Do not ask questions: make reasonable assumptions and continue. Do not delegate to other agents. Build it, run your tests, and finish with a short report of what you actually verified.
+
+Task:
+
+This repository already contains a working spreadsheet engine; its contract is in README.md. Extend it without changing any existing behavior:
+
+1. Text literals and concatenation. A formula may contain a text literal in double quotes (`"a b"`; `""` inside a literal is one quote character). `&` concatenates: it has lower precedence than `+` and `-`, and is left-associative. Each operand becomes text: a number as `GET` would print it, an empty cell as `""`, text as itself, `TRUE`/`FALSE` as those words. An error operand gives that error (the first in left-to-right order). A formula whose value is text prints as that text; `=""` prints an empty line.
+2. Comparisons. `=`, `<>`, `<`, `>`, `<=`, `>=` have the lowest precedence of all operators and are not chained (`=1<2<3` is `#PARSE!`). Two numbers compare numerically; two texts compare exactly (case-sensitive, by character code). An empty cell is `0` against a number and `""` against text. Comparing a number with text is `#VALUE!`. The result is a boolean that prints as `TRUE` or `FALSE`. A boolean used with `+ - * / ^`, unary signs or inside `SUM`/`MIN`/`MAX` arguments is `#VALUE!`; booleans inside ranges are ignored by those functions.
+3. `IF(condition, then, else)`: exactly three arguments, otherwise `#PARSE!`. The condition must be a boolean or a number (non-zero is true); text is `#VALUE!` and an error condition gives that error. Only the chosen branch is evaluated, so an error in the other branch does not matter. Reference cycles are still found from every reference in the formula, including branches not taken.
+4. `COUNT(...)`: the number of numeric values. Inside ranges it counts numbers and ignores empty, text, boolean and error cells. A direct argument that is an error gives that error; a direct text or boolean argument is not counted.
+5. Absolute references: a `$` before the column letter and/or the row number (`$A$1`, `A$1`, `$A1`) refers to the same cell as `A1` and also works in ranges.
+6. `COPY <from> <to>`: copies the raw content of one cell to another (copying an empty cell clears the target). In a formula every reference part without `$` moves by the distance from `<from>` to `<to>` (columns and rows separately); parts with `$` stay. A reference moved outside `A1`–`Z99` becomes the text `#REF!` in the formula. Invalid cell names print `ERROR`.
+7. `FORMULA <cell>` prints the cell's raw content (an empty line for an empty cell). For content set with `SET` it prints what was set; for content produced by `COPY` it prints the moved formula, with every reference written as upper-case letters, keeping `$` signs, and all other text unchanged.
+8. Keep the existing tests passing and add tests for the new behavior. Update the README contract.
+
+Use only the Python standard library. Run with `./run.sh` as before.

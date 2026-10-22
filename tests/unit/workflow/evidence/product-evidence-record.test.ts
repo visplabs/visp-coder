@@ -1,4 +1,8 @@
 import { describe, expect, it } from "vitest";
+import {
+  accountEvidence,
+  accountGaps,
+} from "../../../../src/workflow/product/evidence-record/record-accounts.js";
 import { checkEvidence } from "../../../../src/workflow/product/evidence-record/record-checks.js";
 import { renderEvidenceRecord } from "../../../../src/workflow/product/evidence-record/record-markdown.js";
 import {
@@ -323,5 +327,63 @@ describe("regressionsFrom", () => {
   it("calls a report from an earlier version stale, with no verdicts", () => {
     const regressions = regressionsFrom({ mode: "advise", report }, "later");
     expect(regressions).toMatchObject({ status: "stale", regressions: [], unchecked: [] });
+  });
+});
+
+describe("the worker's account of the listed requirements", () => {
+  const listed = [
+    { id: "R001", statement: "Export value two." },
+    { id: "R002", statement: "Export label two." },
+    { id: "R003", statement: "Keep the module name." },
+  ];
+  const verbose = run({
+    output: "ok 1 - value_is_two\nok 2 - label_is_two\n1..2",
+  });
+  const accounts = [
+    { id: "R001", status: "done" as const, check: "C001", note: "value_is_two" },
+    { id: "R002", status: "done" as const, check: "C001", note: "label_is_two missing_test" },
+    { id: "R003", status: "not-done" as const, reason: "the name stays as it was" },
+  ];
+
+  it("marks a named test VISP cannot find in the check's output as not confirmed from the check output", () => {
+    const entries = accountEvidence(listed, accounts, [verbose]);
+    expect(entries.map((entry) => [entry.requirement, entry.account, entry.verification])).toEqual([
+      ["R001", "done", "verified"],
+      ["R002", "done", "claimed"],
+      ["R003", "not-done", undefined],
+    ]);
+    expect(entries[1]?.detail).toBe(
+      "not confirmed from the check output: missing_test: not in C001's output",
+    );
+  });
+
+  it("raises one gap for the claimed accounts, none when every name is confirmed", () => {
+    const entries = accountEvidence(listed, accounts, [verbose]);
+    expect(accountGaps(entries)).toEqual([
+      {
+        kind: "account",
+        severity: "attention",
+        text: "1 of 2 requirement accounts (R002) name tests that VISP could not confirm from the cited check's output. For example missing_test: not in C001's output",
+      },
+    ]);
+    const confirmed = accountEvidence(listed.slice(0, 1), accounts.slice(0, 1), [verbose]);
+    expect(accountGaps(confirmed)).toEqual([]);
+    expect(accountGaps(undefined)).toEqual([]);
+  });
+
+  it("prints each account with what VISP checked, after the evidence per requirement", () => {
+    const text = renderEvidenceRecord(
+      record({ accounts: accountEvidence(listed, accounts, [verbose]) }),
+    );
+    expect(text.indexOf("## Done")).toBeLessThan(
+      text.indexOf("## Worker's account of the listed requirements"),
+    );
+    const rows = text.split("\n").filter((line) => /^\| \*\*R00\d\*\*/.test(line));
+    expect(rows).toEqual([
+      "| **R001** Export value two. | C001 value_is_two | verified: the test passed in C001's latest run |",
+      "| **R002** Export label two. | C001 label_is_two missing_test | not confirmed from the check output: missing_test: not in C001's output |",
+      "| **R003** Keep the module name. | not done: the name stays as it was | — |",
+    ]);
+    expect(renderEvidenceRecord(record())).not.toContain("Worker's account");
   });
 });

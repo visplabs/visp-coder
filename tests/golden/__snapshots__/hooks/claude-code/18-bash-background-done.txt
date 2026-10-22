@@ -1,6 +1,6 @@
 > .visp/hooks/claude-pretooluse.mjs {"session_id":"golden-session","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"visp done 2>&1 | tail -40","run_in_background":true}}
 --- stdout
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Run `visp done` by itself in the foreground, not in a loop: repeat it without run_in_background and with timeout 600000. It prints its result and the next step; while a review runs, `visp next` waits for it. If the host moves the command to the background, wait for its completion notice, then run `visp next`; do not poll with pgrep, tail -f or sleep loops."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Run `visp done` again with the same arguments, by itself in the foreground: no run_in_background, no loop, no redirect to a file, timeout 600000. It waits for VISP's reviewer (1-2 min) and prints its result and the next step; while a review runs, `visp next` waits for it. If the host moves the command to the background anyway, wait for its completion notice, then run `visp next`; do not poll with pgrep, tail -f or sleep loops."}}
 --- stderr
 
 --- exit 0

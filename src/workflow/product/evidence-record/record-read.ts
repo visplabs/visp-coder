@@ -1,13 +1,16 @@
 import type { WorkspaceState } from "../../state.js";
+import { testSourcesFor } from "../account-verification.js";
 import type { ProductOutcomeStatus } from "../assessment.js";
 import { REVIEWER_ACTIVITY_FILE } from "../critic/critic-exec.js";
 import { readFeatureDiff } from "../feature-diff.js";
 import { unchangedInheritedPaths } from "../inherited-changes.js";
 import { readRegressionGate } from "../regression/regression-report.js";
+import { accountedRequirements, readRequirementAccounts } from "../requirements.js";
 import type { ProductNext } from "../status.js";
 import type { ProductRecord } from "../store.js";
 import { readTestsRecord } from "../tester/independent-tests-record.js";
 import { TESTER_ACTIVITY_FILE, testerNetworkCommands } from "../tester/tester-activity.js";
+import { accountEvidence } from "./record-accounts.js";
 import { buildEvidenceRecord } from "./record-build.js";
 import { evidenceChanges } from "./record-changes.js";
 import type { EvidenceRecord } from "./record-types.js";
@@ -31,11 +34,25 @@ export async function productEvidenceRecord(
     activityEntries(workspace, feature, TESTER_ACTIVITY_FILE),
     testerNetworkCommands(workspace, feature),
   ]);
+  const listed = accountedRequirements(record.brief.originalRequest);
+  const stored = listed.length
+    ? await readRequirementAccounts(workspace, feature, listed)
+    : undefined;
   return buildEvidenceRecord({
     record,
     subject,
     outcomes,
     next,
+    ...(stored?.ok
+      ? {
+          accounts: accountEvidence(
+            listed,
+            stored.value.accounts,
+            record.state.executions,
+            await testSourcesFor(workspace, stored.value.accounts),
+          ),
+        }
+      : {}),
     ...(tests.ok && tests.value ? { tests: tests.value } : {}),
     gate: {
       mode: workspace.config.workflow.regressionGate,

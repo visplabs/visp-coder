@@ -1,7 +1,9 @@
 import { sha256 } from "../../core/hash.js";
 import { productJourneyGaps } from "../evidence/product-journey.js";
 import type { ProductReviewCapture } from "../evidence/product-review.js";
+import { cliCommand } from "../next-action.js";
 import type { WorkspaceState } from "../state.js";
+import { testSourcesFor, verifyAccounts } from "./account-verification.js";
 import { captureRunEntries } from "./capture-run-model.js";
 import { isBrowserCheckCommand, productCheckSupportsBehavior } from "./check/check-command.js";
 import { currentCoverage, productReviewChallenges } from "./coverage.js";
@@ -264,8 +266,22 @@ async function requirementEvidenceGaps(
 ): Promise<string[]> {
   const accounted = await requirementAccounts(workspace, record, slice);
   return accounted
-    ? requirementGaps(accounted.listed, accounted.accounts, passedChecks(record))
+    ? requirementGaps(
+        accounted.listed,
+        accounted.accounts,
+        passedChecks(record),
+        accountCommand(record, slice),
+      )
     : [];
+}
+
+/** The `done` command of the slice that completes the feature, with a check it runs to cite. */
+function accountCommand(record: ProductRecord, slice: ProductSlice | undefined) {
+  const owner = slice ?? record.brief.slices.at(-1);
+  return {
+    done: cliCommand("done", { feature: record.brief.feature, task: owner?.id }),
+    check: owner?.checks[0] ?? "<check id>",
+  };
 }
 
 /** Where each listed requirement stands, for the reply of the call that closes the feature. */
@@ -275,7 +291,17 @@ export async function requirementStatus(
   slice: ProductSlice | undefined,
 ): Promise<string[]> {
   const accounted = await requirementAccounts(workspace, record, slice);
-  return accounted ? requirementSummary(accounted.listed, accounted.accounts) : [];
+  return accounted
+    ? requirementSummary(
+        accounted.listed,
+        accounted.accounts,
+        verifyAccounts(
+          accounted.accounts,
+          record.state.executions,
+          await testSourcesFor(workspace, accounted.accounts),
+        ),
+      )
+    : [];
 }
 
 function currentCheckExecutions(

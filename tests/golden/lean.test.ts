@@ -133,3 +133,31 @@ it("lists the request's requirements and closes once each is accounted for", asy
   ]);
   await run.cli("06-next", ["next"]);
 });
+
+it("starts the lean slice in the feature command, and marks tests the check does not show", async () => {
+  project = await GoldenProject.create(CLAUDE);
+  await models.plan({ reviews: ["satisfied"] });
+  const run = new Recorder(project, "lean/feature-check");
+  const request = [
+    "Change the public value module:",
+    "- `value` returns two instead of one.",
+    '- Add a `label` export that is "two".',
+  ].join("\n");
+  await run.cli("01-feature-check", [
+    "feature",
+    GOAL,
+    "--check",
+    "node checks/value.check.mjs",
+    "--source-brief",
+    request,
+  ]);
+  await project.setValue(2);
+  await run.cli("02-done-claimed", [
+    "done",
+    "--account",
+    "R001=C001 value_is_two",
+    "R002=not done: the label export is left for a later request",
+  ]);
+  await run.models("02-done-claimed", models);
+  await run.cli("03-pr", ["pr"]);
+});

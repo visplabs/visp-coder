@@ -1,0 +1,7 @@
+This project uses VISP. Read CLAUDE.md and the VISP instructions it references before starting, and follow them. Run every command with `export PATH=/bench/shims/visp-leandef:$PATH` first so `visp` is the project's build.
+
+Your project directory is /bench/run/project. Run every shell command from that directory (start each command with `cd /bench/run/project && `) and create or edit files only inside it. Do not read other directories. No dependency downloads or network APIs; the standard library is available. Do not ask questions: make reasonable assumptions and continue. Do not delegate to other agents. Build it, run your tests, and finish with a short report of what you actually verified.
+
+Task:
+
+Side-view pixel art of a red-and-white striped lighthouse on a rocky cliff at sunset, with three seagulls in the sky and waves breaking against the rocks below. 64×64 pixel canvas scaled up without smoothing, a limited palette of at most 16 colours, a dithered orange-to-purple sky, the lighthouse lamp glowing, chunky retro look, no anti-aliasing.

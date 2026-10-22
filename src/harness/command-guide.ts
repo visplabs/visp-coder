@@ -31,8 +31,8 @@ export const VISP_COMMANDS = [
   {
     command: "feature",
     when: "New request",
-    example: 'visp feature "<goal>" --source-brief -',
-    next: 'Pass the request with a quoted heredoc and the host\'s maximum timeout. It keeps running while VISP writes acceptance tests: on Codex keep its session open and poll it; on a blocking shell (Claude Code Bash) start it with run_in_background:true and read its output for the id; if the host can do neither, wait for it. Once it prints the feature id, run visp work --feature <id> --check "<test command>" for one slice. Never start feature again: a repeat can create a second feature. After a kill or error, run visp work --feature <id>; add --retry-tests only when work reports the acceptance tests failed or stopped. Use brief --template for several usable slices.',
+    example: 'visp feature "<goal>" --check "<test command>" --source-brief -',
+    next: 'Pass the request with a quoted heredoc and the host\'s maximum timeout. --check also works all of it as one slice (the visp work --check step). It keeps running while VISP writes acceptance tests: on Codex keep its session open and poll it; on a blocking shell (Claude Code Bash) start it with run_in_background:true and read its output for the result; if the host can do neither, wait for it. Once it prints, you have the slice (without --check, run visp work --feature <id> --check "<test command>" for one). Never start feature again: a repeat can create a second feature. After a kill or error, run visp work --feature <id>; add --retry-tests only when work reports the acceptance tests failed or stopped. Use brief --template for several usable slices.',
   },
   {
     command: "brief",
@@ -80,13 +80,19 @@ export const VISP_COMMANDS = [
     command: "done",
     when: "The slice is usable",
     example: "visp done --task <id>",
-    next: "Follow its returned action. It may run VISP's reviewer (about 1-2 min): wait, then `visp next`.",
+    next: 'Run it in the foreground, never with run_in_background or a redirect: it waits for VISP\'s reviewer (about 1-2 min) and prints the result, so there is nothing to poll. A feature that lists requirements takes one --account "R001=<check id> <test name>" per requirement (work prints the full command). Then follow its returned action and `visp next`.',
   },
   {
     command: "accept",
     when: "Next directs final acceptance",
     example: "visp accept --feature <id>",
     next: "Run the final product checks and report accepted status or remaining gaps.",
+  },
+  {
+    command: "pr",
+    when: "Only when `visp next` prints it",
+    example: "visp pr --feature <id>",
+    next: "Prints the evidence record and what is still open for the human reviewer. It reads recorded state; it changes and pushes nothing.",
   },
 ] as const;
 
@@ -122,11 +128,12 @@ ${commandMap(true, criticCommands)}
 For a literal request containing backticks, dollar signs or quotes, use a quoted heredoc:
 
 \`\`\`sh
-visp feature "<goal>" --source-brief - <<'REQUEST'
+visp feature "<goal>" --check "<test command>" --source-brief - <<'REQUEST'
 <verbatim request>
 REQUEST
-visp work --check "<test command>"
 \`\`\`
+
+\`--check\` makes \`feature\` also run \`visp work --check "<test command>"\`, so its reply holds the slice's context and the \`visp done\` to run next. Without it, run \`visp work --check "<test command>"\` after \`feature\`.
 
 A repeat \`visp work\` may pass \`--known <contextId>\` from an earlier reply still in view; that reply's unchanged excerpts are not repeated.
 

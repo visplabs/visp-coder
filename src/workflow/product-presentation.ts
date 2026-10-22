@@ -127,6 +127,8 @@ export function productResultFailed(value: unknown): boolean {
 
 export function productNextCommand(value: unknown): string | undefined {
   if (typeof value !== "object" || value === null) return undefined;
+  // `visp feature --check` replies with the feature and the work that started its slice.
+  if ("work" in value && value.work) return productNextCommand(value.work);
   if ("command" in value && typeof value.command === "string") return value.command;
   if ("nextCommand" in value && typeof value.nextCommand === "string") return value.nextCommand;
   if (

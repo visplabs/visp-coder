@@ -6,15 +6,19 @@ import {
 } from "../../../src/harness/instructions.js";
 
 it("keeps the verbatim request in full, minimal and shortcut feature guidance", () => {
-  expect(renderAgentGuide()).toContain('visp feature "<goal>" --source-brief -');
-  expect(renderMinimalGuide()).toContain('visp feature "<goal>" --source-brief -');
+  expect(renderAgentGuide()).toContain(
+    'visp feature "<goal>" --check "<test command>" --source-brief -',
+  );
+  expect(renderMinimalGuide()).toContain(
+    'visp feature "<goal>" --check "<test command>" --source-brief -',
+  );
   expect(SLASH_COMMANDS.find((command) => command.name === "visp-feature")?.body).toContain(
     "--source-brief",
   );
 });
 
-it("starts the minimal guide with a one-slice check and a shell-safe request", () => {
-  expect(renderMinimalGuide()).toContain('visp work --check "<test command>"');
+it("starts the minimal guide with a one-slice check in the feature command and a shell-safe request", () => {
+  expect(renderMinimalGuide()).toContain('--check "<test command>"');
   expect(renderMinimalGuide()).toContain("--source-brief -");
   expect(renderMinimalGuide()).toContain("<<'REQUEST'");
 });
@@ -36,10 +40,10 @@ it("routes review through visp next and starts work while feature writes tests",
     );
     expect(guide).toContain("Run visp critic/review only when visp next prints it.");
     expect(guide).toContain(
-      "Run feature/done/verify/accept/next with the host's maximum shell timeout.",
+      "Run done/verify/accept/next/pr in the foreground, alone, with the host's maximum shell timeout: no run_in_background, loop or file redirect.",
     );
     expect(guide).toContain(
-      "Leave feature running; background it on blocking hosts. At its id, run visp work; never rerun feature; after kill/error recover by id.",
+      "Only feature may be backgrounded (leave it running on blocking hosts). When it prints, run visp work unless --check did; never rerun feature; after kill/error recover by id.",
     );
     // "Poll" invited shell loops around visp status, which the hook now refuses.
     expect(guide).not.toContain("Poll; never duplicate");
@@ -48,7 +52,7 @@ it("routes review through visp next and starts work while feature writes tests",
     expect(guide).not.toContain("delegate nothing");
   }
   expect(renderAgentGuide()).toContain(
-    "Wait on done/verify/accept handles until they return; completed checks are saved for retry after interruption.",
+    "Wait on done/verify/accept until they return, in the foreground; completed checks are saved for retry after interruption.",
   );
   expect(renderAgentGuide()).toContain(
     "Use at least 10 minutes for feature/done/verify/accept/next",

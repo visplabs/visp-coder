@@ -1,7 +1,7 @@
 $ visp feature 'Return two from the public value module'
 --- stdout
 feature: {"feature":"001-return-two-from-the-public","incomplete":false,"outcomes":[],"examples":[],"checks":[],"slices":[],"profile":{"name":"lean"}}
-Note: The request states 2 requirements (R001–R002), parallel branches listed separately. Deliver every one. The visp done that completes the feature asks for an account of each: --account R001=<passing check id> [test name], or --account "R001=not done: <reason>".
+Note: The request states 2 requirements (R001–R002), parallel branches listed separately. Deliver every one. The visp done that completes the feature asks for an account of each, all in that one command: --account "R001=<passing check id> <test name>" "R002=…", or "R001=not done: <reason>". Name the tests exactly as the check prints them; VISP looks them up in its output. visp work prints the full command.
 Requirements:
 - R001: From now on, never log request bodies.
 - R002: Make the public value module return two instead of one.
