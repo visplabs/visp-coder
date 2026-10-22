@@ -113,6 +113,16 @@ export function commandMap(includeNext = true, includeCritic = includeNext) {
 }
 
 /**
+ * Where install writes the command guide. At the project root it was in every worker's first
+ * `ls`, and every lean worker of batch leandef2 read its 3.2k tokens before starting (6 of 6);
+ * on the larger task that text then rode every turn above the 100k-token price tier. The
+ * resident guides name it for recovery only.
+ */
+export const COMMAND_GUIDE_PATH = ".visp/VISP.commands.md";
+/** Where an earlier build wrote the command guide; install removes an unedited copy. */
+export const RETIRED_COMMAND_GUIDE_PATH = "VISP.commands.md";
+
+/**
  * The installed guide must not depend on critic settings: readiness compares installed
  * assets with the plan, so a later `visp critic --on` would make it look uninstalled. It
  * leaves out the long reviewer prose, which work/next deliver when it applies, and keeps

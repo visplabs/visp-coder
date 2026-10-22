@@ -121,21 +121,23 @@ describe("the minimal profile", () => {
   it("omits the critic agent and reviewer prose when the critic is disabled", () => {
     const plan = planFor("codex", "minimal", null);
     expect(plan.assets.map((asset) => asset.path)).not.toContain(".codex/agents/visp-critic.toml");
-    const guide = plan.assets.find((asset) => asset.path === "VISP.commands.md")?.content ?? "";
+    const guide =
+      plan.assets.find((asset) => asset.path === ".visp/VISP.commands.md")?.content ?? "";
     expect(guide).not.toContain("## Reviewer execution");
   });
 
   it("installs the same command guide whatever the critic setting", () => {
     const guide = (critic: Parameters<typeof planFor>[2]) =>
-      planFor("codex", "minimal", critic).assets.find((asset) => asset.path === "VISP.commands.md")
-        ?.content;
+      planFor("codex", "minimal", critic).assets.find(
+        (asset) => asset.path === ".visp/VISP.commands.md",
+      )?.content;
     expect(guide(null)).toBe(guide(undefined));
     expect(guide(null)).toContain("| `visp critic feedback");
   });
   it("installs only one short guide for a generic harness", () => {
     for (const harness of HARNESSES.filter((name) => name === "generic")) {
       const paths = planFor(harness, "minimal").assets.map((asset) => asset.path);
-      expect(paths, harness).toEqual(["AGENTS.visp.md", "VISP.commands.md"]);
+      expect(paths, harness).toEqual(["AGENTS.visp.md", ".visp/VISP.commands.md"]);
     }
   });
 
@@ -145,7 +147,7 @@ describe("the minimal profile", () => {
       expect(plan.assets.map((asset) => asset.path)).toEqual([
         "AGENTS.visp.md",
         ".agents/skills/visp/SKILL.md",
-        "VISP.commands.md",
+        ".visp/VISP.commands.md",
         ...(harness === "codex"
           ? [".codex/agents/visp-critic.toml", ".visp/hooks/codex-hooks.mjs", ".codex/hooks.json"]
           : []),
@@ -161,13 +163,13 @@ describe("the minimal profile", () => {
     expect(planFor("copilot", "minimal").assets.map((asset) => asset.path)).toEqual([
       "AGENTS.visp.md",
       ".github/instructions/visp.instructions.md",
-      "VISP.commands.md",
+      ".visp/VISP.commands.md",
       ".github/agents/visp-critic.agent.md",
     ]);
     expect(planFor("cursor", "minimal").assets.map((asset) => asset.path)).toEqual([
       "AGENTS.visp.md",
       ".cursor/rules/visp.mdc",
-      "VISP.commands.md",
+      ".visp/VISP.commands.md",
       ".cursor/agents/visp-critic.md",
     ]);
   });
@@ -177,7 +179,7 @@ describe("the minimal profile", () => {
     expect(paths).toEqual([
       "AGENTS.visp.md",
       ".claude/commands/visp-next.md",
-      "VISP.commands.md",
+      ".visp/VISP.commands.md",
       ".claude/agents/visp-critic.md",
     ]);
   });
@@ -208,7 +210,9 @@ describe("the minimal profile", () => {
     // run in batch leandef2).
     // 545 -> 552: feature runs in the foreground unless visp.yml forces the full profile (a lean
     // feature ended in 4–9 s; the background advice cost a `sleep 20` in 4 of 6 leandef2 runs).
-    expect(guide.length / 4).toBeLessThanOrEqual(552);
+    // 552 -> 560: the command guide's new path, named for recovery only (6 of 6 leandef2 lean
+    // workers read its 3.2k tokens before starting when the guide said "see VISP.commands.md").
+    expect(guide.length / 4).toBeLessThanOrEqual(560);
     expect(guide).toContain("Edit only what the request needs");
     expect(guide).toContain("run visp work unless --check did");
     expect(guide).toContain("If visp.yml sets profile full or worker weak, background feature");
@@ -295,7 +299,7 @@ describe("generated workflow routing", () => {
 
   it("keeps dispatch details on demand rather than repeating them in the resident guide", () => {
     const guide = planFor("generic", "standard").assets[0]?.content ?? "";
-    expect(guide).toContain("VISP.commands.md");
+    expect(guide).toContain(".visp/VISP.commands.md");
     expect(guide).not.toContain("An attached adapter");
     expect(commandGuide()).toContain("model/effort");
     expect(commandGuide()).toContain("attached adapter");

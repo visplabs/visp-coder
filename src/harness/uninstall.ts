@@ -24,6 +24,7 @@ import {
   CLAUDE_SETTINGS_FILE,
   planClaudeSettingsRemoval,
 } from "./claude-settings.js";
+import { commandGuide, RETIRED_COMMAND_GUIDE_PATH } from "./command-guide.js";
 import { preCommitHookPath } from "./git-hook.js";
 import {
   HOOK_MARKER,
@@ -221,6 +222,11 @@ function generatedAssets(harness: Harness): Asset[] {
     render: renderPreToolUseHook,
   });
   assets.set(CI_WORKFLOW, { path: CI_WORKFLOW, content: renderCiWorkflow(pinnedRange()) });
+  // An install from an earlier build may still have the command guide at the project root.
+  assets.set(RETIRED_COMMAND_GUIDE_PATH, {
+    path: RETIRED_COMMAND_GUIDE_PATH,
+    content: commandGuide(false, true),
+  });
   return [...assets.values()];
 }
 

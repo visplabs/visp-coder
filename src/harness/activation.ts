@@ -3,7 +3,7 @@ import { vispError } from "../core/errors.js";
 import { sha256 } from "../core/hash.js";
 import { err, ok, type Result } from "../core/result.js";
 import { lineEndingsNormalized } from "./asset-inspection.js";
-import { commandMap } from "./command-guide.js";
+import { COMMAND_GUIDE_PATH, commandMap } from "./command-guide.js";
 import { TOOL_ACCESS_GUIDANCE } from "./instructions.js";
 
 const AGENT_ACTIVATION_FILE = "AGENTS.md";
@@ -24,7 +24,7 @@ Follow the VISP project instructions in [AGENTS.visp.md](AGENTS.visp.md). The pa
 
 ${commandMap(false)}
 
-Research relevant uncertainties with host tools; apply conclusions in the brief. Read [VISP.commands.md](VISP.commands.md) for input examples, critic dispatch and recovery. No custom skill is needed. Reviewer configuration is not proof of invocation or quality.
+Research relevant uncertainties with host tools; apply conclusions in the brief. Input examples, critic dispatch and recovery, only when a command fails or points there: [${COMMAND_GUIDE_PATH}](${COMMAND_GUIDE_PATH}). No custom skill is needed. Reviewer configuration is not proof of invocation or quality.
 ${ACTIVATION_END}`;
 
 export function agentActivationFile(harness: Harness) {

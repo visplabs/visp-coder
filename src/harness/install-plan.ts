@@ -39,6 +39,7 @@ import {
   planPreToolUseUnregistration,
 } from "./claude-settings.js";
 import { codexRegistrationAdvice, codexRegistrationProblem } from "./codex-mcp-registration.js";
+import { COMMAND_GUIDE_PATH, RETIRED_COMMAND_GUIDE_PATH } from "./command-guide.js";
 import { preCommitHookPath } from "./git-hook.js";
 import {
   HOOK_MARKER,
@@ -975,20 +976,28 @@ async function planOtherProfilePrune(
   const other = PROFILES.find((candidate) => candidate !== profile);
   if (!other) return ok(undefined);
   const keep = new Set(planFor(harness, profile).assets.map((asset) => asset.path));
-  const stale = planFor(harness, other).assets.filter((asset) => !keep.has(asset.path));
-  for (const asset of stale) {
-    const current = await fs.readTextIfExists(asset.path);
+  const stale = planFor(harness, other)
+    .assets.map((asset) => asset.path)
+    .filter((path) => !keep.has(path));
+  // The guide's old path is pruned only when an earlier install recorded it there.
+  const retired = manifest[RETIRED_COMMAND_GUIDE_PATH] ? [RETIRED_COMMAND_GUIDE_PATH] : [];
+  for (const path of [...stale, ...retired]) {
+    const current = await fs.readTextIfExists(path);
     if (!current.ok) return current;
     if (current.value === undefined) continue;
-    if (manifest[asset.path] === assetFingerprint(current.value)) {
-      planRemoval(asset.path, plan, current.value);
+    if (manifest[path] === assetFingerprint(current.value)) {
+      planRemoval(path, plan, current.value);
     } else {
-      plan.manualSteps.push(
-        `${asset.path} belongs to the ${other} profile but has been edited; remove it yourself if it is no longer wanted.`,
-      );
+      plan.manualSteps.push(staleAssetStep(path, other));
     }
   }
   return ok(undefined);
+}
+
+function staleAssetStep(path: string, other: Profile): string {
+  return path === RETIRED_COMMAND_GUIDE_PATH
+    ? `${path} is an edited copy of the command guide, which now lives at ${COMMAND_GUIDE_PATH}; remove it yourself if it is no longer wanted.`
+    : `${path} belongs to the ${other} profile but has been edited; remove it yourself if it is no longer wanted.`;
 }
 
 function planRemoval(path: string, plan: InstallPlan, current: string | undefined): void {

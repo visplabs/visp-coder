@@ -1,6 +1,6 @@
 import { PRODUCT_NAME } from "../core/constants.js";
 import { SOURCE_DELIVERY_GUIDANCE } from "../workflow/delivery-guidance.js";
-import { commandMap } from "./command-guide.js";
+import { COMMAND_GUIDE_PATH, commandMap } from "./command-guide.js";
 
 /**
  * A new request starts with `feature`. Sending every worker to `next` first cost a turn that
@@ -63,8 +63,8 @@ ${RULES_FOR_AGENTS}
 
 The authored working brief is \`.visp/features/<id>/brief.yaml\`. Use brief to update it.
 VISP generates other workflow records and reviewer summaries. Historical artifacts remain readable.
-Command examples, dispatch and recovery: VISP.commands.md.
-Read \`visp.yml\` for project settings; obtain authorization before changing project policy.
+Command examples, dispatch and recovery, when you need them: ${COMMAND_GUIDE_PATH}.
+\`visp.yml\` holds project policy; obtain authorization before changing it.
 `;
 }
 
@@ -73,7 +73,7 @@ export function renderPointerGuide(fullGuide: string): string {
 
 ${commandMap(false)}
 
-Command examples and recovery: VISP.commands.md. Full guide: ${fullGuide}
+Command examples and recovery: ${COMMAND_GUIDE_PATH}. Full guide: ${fullGuide}
 `;
 }
 
@@ -85,7 +85,7 @@ Loop: \`visp work\` → implement → \`visp done\` → its next step. Run \`vis
 
 ${COMPACT_RULES}
 
-VISP generates records; see VISP.commands.md.
+VISP generates records. Only if a command fails: ${COMMAND_GUIDE_PATH}.
 `;
 }
 
