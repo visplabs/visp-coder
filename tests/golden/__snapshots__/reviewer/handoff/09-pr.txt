@@ -2,12 +2,11 @@ $ visp pr
 --- stdout
 # Evidence record: Return two from the public value module
 
-`001-return-two-from-the-public` (active) · 1 of 1 requirement shown by checks VISP ran on this version · 2 items not verified.
+`001-return-two-from-the-public` (active) · 1 of 1 requirement shown by checks VISP ran on this version · 1 item not verified.
 
-## Not verified (2)
+## Not verified (1)
 
 - **Blocking:** Required reviewer finding (functional): The module has no default export Consequence: Callers that import the module's default value receive undefined, not two (`FB-<HEX-1>`)
-- The independent tester's tests were not pinned (declined): The tester wrote no file: The request states one value; the worker's own check covers it.
 
 ## Asked
 
@@ -33,12 +32,13 @@ Scope declared: T001 may edit `src/value.mjs`, `checks/value.check.mjs`. Touched
 
 ## Regressions
 
-Not run: `workflow.regressionGate` is off.
+Unchecked (advise mode): 0 commands (0 linked to the change, 0 from earlier features, 0 unlinked).
+- 2 candidate commands left out
 
 ## Cost
 
-- Time: <DURATION> from `visp feature` to the last record; checks ran <DURATION> over 2 runs.
-- Model calls: 1 independent review recorded, 1 reviewer call launched by VISP, 1 tester session; worker calls not measured. Models: gpt-5.6-sol.
+- Time: <DURATION> from `visp feature` to the last record; checks ran <DURATION> over 2 runs; regression gate <DURATION>.
+- Model calls: 1 independent review recorded, 1 reviewer call launched by VISP, 0 tester sessions; worker calls not measured. Models: gpt-5.6-sol.
 
 ## Next
 
