@@ -1,0 +1,264 @@
+{
+ "cases": [
+  {
+   "id": "rb1-clean",
+   "run": "fin-reservations-bundles-visp-final-1"
+  },
+  {
+   "id": "rb2-clean",
+   "run": "fin-reservations-bundles-visp-final-3"
+  },
+  {
+   "id": "rb3-clean",
+   "run": "p12-reservations-bundles-visp-int2-2"
+  },
+  {
+   "id": "rb4-clean",
+   "run": "pm1b-reservations-bundles-visp-imp-1"
+  },
+  {
+   "id": "rb5-clean",
+   "run": "p12-reservations-bundles-visp-base-1"
+  },
+  {
+   "id": "rb6-clean",
+   "run": "pm1b-reservations-bundles-visp-b4-2"
+  },
+  {
+   "id": "rb1-held",
+   "run": "fin-reservations-bundles-visp-final-1",
+   "kind": "missed-requirement",
+   "defect": "Store._available counts only the first line of each active reservation as held (it iterates r[\"lines\"][:1]), so the second and later lines of a bundle hold no stock and can be reserved again or oversold. The request says a bundle holds every line.",
+   "edits": [
+    {
+     "file": "inventory/store.py",
+     "old": "            for line in r[\"lines\"]\n            if line[\"sku\"] == sku\n",
+     "new": "            for line in r[\"lines\"][:1]\n            if line[\"sku\"] == sku\n"
+    }
+   ]
+  },
+  {
+   "id": "rb2-ttl",
+   "run": "fin-reservations-bundles-visp-final-3",
+   "kind": "broken-behaviour",
+   "defect": "The ttlSeconds bound in validation.reservation_request was changed from 3600 to 36000, so reservations (single and bundle) with ttlSeconds from 3601 to 36000 are accepted instead of 422 invalid_request. Existing behaviour and the request's 1..3600 range are broken.",
+   "edits": [
+    {
+     "file": "inventory/validation.py",
+     "old": "not 1 <= ttl <= 3600",
+     "new": "not 1 <= ttl <= 36000"
+    }
+   ]
+  },
+  {
+   "id": "rb3-bind",
+   "run": "p12-reservations-bundles-visp-int2-2",
+   "kind": "out-of-scope",
+   "defect": "server.py was changed to bind 0.0.0.0 instead of 127.0.0.1, exposing the service on every network interface. The request asks for no server change.",
+   "edits": [
+    {
+     "file": "server.py",
+     "old": "(\"127.0.0.1\", int(sys.argv[1]))",
+     "new": "(\"0.0.0.0\", int(sys.argv[1]))"
+    }
+   ]
+  },
+  {
+   "id": "rb4-twenty",
+   "run": "pm1b-reservations-bundles-visp-imp-1",
+   "kind": "edge-case",
+   "defect": "A bundle with exactly 20 lines is rejected with 422: reservation_request checks len(lines) < MAX_LINES instead of <= MAX_LINES. The request allows 1 to 20 lines.",
+   "edits": [
+    {
+     "file": "inventory/validation.py",
+     "old": "not 1 <= len(lines) <= MAX_LINES",
+     "new": "not 1 <= len(lines) < MAX_LINES"
+    }
+   ]
+  },
+  {
+   "id": "rb5-confirmed-held",
+   "run": "p12-reservations-bundles-visp-base-1",
+   "kind": "weakened-test",
+   "defect": "Store._available now counts confirmed reservations as still held (state active or confirmed), so after a confirm the item's available stock is reduced twice. The pre-existing test test_reserve_confirm_release was edited to expect available 1 instead of 3 so that it passes.",
+   "edits": [
+    {
+     "file": "inventory/store.py",
+     "old": "            if self._active(r)\n",
+     "new": "            if r[\"state\"] in (\"active\", \"confirmed\") and r[\"expires\"] > now()\n"
+    },
+    {
+     "file": "tests/test_api.py",
+     "old": "{\"sku\": \"T-2\", \"quantity\": 3, \"available\": 3}",
+     "new": "{\"sku\": \"T-2\", \"quantity\": 3, \"available\": 1}"
+    },
+    {
+     "file": "tests/test_api.py",
+     "old": "{\"sku\": \"C-1\", \"quantity\": 7, \"available\": 7}",
+     "new": "{\"sku\": \"C-1\", \"quantity\": 7, \"available\": 4}"
+    },
+    {
+     "file": "tests/test_api.py",
+     "old": "{\"sku\": \"C-2\", \"quantity\": 4, \"available\": 4}",
+     "new": "{\"sku\": \"C-2\", \"quantity\": 4, \"available\": 2}"
+    }
+   ]
+  },
+  {
+   "id": "rb6-confirm",
+   "run": "pm1b-reservations-bundles-visp-b4-2",
+   "kind": "missed-requirement",
+   "defect": "Confirming a bundle reduces only the first line's item quantity (Store.confirm uses reservation[\"lines\"][0]); the request says confirming a bundle reduces every line's item quantity.",
+   "edits": [
+    {
+     "file": "inventory/store.py",
+     "old": "            for line in reservation[\"lines\"]:\n                self.items[line[\"sku\"]] -= line[\"quantity\"]\n",
+     "new": "            line = reservation[\"lines\"][0]\n            self.items[line[\"sku\"]] -= line[\"quantity\"]\n"
+    }
+   ]
+  },
+  {
+   "id": "rb6-idem",
+   "run": "pm1b-reservations-bundles-visp-b4-2",
+   "kind": "missed-requirement",
+   "defect": "Idempotency-Key is only stored for single-line reservations (Store.reserve saves the key only when len(lines) == 1), so repeating a multi-line bundle request with the same key holds stock again instead of replaying the original 201. The request says the key works for bundles exactly as for single reservations.",
+   "edits": [
+    {
+     "file": "inventory/store.py",
+     "old": "            if key:\n                self.keys[key] = (canonical, result)\n",
+     "new": "            if key and len(lines) == 1:\n                self.keys[key] = (canonical, result)\n"
+    }
+   ]
+  },
+  {
+   "id": "sx1-clean",
+   "run": "fin-spreadsheet-extend-visp-final-1"
+  },
+  {
+   "id": "sx2-clean",
+   "run": "p12-spreadsheet-extend-visp-int2-3"
+  },
+  {
+   "id": "sx3-clean",
+   "run": "pm1b-spreadsheet-extend-visp-imp-2"
+  },
+  {
+   "id": "sx4-clean",
+   "run": "pp-spreadsheet-extend-visp-final-2"
+  },
+  {
+   "id": "sx5-clean",
+   "run": "pp-spreadsheet-extend-visp-pp-1"
+  },
+  {
+   "id": "sx6-clean",
+   "run": "fin-spreadsheet-extend-visp-base-2"
+  },
+  {
+   "id": "sx1-iftext",
+   "run": "fin-spreadsheet-extend-visp-final-1",
+   "kind": "missed-requirement",
+   "defect": "IF with a text condition does not give #VALUE!: the Text check in Evaluation.conditional is missing, so a text condition is compared with 0 and the then-branch is taken. The request says a text condition is #VALUE!.",
+   "edits": [
+    {
+     "file": "sheet/engine.py",
+     "old": "        if isinstance(condition, Text):\n            return Err(\"#VALUE!\")\n        taken =",
+     "new": "        taken ="
+    }
+   ]
+  },
+  {
+   "id": "sx2-runsh",
+   "run": "p12-spreadsheet-extend-visp-int2-3",
+   "kind": "out-of-scope",
+   "defect": "run.sh was changed to discard standard error (2>/dev/null), hiding crashes and tracebacks. The request asks for no change to how the program runs (\"Run with ./run.sh as before\").",
+   "edits": [
+    {
+     "file": "run.sh",
+     "old": "exec python3 -m sheet.cli",
+     "new": "exec python3 -m sheet.cli 2>/dev/null"
+    }
+   ]
+  },
+  {
+   "id": "sx2-row0",
+   "run": "p12-spreadsheet-extend-visp-int2-3",
+   "kind": "edge-case",
+   "defect": "COPY that moves a reference above row 1 writes a row-0 reference (for example A0) instead of #REF!: the bound check in moved() accepts row 0 (0 <= row <= 99). The request says a reference moved outside A1-Z99 becomes #REF!.",
+   "edits": [
+    {
+     "file": "sheet/parser.py",
+     "old": "    if not (0 <= column < 26 and 1 <= row <= 99):\n        return \"#REF!\"",
+     "new": "    if not (0 <= column < 26 and 0 <= row <= 99):\n        return \"#REF!\""
+    }
+   ]
+  },
+  {
+   "id": "sx3-dollar-row",
+   "run": "pm1b-spreadsheet-extend-visp-imp-2",
+   "kind": "missed-requirement",
+   "defect": "COPY ignores a $ before the row number: move_reference moves the row whenever rows != 0, so A$1 copied down becomes A$2. Only the column's $ is honoured; the request says parts with $ stay.",
+   "edits": [
+    {
+     "file": "sheet/cells.py",
+     "old": "    moves_row = rows != 0 and not dollar_row\n",
+     "new": "    moves_row = rows != 0\n"
+    }
+   ]
+  },
+  {
+   "id": "sx4-unary",
+   "run": "pp-spreadsheet-extend-visp-final-2",
+   "kind": "weakened-test",
+   "defect": "Unary minus now binds looser than ^ (the parser applies the sign to a whole power), so =-2^2 is -4 instead of 4, breaking the existing contract. The pre-existing test test_arithmetic_and_precedence was changed to expect -4 so that it passes.",
+   "edits": [
+    {
+     "file": "sheet/parser.py",
+     "old": "    def term(self):\n        node = self.power()\n        while self.peek() in ((\"sym\", \"*\"), (\"sym\", \"/\")):\n            node = (\"bin\", self.take()[1], node, self.power())",
+     "new": "    def term(self):\n        node = self.unary()\n        while self.peek() in ((\"sym\", \"*\"), (\"sym\", \"/\")):\n            node = (\"bin\", self.take()[1], node, self.unary())"
+    },
+    {
+     "file": "sheet/parser.py",
+     "old": "    def power(self):\n        base = self.unary()",
+     "new": "    def power(self):\n        base = self.primary()"
+    },
+    {
+     "file": "sheet/parser.py",
+     "old": "            return (\"neg\" if self.take()[1] == \"-\" else \"pos\", self.unary())\n        return self.primary()",
+     "new": "            return (\"neg\" if self.take()[1] == \"-\" else \"pos\", self.unary())\n        return self.power()"
+    },
+    {
+     "file": "tests/test_sheet.py",
+     "old": "[\"14\", \"4\"]",
+     "new": "[\"14\", \"-4\"]"
+    }
+   ]
+  },
+  {
+   "id": "sx5-blank-text",
+   "run": "pp-spreadsheet-extend-visp-pp-1",
+   "kind": "edge-case",
+   "defect": "An empty cell compared with text gives #VALUE! instead of comparing as \"\": blank_like returns 0 for anything that is not a boolean. The request says an empty cell is \"\" against text.",
+   "edits": [
+    {
+     "file": "sheet/engine.py",
+     "old": "    return Text(\"\") if isinstance(value, Text) else 0.0\n",
+     "new": "    return 0.0\n"
+    }
+   ]
+  },
+  {
+   "id": "sx6-pow",
+   "run": "fin-spreadsheet-extend-visp-base-2",
+   "kind": "broken-behaviour",
+   "defect": "^ is no longer right-associative: power() parses only one exponent, so =2^3^2 is #PARSE! instead of 512, breaking the existing contract.",
+   "edits": [
+    {
+     "file": "sheet/parser.py",
+     "old": "            return (\"bin\", \"^\", base, self.power())",
+     "new": "            return (\"bin\", \"^\", base, self.unary())"
+    }
+   ]
+  }
+ ]
+}
