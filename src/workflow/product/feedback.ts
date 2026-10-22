@@ -130,7 +130,6 @@ export function productFeedbackPlan(
   record: ProductRecord,
   subject: string,
   slice?: ProductSlice,
-  reviewMode: "current" | "observation-preview" = "current",
   options: { readonly reviewer?: ReviewerPointer; readonly requiredOnly?: boolean } = {},
 ) {
   // Lean mode's requestGaps: advisory findings are notes, never a next correction.
@@ -157,7 +156,7 @@ export function productFeedbackPlan(
     ),
     probeResponses: [...responses.values()].map(({ kind, status }) => ({ kind, status })),
     checkSetup: productCheckGuidance(record.brief, slice),
-    visualCheckpoint: visualCheckpoint(record, subject, slice, reviewMode, options.reviewer),
+    visualCheckpoint: visualCheckpoint(record, subject, slice, options.reviewer),
     focus: feedbackFocus(findings.some((entry) => entry.required) || !!failure, gaps.length > 0),
     research: researchQuestion
       ? {

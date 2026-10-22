@@ -20,7 +20,6 @@ import {
   runProductWork,
   updateProductBrief,
 } from "../../../../src/workflow/product/index.js";
-import { OBSERVATION_REVIEW_INSTRUCTIONS } from "../../../../src/workflow/product/observation-preview.js";
 import {
   independentJudgments,
   independentReviewJsonSchema,
@@ -70,11 +69,7 @@ const capabilities = {
   readOnly: true,
   delegationAllowed: true,
 } as const;
-async function prepared(
-  reviewMode: "current" | "observation-preview" = "current",
-  verifier = false,
-  maxCalls = CRITIC_MAX_CALLS,
-) {
+async function prepared(verifier = false, maxCalls = CRITIC_MAX_CALLS) {
   const p = await productWorkspace({ critic: true });
   projects.push(p);
   if (verifier) {
@@ -98,7 +93,6 @@ async function prepared(
   expect((await runProductVerify(await p.workspace.state(), { task: "T001" })).ok).toBe(true);
   const run = async (options: object) => {
     const workspace = await p.workspace.state();
-    workspace.config.workflow.reviewMode = reviewMode;
     return runProductCritic(workspace, { task: "T001", ...options });
   };
   expect((await run({ operation: "configure", config: { ...config, maxCalls } })).ok).toBe(true);
@@ -139,7 +133,6 @@ function response(packet: CriticPacket) {
 it("binds a compact native response to tool-owned identity and uses the actual response validator as provider schema", async () => {
   const { p, run, native, packet } = await prepared();
   expect(packet.question).toBe("Does the public value fulfill the request?");
-  expect(packet.instructions).not.toContain(OBSERVATION_REVIEW_INSTRUCTIONS);
   for (const key of ["feedbackPlan", "agenda", "previousFindings", "challenges", "recurrence"])
     expect(packet.current).not.toHaveProperty(key);
   expect(packet).not.toHaveProperty("previous");
@@ -284,7 +277,7 @@ it("rejects invented finding fields instead of treating malformed feedback as a 
 it.each(["executed", "source-only"])(
   "requires %s counterevidence when explicitly disproving a critic finding",
   async (evidenceKind) => {
-    const { p, run, native, packet } = await prepared("current", true);
+    const { p, run, native, packet } = await prepared(true);
     expect(packet.current).not.toHaveProperty("repairQuestions");
     const first = response(packet);
     expect(
@@ -576,7 +569,7 @@ it("recovers after renewed permission without replaying history or requiring sou
 });
 
 it("requires explicit recovery for unknown invocation and preserves exhausted budgets", async () => {
-  const { run, native } = await prepared("current", false, 2);
+  const { run, native } = await prepared(false, 2);
   expect(
     await run({
       operation: "submit",

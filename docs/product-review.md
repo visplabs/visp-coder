@@ -224,5 +224,3 @@ This needs a completed replacement run for the same task with a successful obser
 The brief's `design.refinementCycles` (default 2) bounds correction cycles after an initial finding. Cycles count assessed implementation changes after a failure; unavailable reviews, duplicate submissions and metadata edits do not spend them. Exhausting the budget never turns a failure into a pass.
 
 For UI work, `work` schedules a first-render visual checkpoint before content expands. Review the primary activity's scale, composition, contrast and interaction feedback at the actual viewport sizes. Working controls and a consistent theme do not establish visual quality, and an image does not establish unobserved behavior.
-
-`workflow.reviewMode: observation-preview` is an opt-in mode that gives the independent reviewer observation-first guidance and keeps selected intermediate images labeled from recorded operations. The default is `current`.

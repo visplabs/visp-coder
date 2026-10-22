@@ -102,17 +102,15 @@ describe("quality-first comparison preparation", () => {
     expect(prepared.kind).toBe("prepared-feedback-policy-comparison");
     if (prepared.kind !== "prepared-feedback-policy-comparison" || !("stages" in prepared))
       throw new Error("Expected policy preparation");
-    expect(prepared.assignments).toHaveLength(36);
-    expect(new Set(prepared.assignments.map((entry) => entry.id)).size).toBe(36);
-    expect(prepared.stages).toHaveLength(3);
-    const [baseline, current, preview, repair] = prepared.arms;
+    expect(prepared.assignments).toHaveLength(27);
+    expect(new Set(prepared.assignments.map((entry) => entry.id)).size).toBe(27);
+    expect(prepared.stages).toHaveLength(2);
+    const [baseline, current, repair] = prepared.arms;
     expect(baseline?.bundle).toMatchObject({ archiveSha256: pins.legacy.archiveSha256 });
-    expect(current?.bundle).toEqual(preview?.bundle);
-    expect(preview?.bundle).toEqual(repair?.bundle);
-    expect(current?.critic).toEqual(preview?.critic);
-    expect(repair?.critic).toEqual({ ...preview?.critic, maxCalls: 3 });
+    expect(current?.bundle).toEqual(repair?.bundle);
+    expect(repair?.critic).toEqual({ ...current?.critic, maxCalls: 3 });
     expect(current?.reviewMode).toBe("current");
-    expect(preview?.reviewMode).toBe("observation-preview");
+    expect(repair?.reviewMode).toBe("current");
     expect(repair?.opportunities).toEqual(["understanding", "product", "focused-repair"]);
     expect(prepared.policy.calibration).toContain("repairRegressions");
     expect(prepared.policy.interpretation).toContain("pilot, not proof");
@@ -374,7 +372,7 @@ it("pins isolated reviewer calibration inputs with three repetitions and no live
     budget: null,
     reviewer: { model: reviewer?.model },
   });
-  expect(result.assignments).toHaveLength(36);
+  expect(result.assignments).toHaveLength(18);
   expect(result.cases[0]?.reviewer).not.toHaveProperty("evaluator");
   expect(runExperiment).not.toHaveBeenCalled();
   await expect(
@@ -404,7 +402,7 @@ it("accepts up to sixteen calibration cases across seven scenarios", async () =>
     cases,
   });
   expect(result.cases).toHaveLength(14);
-  expect(result.assignments).toHaveLength(84);
+  expect(result.assignments).toHaveLength(42);
 });
 
 it("rejects calibration sets with fewer than three scenarios or more than sixteen cases", async () => {

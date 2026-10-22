@@ -8,7 +8,6 @@ import {
   readCriticState,
 } from "../../../../src/workflow/product/critic/critic-store.js";
 import { runProductVerify, runProductWork } from "../../../../src/workflow/product/index.js";
-import { OBSERVATION_REVIEW_INSTRUCTIONS } from "../../../../src/workflow/product/observation-preview.js";
 import { independentReviewTemplate } from "../../../../src/workflow/product/review/independent-review.js";
 import {
   CRITIC_INSTRUCTIONS,
@@ -44,74 +43,67 @@ async function ready(images: boolean) {
   return w.state();
 }
 
-it.each(["current", "observation-preview"] as const)(
-  "delivers the same product rubric through native, prepared and host review in %s mode",
-  async (reviewMode) => {
-    const workspace = await ready(true);
-    const ambiguities = [
-      {
-        quote: "Blank lines are ignored.",
-        readings: ["Only empty lines", "Empty and whitespace-only lines"],
-        conventionalReading: "Empty and whitespace-only lines",
+it("delivers the same product rubric through native, prepared and host review", async () => {
+  const workspace = await ready(true);
+  const ambiguities = [
+    {
+      quote: "Blank lines are ignored.",
+      readings: ["Only empty lines", "Empty and whitespace-only lines"],
+      conventionalReading: "Empty and whitespace-only lines",
+    },
+  ];
+  await writeFile(
+    workspace.paths.featureFile(workspace.status?.activeFeature ?? "", "acceptance-tests.json"),
+    JSON.stringify({
+      version: 1,
+      status: "declined",
+      startedAt: new Date().toISOString(),
+      ambiguities,
+    }),
+  );
+  const handoff = await runProductReviewerHandoff(workspace, { task: "T001" });
+  const selected = await criticSelection(workspace, { task: "T001" });
+  if (!handoff.ok || !selected.ok) throw new Error("Missing review setup");
+  const state = await readCriticState(workspace, selected.value);
+  if (!state.ok || !state.value.state) throw new Error("Missing critic state");
+  const native = await criticPacket(workspace, selected.value, state.value.state, handoff.value);
+  if (!native.ok) throw new Error(native.error.message);
+  const prepared = await runProductReviewRequest(workspace, { task: "T001", prepare: true });
+  if (!prepared.ok) throw new Error(prepared.error.message);
+  const packet = JSON.parse(
+    await readFile((prepared.value as { packetPath: string }).packetPath, "utf8"),
+  );
+  let delivered: unknown;
+  await runProductReviewRequest(
+    workspace,
+    { task: "T001", dispatch: true },
+    {
+      model: "test-reviewer",
+      review: async (request) => {
+        delivered = request;
+        return independentReviewTemplate();
       },
-    ];
-    await writeFile(
-      workspace.paths.featureFile(workspace.status?.activeFeature ?? "", "acceptance-tests.json"),
-      JSON.stringify({
-        version: 1,
-        status: "declined",
-        startedAt: new Date().toISOString(),
-        ambiguities,
-      }),
-    );
-    workspace.config.workflow.reviewMode = reviewMode;
-    const handoff = await runProductReviewerHandoff(workspace, { task: "T001" });
-    const selected = await criticSelection(workspace, { task: "T001" });
-    if (!handoff.ok || !selected.ok) throw new Error("Missing review setup");
-    const state = await readCriticState(workspace, selected.value);
-    if (!state.ok || !state.value.state) throw new Error("Missing critic state");
-    const native = await criticPacket(workspace, selected.value, state.value.state, handoff.value);
-    if (!native.ok) throw new Error(native.error.message);
-    const prepared = await runProductReviewRequest(workspace, { task: "T001", prepare: true });
-    if (!prepared.ok) throw new Error(prepared.error.message);
-    const packet = JSON.parse(
-      await readFile((prepared.value as { packetPath: string }).packetPath, "utf8"),
-    );
-    let delivered: unknown;
-    await runProductReviewRequest(
-      workspace,
-      { task: "T001", dispatch: true },
-      {
-        model: "test-reviewer",
-        review: async (request) => {
-          delivered = request;
-          return independentReviewTemplate();
-        },
-      },
-    );
-    expect(packet.instructions).toBe(native.value.instructions);
-    expect(delivered).toMatchObject({ instructions: native.value.instructions });
-    for (const input of [packet, delivered, native.value.current])
-      expect(input).toMatchObject({ ambiguities });
-    expect(packet.instructions).toContain("deliberate, conventional choice");
-    expect(packet.instructions).toContain("visual quality");
-    expect(packet.instructions).toContain("composition");
-    expect(packet.instructions).toContain(
-      "consecutive images of the same action can show a contradiction",
-    );
-    expect(packet.instructions).toContain("preview's origin and direction");
-    expect(packet.instructions).toContain("Finish findings are always required: false");
-    expect(packet.instructions.includes(OBSERVATION_REVIEW_INSTRUCTIONS)).toBe(
-      reviewMode === "observation-preview",
-    );
-    expect(packet.images.length).toBeGreaterThan(0);
-    for (const input of [packet, delivered, native.value.current]) {
-      for (const key of ["feedbackPlan", "agenda", "previousFindings", "challenges"])
-        expect(input).not.toHaveProperty(key);
-    }
-    expect(native.value.current).not.toHaveProperty("instructions");
-  },
-);
+    },
+  );
+  expect(packet.instructions).toBe(native.value.instructions);
+  expect(delivered).toMatchObject({ instructions: native.value.instructions });
+  for (const input of [packet, delivered, native.value.current])
+    expect(input).toMatchObject({ ambiguities });
+  expect(packet.instructions).toContain("deliberate, conventional choice");
+  expect(packet.instructions).toContain("visual quality");
+  expect(packet.instructions).toContain("composition");
+  expect(packet.instructions).toContain(
+    "consecutive images of the same action can show a contradiction",
+  );
+  expect(packet.instructions).toContain("preview's origin and direction");
+  expect(packet.instructions).toContain("Finish findings are always required: false");
+  expect(packet.images.length).toBeGreaterThan(0);
+  for (const input of [packet, delivered, native.value.current]) {
+    for (const key of ["feedbackPlan", "agenda", "previousFindings", "challenges"])
+      expect(input).not.toHaveProperty(key);
+  }
+  expect(native.value.current).not.toHaveProperty("instructions");
+});
 
 it("does not give source-only or design consultations rendered-product instructions", async () => {
   const workspace = await ready(true);

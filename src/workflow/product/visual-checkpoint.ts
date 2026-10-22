@@ -3,7 +3,6 @@ import { validCaptureRuns } from "./capture-run-model.js";
 import { needsBrowser } from "./environment.js";
 import { evidenceApplies } from "./evidence-references.js";
 import type { ProductSlice } from "./model.js";
-import { OBSERVATION_REVIEW_INSTRUCTIONS, observationSequence } from "./observation-preview.js";
 import type { ProductRecord } from "./store.js";
 import { productContractDigest } from "./subject.js";
 
@@ -12,7 +11,6 @@ export function visualCheckpoint(
   record: ProductRecord,
   subject: string,
   slice?: ProductSlice,
-  reviewMode: "current" | "observation-preview" = "current",
   reviewer: ReviewerPointer = "host",
 ) {
   if (!needsBrowser(record.brief, slice)) return undefined;
@@ -56,8 +54,6 @@ export function visualCheckpoint(
     : assessment?.status === "satisfied";
   const captures = runs.flatMap((run) => run.captures);
   const repeated = runs.length >= 3 && !satisfied;
-  const sequence =
-    reviewMode === "observation-preview" ? observationSequence(record, subject, slice) : undefined;
   return {
     status: !captures.length ? "awaiting-render" : satisfied ? "assessed" : "review-rendered-slice",
     originalRequest: record.brief.originalRequest,
@@ -74,17 +70,6 @@ export function visualCheckpoint(
     ]
       .slice(0, 4)
       .map(({ id, path, viewport }) => ({ id, path, viewport })),
-    ...(sequence
-      ? {
-          reviewMode,
-          observationSequence: sequence,
-          images: sequence.states.map((state) => {
-            const capture = captures.find((capture) => capture.id === state.id);
-            return { ...state, path: capture?.path };
-          }),
-          observationInstructions: OBSERVATION_REVIEW_INSTRUCTIONS,
-        }
-      : {}),
     ...reviewPointer(record.brief.feature, slice, reviewer),
     assess:
       "Judge the actual primary activity at each viewport: usable scale, scene composition, hierarchy, contrast, expressive assets/materials and intermediate feedback. Matching the worker's palette or theme is not aesthetic success. A UI can be readable yet visually weak. Give zero to three consequential findings with a concrete visible change and next observation, or explain why the requested experience is already achieved. Use the existing feedback fields.",

@@ -64,14 +64,6 @@ export function productReviewerHandoff(bundle: ProductReviewBundle) {
 /** Evidence delivery is shared; the caller chooses the matching submission contract. */
 export function productReviewerContext(bundle: ProductReviewBundle) {
   return {
-    ...(bundle.observationSequence
-      ? {
-          originalRequest: bundle.originalRequest,
-          outcomes: bundle.outcomes,
-          images: bundle.images,
-          observationSequence: bundle.observationSequence,
-        }
-      : {}),
     kind: "product-review-request" as const,
     feature: bundle.feature,
     task: bundle.task,
@@ -134,7 +126,6 @@ export function independentReviewerContext(bundle: ReturnType<typeof productRevi
           requestPromisesNote: REQUEST_PROMISES_GUIDANCE,
         }
       : {}),
-    ...(bundle.observationSequence ? { observationSequence: bundle.observationSequence } : {}),
     images: bundle.images,
     sources: bundle.sources.filter((source) => source.kind !== "authored-brief"),
     experiments: {
