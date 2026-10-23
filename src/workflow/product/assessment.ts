@@ -284,11 +284,15 @@ function accountCommand(record: ProductRecord, slice: ProductSlice | undefined) 
   };
 }
 
-/** Where each listed requirement stands, for the reply of the call that closes the feature. */
+/**
+ * Where each listed requirement stands, for the reply of the call that closes the feature. Named
+ * tests are read only in runs on `subject`, the version the call checked.
+ */
 export async function requirementStatus(
   workspace: WorkspaceState,
   record: ProductRecord,
   slice: ProductSlice | undefined,
+  subject: string,
 ): Promise<string[]> {
   const accounted = await requirementAccounts(workspace, record, slice);
   return accounted
@@ -297,7 +301,7 @@ export async function requirementStatus(
         accounted.accounts,
         verifyAccounts(
           accounted.accounts,
-          record.state.executions,
+          applicableExecutions(record, subject, slice),
           await testSourcesFor(workspace, accounted.accounts),
         ),
       )

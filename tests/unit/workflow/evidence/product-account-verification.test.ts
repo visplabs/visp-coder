@@ -14,6 +14,7 @@ const run = (
   ({
     id: "e1",
     check: "C001",
+    command: "./run-tests",
     status: "passed",
     output,
     ...(baseline === undefined
@@ -220,12 +221,9 @@ describe("suite-level verification", () => {
     expect(result.get("R002")?.status).toBe("verified");
   });
 
-  it("reads the passing summaries of pytest, jest, mocha, TAP and go test", () => {
+  it("reads the passing summaries of pytest, jest, mocha and TAP", () => {
     const js = sources({
       "tests/a.test.js": "it('test_one', () => {});\ntest('test_two', () => {});",
-    });
-    const go = sources({
-      "pkg/a_test.go": "func Test_one(t *testing.T) {}\nfunc Test_two(t *testing.T) {}",
     });
     const py = sources({ "tests/test_a.py": "def test_one(): pass\ndef test_two(): pass\n" });
     const cases: [string, ReturnType<typeof sources>][] = [
@@ -236,13 +234,125 @@ describe("suite-level verification", () => {
       ["ℹ tests 2\nℹ pass 2\nℹ fail 0", js],
       ["# tests 2\n# pass 2\n# fail 0", js],
       ["2/2 passed", js],
-      ["ok  \texample.com/pkg\t0.004s", go],
     ];
     for (const [output, files] of cases) {
-      const names = files === go ? "Test_one" : "test_one";
-      const result = verifyAccounts([account(names)], [run(output)], files);
+      const result = verifyAccounts([account("test_one")], [run(output)], files);
       expect(result.get("R001")?.status, output).toBe("verified");
     }
+  });
+
+  it("never verifies at suite level from go test's package line, which gives no count", () => {
+    const go = sources({
+      "m_test.go": 'func TestA(t *testing.T) {}\nfunc TestB(t *testing.T) { t.Skip("todo") }\n',
+    });
+    const result = verifyAccounts([account("TestB")], [run("ok  \texample.com/m\t0.002s\n")], go);
+    expect(result.get("R001")).toMatchObject({
+      status: "claimed",
+      names: [{ reason: "no-test-names" }],
+    });
+  });
+
+  it("claims the name when the suite ran more tests than the test files define", () => {
+    const result = verifyAccounts([account("test_bundle_idempotency_key")], [run(DOTS(3))], python);
+    expect(result.get("R001")?.summary).toBe(
+      "not confirmed from the check output: C001 ran 3 tests but the test files define 2",
+    );
+  });
+
+  it("counts inherited test methods, so a subclassed suite cannot stand in for another file", () => {
+    const files = sources({
+      "tests/test_store.py": [
+        "class Base(unittest.TestCase):",
+        "    def test_a(self): pass",
+        "    def test_b(self): pass",
+        "class Mem(Base): pass",
+        "class Sql(Base): pass",
+      ].join("\n"),
+      "tests/test_bundles.py": [
+        "class BundleTests(unittest.TestCase):",
+        "    def test_bundle_rejects_archived(self):",
+        "        self.fail()",
+      ].join("\n"),
+    });
+    const result = verifyAccounts(
+      [account("test_bundle_rejects_archived")],
+      [run(DOTS(6), undefined, { command: "python -m unittest tests.test_store" })],
+      files,
+    );
+    expect(result.get("R001")).toMatchObject({
+      status: "claimed",
+      names: [{ reason: "not-covered" }],
+    });
+    const whole = verifyAccounts([account("test_bundle_rejects_archived")], [run(DOTS(6))], files);
+    expect(whole.get("R001")?.summary).toBe(
+      "not confirmed from the check output: C001 ran 6 tests but the test files define 7",
+    );
+  });
+
+  it("counts only the files the run covered, as pytest's progress lines or the command name them", () => {
+    const files = sources({
+      "tests/test_a.py":
+        "@pytest.mark.parametrize('x', range(10))\ndef test_param(x):\n    assert x >= 0\n",
+      "tests/test_b.py": "def test_named():\n    assert False\n",
+      "tests/test_c.py": "def test_one(): pass\ndef test_two(): pass\n",
+      "legacy/test_old.py": "class OldTest(unittest.TestCase):\n    def test_old(self): pass\n",
+    });
+    const pytestFile = verifyAccounts(
+      [account("test_named")],
+      [
+        run(
+          "tests/test_a.py ..........                                   [100%]\n============ 10 passed in 0.05s ============\n",
+        ),
+      ],
+      files,
+    );
+    expect(pytestFile.get("R001")).toMatchObject({
+      status: "claimed",
+      names: [{ reason: "not-covered" }],
+    });
+    expect(pytestFile.get("R001")?.summary).toBe(
+      "not confirmed from the check output: test_named is defined only in test files C001 did not run",
+    );
+    const parametrized = verifyAccounts(
+      [account("test_param")],
+      [run("..........\n10 passed in 0.05s", undefined, { command: "pytest -q tests/test_a.py" })],
+      files,
+    );
+    expect(parametrized.get("R001")?.summary).toBe(
+      "not confirmed from the check output: C001's test files define parametrized or generated tests, which VISP cannot count",
+    );
+    const named = verifyAccounts(
+      [account("test_one")],
+      [run("..\n2 passed in 0.05s", undefined, { command: "python -m pytest -q tests/test_c.py" })],
+      files,
+    );
+    expect(named.get("R001")).toMatchObject({
+      status: "verified",
+      names: [{ definedIn: ["tests/test_c.py"] }],
+    });
+    const discover = verifyAccounts(
+      [account("test_old")],
+      [run(DOTS(1), undefined, { command: "python3 -B -m unittest discover -s legacy" })],
+      files,
+    );
+    expect(discover.get("R001")?.status).toBe("verified");
+  });
+
+  it("never verifies a helper the test files define but do not run as a test", () => {
+    const files = sources({
+      "tests/test_api.py": [
+        "def post_json(path, body):",
+        "    return None",
+        "class T(unittest.TestCase):",
+        "    def test_a(self): pass",
+        "    def test_b(self): pass",
+      ].join("\n"),
+    });
+    const result = verifyAccounts([account("post_json")], [run(DOTS(2))], files);
+    expect(result.get("R001")).toMatchObject({
+      status: "claimed",
+      names: [{ reason: "not-defined" }],
+    });
   });
 
   it("never verifies a name that is not defined anywhere", () => {
@@ -335,6 +445,84 @@ describe("suite-level verification", () => {
       status: "claimed",
       names: [{ reason: "passes-before" }],
     });
+  });
+});
+
+describe("skipped tests and qualified names", () => {
+  it("never verifies a name any line marks skipped, todo or expected to fail", () => {
+    const outputs = [
+      "TAP version 13\nok 1 - test_x\nok 2 - test_x # SKIP not ready\n1..2",
+      "ok 1 - test_x\nnot ok 2 - test_x # TODO later\n1..2",
+      "ok 1 - test_x\nok 2 - test_x # skip\n1..2",
+      "test_x (a.A.test_x) ... ok\ntest_x (b.B.test_x) ... skipped 'todo'",
+      "test_x (a.A.test_x) ... ok\ntest_x (b.B.test_x) ... expected failure",
+      "tests/a.py::test_x PASSED\ntests/b.py::test_x SKIPPED (todo)",
+      "tests/a.py::test_x PASSED\ntests/b.py::test_x XFAIL",
+      "tests/a.py::test_x PASSED\ntests/b.py::test_x XPASS",
+      "--- PASS: test_x (0.00s)\n--- SKIP: test_x (0.00s)",
+      "  ✓ test_x (2 ms)\n  ○ skipped test_x",
+      "  ✓ test_x (2 ms)\n  ✎ todo test_x",
+      "✔ test_x (1ms)\n﹣ test_x (0.1ms) # SKIP",
+    ];
+    for (const output of outputs) {
+      const result = verifyAccounts([account("test_x")], [run(output)]);
+      expect(result.get("R001"), output).toMatchObject({
+        status: "claimed",
+        names: [{ reason: "skipped" }],
+      });
+    }
+    const tap = verifyAccounts(
+      [account("creates a bundle; rejects archived items")],
+      [
+        run(
+          "TAP version 13\nok 1 - creates a bundle\nok 2 - rejects archived items # SKIP not ready\n1..2\n# pass 1\n# skipped 1\n",
+        ),
+      ],
+    );
+    expect(tap.get("R001")?.summary).toBe(
+      "not confirmed from the check output: rejects archived items: skipped, todo or expected to fail in C001's latest run",
+    );
+  });
+
+  it("reads a qualified name against the module and class the line gives", () => {
+    const unittest = [
+      "test_create (tests.test_items.ItemTests.test_create) ... ok",
+      "test_create (tests.test_bundles.BundleTests.test_create) ... skipped 'todo'",
+      "",
+      "Ran 2 tests in 0.001s",
+      "",
+      "OK (skipped=1)",
+    ].join("\n");
+    const pytest = [
+      "tests/test_items.py::ItemTests::test_create PASSED [ 50%]",
+      "tests/test_bundles.py::BundleTests::test_create SKIPPED (todo) [100%]",
+    ].join("\n");
+    const legacy = [
+      "test_create (tests.test_items.ItemTests) ... ok",
+      "test_create (tests.test_bundles.BundleTests) ... skipped 'todo'",
+    ].join("\n");
+    for (const output of [unittest, pytest, legacy]) {
+      const result = verifyAccounts(
+        [
+          account("test_create", "R001"),
+          account("ItemTests.test_create", "R002"),
+          account("test_items.ItemTests.test_create", "R003"),
+          account("test_bundles.BundleTests.test_create", "R004"),
+          account("OtherTests.test_create", "R005"),
+        ],
+        [run(output)],
+      );
+      const reasons = [...result.values()].map((entry) =>
+        entry.names.map((name) => (name.verdict === "claimed" ? name.reason : name.verdict)),
+      );
+      expect(reasons, output).toEqual([
+        ["skipped"],
+        ["verified"],
+        ["verified"],
+        ["skipped"],
+        ["not-in-output"],
+      ]);
+    }
   });
 });
 

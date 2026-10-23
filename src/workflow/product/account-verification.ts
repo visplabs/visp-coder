@@ -1,16 +1,18 @@
 import type { WorkspaceState } from "../state.js";
 import type { ProductExecution } from "./model.js";
-import { loadTestSources, type TestSources } from "./test-sources.js";
+import { testFilesRun } from "./test-run-files.js";
+import { loadTestSources, type TestRunnerKind, type TestSources } from "./test-sources.js";
 
 /**
  * The worker's account of a listed requirement names the check that shows it and, usually, the
  * tests ("R002=C001 test_bundle_all_or_nothing"). Whether the check passed is judged elsewhere;
- * this reads the names against what the check printed. A name counts as verified when the cited
- * check's latest passing run lists it as passed and, when the run on the old code lists it too,
- * when it failed there. A runner that prints only dots and a passing summary lists no names: then
- * a name counts as verified at suite level, when the summary is a clean pass that covers at least
- * the tests the project's test files define and those files define the name. Everything else is
- * not confirmed: VISP says so, and never blocks on it.
+ * this reads the names against what the check printed. A name counts as verified when every line
+ * of the cited check's latest passing run that names it reports a pass (none skipped, todo or
+ * expected to fail) and, when the run on the old code lists it too, when it failed there. A runner
+ * that prints only dots and a passing summary lists no names: then a name counts as verified at
+ * suite level when the summary is a clean pass whose count equals the tests the test files it
+ * covered define, and those files define the name. Everything else is not confirmed: VISP says
+ * so, and never blocks on it.
  */
 
 export type NameVerdict =
@@ -29,9 +31,12 @@ export type NameVerdict =
       readonly reason:
         | "no-test-names"
         | "not-defined"
+        | "not-covered"
+        | "uncountable"
         | "count-mismatch"
         | "not-in-output"
         | "no-outcome"
+        | "skipped"
         | "failed"
         | "passes-before";
       /** For "count-mismatch": how many tests the run reports and how many the test files define. */
@@ -77,12 +82,19 @@ function titleSegments(note: string | undefined): string[] {
     .filter((segment) => segment.length >= 12 && segment.split(/\s+/).length >= 3);
 }
 
-/** go test's package line (`ok  \tpkg\t0.004s`): it names no test. */
+/** go test's package line (`ok  \tpkg\t0.004s`): it names no test and gives no count. */
 const GO_PACKAGE = String.raw`\S+\s+(?:[\d.]+s|\(cached\))\s*$`;
-const GO_PACKAGE_LINE = new RegExp(`^ok\\s+${GO_PACKAGE}`, "m");
 
 const FAILED = /\b(?:FAIL(?:ED|URE)?|ERROR)\b|\bnot ok\b|[✖✕✗×]/;
 const PASSED = /\.\.\. ok\b|\bPASS(?:ED)?\b|^\s*ok\s+\S|[✔✓✅]|\bok\b\s*(?:\(|$)/;
+/**
+ * A test that did not run as a plain pass: unittest's `skipped` and `expected failure`, pytest's
+ * SKIPPED, XFAIL and XPASS, TAP's `# SKIP` and `# TODO`, go's `--- SKIP`, jest's `○` and `✎`.
+ */
+const NOT_RUN =
+  /\.\.\. (?:skipped|expected failure|unexpected success)\b|\b(?:SKIPPED|XFAIL|XPASS)\b|--- SKIP\b|^\s*[○✎﹣]\s/;
+const TAP_DIRECTIVE = /#\s*(?:skip|todo)\b/i;
+const notRun = (line: string) => NOT_RUN.test(line) || TAP_DIRECTIVE.test(line);
 /** Lines that report a test one by one: a runner printing only dots has none. */
 const PER_TEST = new RegExp(
   String.raw`\.\.\. (?:ok|FAIL|ERROR|skipped)|\b(?:PASSED|FAILED|ERROR)\b|^\s*(?:PASS|FAIL)\s|[✔✓✖✕✅]|^\s*(?:not )?ok\s+(?!${GO_PACKAGE})\S|--- (?:PASS|FAIL)`,
@@ -90,16 +102,56 @@ const PER_TEST = new RegExp(
 );
 
 type Matcher = (line: string) => boolean;
-type Outcome = "passed" | "failed" | "seen" | "absent";
+type Outcome = "passed" | "failed" | "skipped" | "seen" | "absent";
 
 function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/** A name stands alone in a line: not part of a longer identifier. */
+const mention = (name: string) => new RegExp(`(?<![\\w])${escapeRegExp(name)}(?![\\w])`);
+
+/**
+ * The module and class a line gives for the test `leaf`, in unittest's form
+ * (`test_x (pkg.test_api.ApiTest.test_x)`, or `(pkg.test_api.ApiTest)` before Python 3.11) or
+ * pytest's (`tests/test_api.py::ApiTest::test_x`). Undefined when the line gives neither.
+ */
+function lineQualifiers(line: string, leaf: string): string[] | undefined {
+  const name = escapeRegExp(leaf);
+  const unittest = new RegExp(`(?<![\\w.])${name} \\(([\\w.]+)\\)`).exec(line)?.[1];
+  if (unittest) {
+    const parts = unittest.split(".");
+    return parts.at(-1) === leaf ? parts.slice(0, -1) : parts;
+  }
+  const pytest = new RegExp(`([\\w./-]+)\\.py((?:::\\w+)*)::${name}(?![\\w])`).exec(line);
+  return pytest
+    ? [...(pytest[1] ?? "").split("/"), ...(pytest[2] ?? "").split("::").filter(Boolean)]
+    : undefined;
+}
+
+/** `wanted` appear in `given` in the same order, other parts allowed between them. */
+function inOrder(wanted: readonly string[], given: readonly string[]): boolean {
+  let at = 0;
+  for (const part of given) if (part === wanted[at]) at++;
+  return at === wanted.length;
+}
+
+/**
+ * A name stands alone in a line: not part of a longer identifier. A qualified name
+ * (`test_api.ApiTest.test_x`) matches a line that contains it whole, or that gives the same
+ * module and class for the test in unittest's or pytest's form; never another class's test.
+ */
 function nameMatcher(name: string): Matcher {
-  const mention = new RegExp(`(?<![\\w])${escapeRegExp(name)}(?![\\w])`);
-  return (line) => mention.test(line);
+  const whole = mention(name);
+  const parts = name.split(/::|\./);
+  const leaf = parts.at(-1) ?? name;
+  const qualifiers = parts.slice(0, -1);
+  if (!qualifiers.length) return (line) => whole.test(line);
+  const bare = mention(leaf);
+  return (line) => {
+    if (whole.test(line)) return true;
+    const given = bare.test(line) ? lineQualifiers(line, leaf) : undefined;
+    return given !== undefined && inOrder(qualifiers, given);
+  };
 }
 
 const squash = (text: string) =>
@@ -113,11 +165,15 @@ function titleMatcher(title: string): Matcher {
   return (line) => squash(line).includes(wanted);
 }
 
-/** What a run's output says about one test: the lines that mention it, passed or failed. */
+/**
+ * What a run's output says about one test, from every line that names it: failed if one fails,
+ * else skipped if one is skipped, todo or expected to fail, else passed if one passes.
+ */
 function outcomeIn(output: string, matches: Matcher): Outcome {
   const lines = output.split("\n").filter(matches);
   if (!lines.length) return "absent";
-  if (lines.some((line) => FAILED.test(line))) return "failed";
+  if (lines.some((line) => !notRun(line) && FAILED.test(line))) return "failed";
+  if (lines.some(notRun)) return "skipped";
   return lines.some((line) => PASSED.test(line)) ? "passed" : "seen";
 }
 
@@ -126,10 +182,11 @@ function baselineOutput(execution: ProductExecution): string {
   return (execution.flip?.commands ?? []).map((command) => command.output ?? "").join("\n");
 }
 
-/** A clean passing summary of a whole suite: what it says, and how many tests it ran when it says. */
+/** A clean passing summary of a whole suite: what it says, how many tests it ran, and whose rules count them. */
 interface SuitePass {
   readonly text: string;
-  readonly ran?: number;
+  readonly ran: number;
+  readonly runner: TestRunnerKind;
 }
 
 const SUITE_FAILURE = /^(?:FAILED|FAIL|not ok)\b|--- FAIL|^(?:ℹ|#) fail\s+[1-9]/m;
@@ -147,66 +204,82 @@ function pytestPass(output: string): SuitePass | undefined {
   const parts = PYTEST_SUMMARY.exec(output)?.[1]?.split(", ") ?? [];
   const passed = parts.map((part) => /^(\d+) passed$/.exec(part)?.[1]).find(Boolean);
   const rest = parts.filter((part) => !/^\d+ (?:passed|warnings?)$/.test(part));
-  return passed && !rest.length ? { text: `${passed} passed`, ran: Number(passed) } : undefined;
+  return passed && !rest.length
+    ? { text: `${passed} passed`, ran: Number(passed), runner: "pytest" }
+    : undefined;
 }
 
-function equalCounts(match: RegExpExecArray | null): SuitePass | undefined {
+function equalCounts(match: RegExpExecArray | null, runner: TestRunnerKind): SuitePass | undefined {
   const [, first, second, all] = match ?? [];
   const ran = Number(all ?? first);
   const total = Number(all ?? second);
-  return match && ran === total && ran > 0 ? { text: `${ran} passed`, ran } : undefined;
+  return match && ran === total && ran > 0 ? { text: `${ran} passed`, ran, runner } : undefined;
 }
 
 /**
  * The summary line of a run in which every test passed and none was skipped, for the runners VISP
- * knows: unittest, pytest, jest, mocha, node:test and TAP, go test, and "N/N passed" printers.
- * Anything else, and any failure, skip or todo, is not a clean pass.
+ * knows that print a count: unittest, pytest, jest, mocha, node:test and TAP, and "N/N passed"
+ * printers. Anything else, and any failure, skip or todo, is not a clean pass. go test's `ok pkg`
+ * is not one: it gives no count, and a skipped test leaves it unchanged.
  */
 function suitePass(output: string): SuitePass | undefined {
   if (SUITE_FAILURE.test(output)) return undefined;
   const ran = UNITTEST_RAN.exec(output)?.[1];
   if (ran)
     return UNITTEST_OK.test(output)
-      ? { text: `Ran ${ran} tests, OK`, ran: Number(ran) }
+      ? { text: `Ran ${ran} tests, OK`, ran: Number(ran), runner: "unittest" }
       : undefined;
   const pytest = pytestPass(output);
   if (pytest) return pytest;
   const jest = JEST_SUMMARY.exec(output);
-  if (jest) return equalCounts(jest);
+  if (jest) return equalCounts(jest, "js");
   const mocha = MOCHA_PASSING.exec(output)?.[1];
   if (mocha)
     return MOCHA_NOT_PASSING.test(output)
       ? undefined
-      : { text: `${mocha} passing`, ran: Number(mocha) };
+      : { text: `${mocha} passing`, ran: Number(mocha), runner: "js" };
   const node = NODE_PASS.exec(output)?.[1];
   if (node)
-    return NODE_NOT_PASS.test(output) ? undefined : { text: `${node} passed`, ran: Number(node) };
-  const all = equalCounts(ALL_PASSED.exec(output));
-  if (all) return all;
-  return GO_PACKAGE_LINE.test(output) ? { text: "go test ok" } : undefined;
+    return NODE_NOT_PASS.test(output)
+      ? undefined
+      : { text: `${node} passed`, ran: Number(node), runner: "js" };
+  return equalCounts(ALL_PASSED.exec(output), "any");
 }
 
 function verdictFor(name: string, matches: Matcher, execution: ProductExecution): NameVerdict {
   const now = outcomeIn(execution.output, matches);
   if (now === "absent") return { name, verdict: "claimed", reason: "not-in-output" };
   if (now === "failed") return { name, verdict: "claimed", reason: "failed" };
+  if (now === "skipped") return { name, verdict: "claimed", reason: "skipped" };
   if (now === "seen") return { name, verdict: "claimed", reason: "no-outcome" };
   const before = outcomeIn(baselineOutput(execution), matches);
   if (before === "passed") return { name, verdict: "claimed", reason: "passes-before" };
   return { name, verdict: "verified", failsBefore: before === "failed", basis: "listed" };
 }
 
-/** A name a dots-only run does not list: verified when the suite passed and the test files define it. */
+/**
+ * A name a dots-only run does not list: verified when the suite passed, the test files the run
+ * covered define it, and the run's count is exactly the tests those files define, so every one
+ * of them ran. A count from parametrized or generated tests cannot be checked, so it never verifies.
+ */
 function suiteVerdict(
   name: string,
   pass: SuitePass,
   execution: ProductExecution,
   sources: TestSources,
 ): NameVerdict {
-  const definedIn = sources.definedIn(name);
-  if (!definedIn.length) return { name, verdict: "claimed", reason: "not-defined" };
-  const defined = sources.definitionCount;
-  if (pass.ran !== undefined && pass.ran < defined)
+  const covers = testFilesRun(execution.command, execution.output, sources.paths, pass.runner);
+  const run = covers ? sources.within(covers) : sources;
+  const definedIn = run.definedIn(name, pass.runner);
+  if (!definedIn.length)
+    return {
+      name,
+      verdict: "claimed",
+      reason: sources.definedIn(name, pass.runner).length ? "not-covered" : "not-defined",
+    };
+  const defined = run.testCount(pass.runner);
+  if (defined === undefined) return { name, verdict: "claimed", reason: "uncountable" };
+  if (pass.ran !== defined)
     return {
       name,
       verdict: "claimed",
@@ -244,15 +317,18 @@ function namedTests(
   return verdicts;
 }
 
+type Claimed = Extract<NameVerdict, { verdict: "claimed" }>;
+
 const REASONS: Record<
   Exclude<
-    Extract<NameVerdict, { verdict: "claimed" }>["reason"],
-    "no-test-names" | "not-defined" | "count-mismatch"
+    Claimed["reason"],
+    "no-test-names" | "not-defined" | "not-covered" | "uncountable" | "count-mismatch"
   >,
   string
 > = {
   "not-in-output": "not in its output",
   "no-outcome": "its output does not say whether it passed",
+  skipped: "skipped, todo or expected to fail in its latest run",
   failed: "failed in its latest run",
   "passes-before": "also passes on the old code, so it does not show the change",
 };
@@ -292,25 +368,32 @@ function summarize(
   if (!claimed.length) {
     return { status: "verified", summary: verifiedSummary(check, names, run) };
   }
-  const reasons = new Map<string, NameVerdict[]>();
-  for (const entry of claimed) {
-    const list = reasons.get(entry.reason) ?? [];
-    list.push(entry);
-    reasons.set(entry.reason, list);
-  }
-  const text = [...reasons.entries()].map(([reason, listed]) => {
-    const first = listed[0];
-    const nameList = listed.map((entry) => entry.name).join(", ");
-    if (reason === "no-test-names")
-      return `${check}'s output lists no test names (${listed.length} named)`;
-    if (reason === "not-defined")
-      return `${nameList} ${listed.length === 1 ? "is" : "are"} not defined in the project's test files`;
-    if (reason === "count-mismatch" && first?.verdict === "claimed" && first.counts)
-      return `${check} ran ${plural(first.counts.ran, "test")} but the test files define ${first.counts.defined}`;
-    const why = REASONS[reason as keyof typeof REASONS].replace("its", `${check}'s`);
-    return `${nameList}: ${why}`;
-  });
+  const reasons = new Map<Claimed["reason"], Claimed[]>();
+  for (const entry of claimed)
+    reasons.set(entry.reason, [...(reasons.get(entry.reason) ?? []), entry]);
+  const text = [...reasons.entries()].map(([reason, listed]) => claimText(check, reason, listed));
   return { status: "claimed", summary: `${NOT_CONFIRMED}${text.join("; ")}` };
+}
+
+/** Why the names `listed`, which share `reason`, are not confirmed: one clause of the summary. */
+function claimText(check: string, reason: Claimed["reason"], listed: readonly Claimed[]): string {
+  const names = listed.map((entry) => entry.name).join(", ");
+  const verb = listed.length === 1 ? "is" : "are";
+  const counts = listed[0]?.counts ?? { ran: 0, defined: 0 };
+  switch (reason) {
+    case "no-test-names":
+      return `${check}'s output lists no test names (${listed.length} named)`;
+    case "not-defined":
+      return `${names} ${verb} not defined in the project's test files`;
+    case "not-covered":
+      return `${names} ${verb} defined only in test files ${check} did not run`;
+    case "uncountable":
+      return `${check}'s test files define parametrized or generated tests, which VISP cannot count`;
+    case "count-mismatch":
+      return `${check} ran ${plural(counts.ran, "test")} but the test files define ${counts.defined}`;
+    default:
+      return `${names}: ${REASONS[reason].replace("its", `${check}'s`)}`;
+  }
 }
 
 interface AccountInput {

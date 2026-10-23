@@ -1,6 +1,6 @@
 import type { WorkspaceState } from "../../state.js";
 import { testSourcesFor } from "../account-verification.js";
-import type { ProductOutcomeStatus } from "../assessment.js";
+import { applicableExecutions, type ProductOutcomeStatus } from "../assessment.js";
 import { REVIEWER_ACTIVITY_FILE } from "../critic/critic-exec.js";
 import { readFeatureDiff } from "../feature-diff.js";
 import { unchangedInheritedPaths } from "../inherited-changes.js";
@@ -45,10 +45,11 @@ export async function productEvidenceRecord(
     next,
     ...(stored?.ok
       ? {
+          // Only runs on this version count, as for the checks: an older pass may no longer hold.
           accounts: accountEvidence(
             listed,
             stored.value.accounts,
-            record.state.executions,
+            applicableExecutions(record, subject),
             await testSourcesFor(workspace, stored.value.accounts),
           ),
         }

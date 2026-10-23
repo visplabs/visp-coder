@@ -84,6 +84,37 @@ it("names the whole account command in the reply when the request lists requirem
   );
 });
 
+it("does not verify an account from a run on an earlier version", async () => {
+  const created = await project();
+  const feature = await runCli(
+    created.root,
+    "feature",
+    "Return two",
+    "--check",
+    CHECK,
+    "--source-brief",
+    "- Export value two.\n- Export label two.",
+  );
+  expect(feature.exitCode, feature.stderr).toBe(0);
+  await created.write("src/value.mjs", "export const value = 2;\nexport const label = 'one';\n");
+  const done = await runCli(
+    created.root,
+    "done",
+    "--account",
+    "R001=C001 value is two",
+    "R002=not done: the label stays for a later request",
+  );
+  expect(done.stdout).toContain(
+    "R001: done, C001 value is two (verified: the test passed in C001's latest run)",
+  );
+  // An edit after done breaks the test; C001's passing run is now of an earlier version.
+  await created.write("src/value.mjs", "export const value = 3;\nexport const label = 'one';\n");
+  const report = await runCli(created.root, "pr");
+  expect(report.exitCode, report.stderr).toBe(0);
+  const row = report.stdout.split("\n").find((line) => line.startsWith("| **R001**"));
+  expect(row).toBe("| **R001** Export value two. | C001 value is two | — |");
+});
+
 it("ignores a blank --check and asks for visp work as before", async () => {
   const created = await project();
   const result = await runCli(
