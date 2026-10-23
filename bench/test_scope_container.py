@@ -203,38 +203,95 @@ class SessionTests(unittest.TestCase):
 
 
 class HostGuardTests(unittest.TestCase):
-    """The host state hash: two files by content, ~/.ssh by its file names only."""
+    """The host state the guard records: ~/.claude.json by existence and mode, settings by content, directories by names."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.real = pathlib.Path(self.tmp.name)
-        (self.real / ".claude").mkdir()
-        (self.real / ".ssh").mkdir()
+        for directory in (".claude", ".ssh", ".codex"):
+            (self.real / directory).mkdir()
         (self.real / ".claude" / "settings.json").write_text("{}")
+        (self.real / ".claude" / "projects").mkdir()
         (self.real / ".claude.json").write_text('{"a": 1}')
+        (self.real / ".claude.json").chmod(0o600)
         (self.real / ".ssh" / "id_ed25519").write_text("key one")
 
     def tearDown(self):
         self.tmp.cleanup()
 
+    def changes(self, before):
+        return containers.host_changes(before, containers.host_state(self.real))
+
     def test_each_watched_change_is_named(self):
         before = containers.host_state(self.real)
-        self.assertEqual(set(before), {"~/.claude/settings.json", "~/.claude.json", "~/.ssh/ (names)"})
-        self.assertEqual(containers.host_changes(before, containers.host_state(self.real)), [])
+        self.assertEqual(set(before), {"~/.claude.json (exists, mode)", "~/.claude/settings.json", "~/.ssh/ (names)",
+                                       "~/.claude/ (names)", "~/.codex/ (names)"})
+        self.assertEqual(self.changes(before), [])
         (self.real / ".claude" / "settings.json").write_text('{"x": 1}')
-        self.assertEqual(containers.host_changes(before, containers.host_state(self.real)), ["~/.claude/settings.json"])
-        (self.real / ".ssh" / "new_key").write_text("k")
+        self.assertEqual(self.changes(before), ["~/.claude/settings.json"])
+        (self.real / ".ssh" / "keys").mkdir()
+        (self.real / ".ssh" / "keys" / "new_key").write_text("k")
+        (self.real / ".codex" / "auth.json").write_text("{}")
+        (self.real / ".claude" / "agents").mkdir()
+        self.assertEqual(self.changes(before), ["~/.claude/ (names)", "~/.claude/settings.json", "~/.codex/ (names)",
+                                                "~/.ssh/ (names)"])
+        (self.real / ".claude.json").chmod(0o644)
+        self.assertIn("~/.claude.json (exists, mode)", self.changes(before))
         (self.real / ".claude.json").unlink()
-        self.assertEqual(containers.host_changes(before, containers.host_state(self.real)),
-                         ["~/.claude.json", "~/.claude/settings.json", "~/.ssh/ (names)"])
+        self.assertIn("~/.claude.json (exists, mode)", self.changes(before))
+
+    def test_what_a_host_session_rewrites_does_not_trip_it(self):
+        """A Claude Code session on the host rewrites ~/.claude.json and writes under ~/.claude/projects constantly."""
+        before = containers.host_state(self.real)
+        (self.real / ".claude.json").write_text('{"a": 2, "numStartups": 41, "tipsHistory": {}}')
+        (self.real / ".claude" / "projects" / "-home-x").mkdir()
+        (self.real / ".claude" / "projects" / "-home-x" / "session.jsonl").write_text("{}")
+        self.assertEqual(self.changes(before), [])
 
     def test_ssh_contents_are_not_hashed(self):
         before = containers.host_state(self.real)
         (self.real / ".ssh" / "id_ed25519").write_text("key two")
-        self.assertEqual(containers.host_changes(before, containers.host_state(self.real)), [])
+        self.assertEqual(self.changes(before), [])
         empty = pathlib.Path(self.tmp.name) / "empty"
         empty.mkdir()
         self.assertEqual(set(containers.host_state(empty).values()), {"absent"})
+
+
+class LinkTests(unittest.TestCase):
+    """No path under the run directory may lead into the real home."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.real = pathlib.Path(self.tmp.name) / "realhome"
+        (self.real / ".ssh").mkdir(parents=True)
+        (self.real / ".ssh" / "id_ed25519").write_text("key")
+        # The run lies under the real home, as the default $VISP_BENCH_RUNS (~/visp-bench) puts it.
+        self.run = self.real / "visp-bench" / "runs" / "r"
+        for area in ("project", "outside", "home"):
+            (self.run / area).mkdir(parents=True)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_links_inside_the_run_or_outside_the_home_pass(self):
+        (self.run / "project" / "data").symlink_to(self.run / "outside")
+        (self.run / "project" / "a.txt").write_text("x")
+        os.link(self.run / "project" / "a.txt", self.run / "outside" / "a-copy.txt")
+        (self.run / "project" / "system").symlink_to("/usr/share")
+        self.assertEqual(containers.link_problems(self.run, self.real), [])
+
+    def test_a_symlink_into_the_real_home_is_named(self):
+        (self.run / "project" / "keys").symlink_to(self.real / ".ssh")
+        (self.run / "home" / "dangling").symlink_to(self.real / "missing" / "file")
+        problems = containers.link_problems(self.run, self.real)
+        self.assertEqual(len(problems), 2)
+        self.assertTrue(problems[0].startswith("home/dangling is a symlink into the real home"))
+        self.assertTrue(problems[1].startswith("project/keys is a symlink into the real home"))
+
+    def test_a_hard_link_to_a_file_outside_the_run_is_named(self):
+        os.link(self.real / ".ssh" / "id_ed25519", self.run / "project" / "key")
+        self.assertEqual(containers.link_problems(self.run, self.real),
+                         ["project/key is hard-linked to a path outside the run directory"])
 
 
 class RunScopeContainerTests(unittest.TestCase):
@@ -253,9 +310,11 @@ class RunScopeContainerTests(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def main(self, states):
+    def main(self, states, during=None):
+        """Run run_scope.main; `states` are host_state's answers in turn, or a function in its place; `during`
+        runs while the pretend worker works."""
         import run_scope
-        states = iter(states)
+        state = states if callable(states) else (lambda answers: lambda real: next(answers))(iter(states))
 
         class FakeSession:
             def __init__(self, run, arm, image, token, digest, allow):
@@ -269,6 +328,8 @@ class RunScopeContainerTests(unittest.TestCase):
 
         def session(project, arm, prompt, model, timeout, effort=None, launch=None):
             assert launch is not None
+            if during:
+                during()
             return {"arm": arm["arm"], "report": f"done {FAKE_TOKEN}", "sessionIds": ["s"], "isError": False}
 
         argv = ["run_scope.py", "r", "--token-file", str(self.token)]
@@ -277,7 +338,7 @@ class RunScopeContainerTests(unittest.TestCase):
                 mock.patch.object(run_scope, "score", lambda *args: {"overreach": False}), \
                 mock.patch.object(containers, "Session", FakeSession), \
                 mock.patch.object(containers, "preflight", lambda image, path: ([], {"claude": "2.1.300"})), \
-                mock.patch.object(containers, "host_state", lambda real: next(states)), \
+                mock.patch.object(containers, "host_state", state), \
                 mock.patch.object(sys, "argv", argv), contextlib.redirect_stdout(io.StringIO()) as printed:
             run_scope.main()
         return json.loads((self.run / "result.json").read_text()), printed.getvalue()
@@ -295,14 +356,43 @@ class RunScopeContainerTests(unittest.TestCase):
             self.assertNotIn(FAKE_TOKEN, text)
 
     def test_a_host_state_change_flags_the_run_and_skips_scoring(self):
-        result, _ = self.main([{"~/.claude.json": "a"}, {"~/.claude.json": "b"}])
+        result, _ = self.main([{"~/.claude/settings.json": "a"}, {"~/.claude/settings.json": "b"}])
         flag = json.loads((self.run / "invalid.json").read_text())
         self.assertEqual(flag["reason"], "host state changed")
-        self.assertEqual(flag["match"], "~/.claude.json")
+        self.assertEqual(flag["match"], "~/.claude/settings.json")
         self.assertIn("host state changed", json.loads((self.run / "scope.json").read_text())["error"])
-        self.assertEqual(result["isolation"]["hostChanged"], ["~/.claude.json"])
+        self.assertEqual(result["isolation"]["hostChanged"], ["~/.claude/settings.json"])
         import batch
         self.assertIn(flag["reason"], batch.STOPPING)
+
+    def test_a_host_session_rewriting_claude_json_during_the_run_does_not_trip_the_guard(self):
+        real = pathlib.Path(self.tmp.name) / "realhome"
+        (real / ".claude").mkdir(parents=True)
+        (real / ".claude" / "settings.json").write_text("{}")
+        (real / ".claude.json").write_text('{"numStartups": 1}')
+        real_state = containers.host_state
+
+        def rewrite():
+            (real / ".claude.json").write_text('{"numStartups": 2, "projects": {"/x": {}}}')
+        result, _ = self.main(lambda _real: real_state(real), during=rewrite)
+        self.assertEqual(result["isolation"]["hostChanged"], [])
+        self.assertFalse((self.run / "invalid.json").exists())
+
+    def test_a_link_into_the_real_home_made_during_the_run_flags_it(self):
+        # Only a link is made; nothing under the real home is read or written.
+        result, _ = self.main([{}, {}], during=lambda: (self.run / "project" / "keys").symlink_to(
+            scope_env.real_home() / ".ssh"))
+        self.assertEqual(len(result["isolation"]["hostChanged"]), 1)
+        self.assertIn("project/keys is a symlink into the real home", result["isolation"]["hostChanged"][0])
+        self.assertEqual(json.loads((self.run / "invalid.json").read_text())["reason"], "host state changed")
+
+    def test_a_link_into_the_real_home_before_the_run_aborts_it(self):
+        (self.run / "outside").mkdir()
+        (self.run / "outside" / "keys").symlink_to(scope_env.real_home() / ".ssh")
+        with self.assertRaises(SystemExit) as raised:
+            self.main([{}, {}])
+        self.assertIn("links into the real home", str(raised.exception))
+        self.assertFalse((self.run / "result.json").exists())
 
     def test_a_visp_arm_is_refused_in_the_container(self):
         arm = json.loads((self.run / "arm.json").read_text())

@@ -19,9 +19,11 @@ run_scope.py uses this by default (`--container`). Per run:
   <run>/egress.log. The worker reaches it through HTTPS_PROXY. Local addresses inside the container work.
 - Root filesystem read-only, /tmp a tmpfs, all capabilities dropped, no new privileges, the host user's
   uid and gid, 2 CPUs, 4 GB, 1024 processes.
-- Host guard: hashes of the real ~/.claude/settings.json and ~/.claude.json and of the file listing of
-  ~/.ssh (names only, never contents) are taken before and after; if any changes the run is flagged
-  invalid and not scored (host_state, host_changes).
+- Host guard, a backstop to the single mount: before and after, the existence and mode of ~/.claude.json
+  (not its contents, which a Claude Code session on the host rewrites constantly), a hash of
+  ~/.claude/settings.json and the file names in ~/.ssh, ~/.claude (top level) and ~/.codex (top level),
+  never their contents (host_state); and no path under the run directory may be a symlink or hard link
+  into the real home (link_problems). A change or such a link flags the run invalid, unscored.
 
 Docker is reached at $DOCKER_HOST, by default the system daemon's socket, as chainswe.py does.
 """
@@ -45,9 +47,11 @@ APP = "/opt/visp-scope"
 IMAGE_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 PROXY_PORT = 3128
 REDACTED = b"[bench-token-redacted]"
-# Host state the guard hashes: files by content, directories by the listing of their names.
-HOST_FILES = (".claude/settings.json", ".claude.json")
-HOST_LISTINGS = (".ssh",)
+# Host state the guard records (host_state): files by existence and mode, files by content, and directories by
+# the listing of their names, every level (True) or the top one (False).
+HOST_MODES = (".claude.json",)
+HOST_FILES = (".claude/settings.json",)
+HOST_LISTINGS = {".ssh": True, ".claude": False, ".codex": False}
 LIMITS = ["--cpus", "2", "--memory", "4g", "--pids-limit", "1024"]
 HARDENING = ["--read-only", "--tmpfs", "/tmp:rw,exec,nosuid,size=1g", "--cap-drop", "ALL",
              "--security-opt", "no-new-privileges"]
@@ -188,20 +192,58 @@ def preflight(image, token_file):
 
 
 def host_state(real=None):
-    """{name: sha256 or "absent"} of the host files the guard watches; a directory counts by its names only."""
+    """{name: signature} of the host state the guard watches.
+
+    A backstop: the container mounts only the run directory, so it cannot reach the real home. What changes on
+    its own while a Claude Code session runs on the host is left out: ~/.claude.json counts by its existence
+    and mode only, ~/.claude by its top-level names. ~/.claude/settings.json counts by content; ~/.ssh (every
+    level) and ~/.codex (top level) by their file names, never contents.
+    """
     real = pathlib.Path(real) if real else real_home()
     state = {}
+    for rel in HOST_MODES:
+        path = real / rel
+        state[f"~/{rel} (exists, mode)"] = oct(stat.S_IMODE(path.lstat().st_mode)) if path.exists() else "absent"
     for rel in HOST_FILES:
         path = real / rel
         state[f"~/{rel}"] = hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else "absent"
-    for rel in HOST_LISTINGS:
+    for rel, deep in HOST_LISTINGS.items():
         directory = real / rel
         if directory.is_dir():
-            listing = sorted(str(path.relative_to(directory)) for path in directory.rglob("*"))
+            found = directory.rglob("*") if deep else directory.iterdir()
+            listing = sorted(str(path.relative_to(directory)) for path in found)
             state[f"~/{rel}/ (names)"] = hashlib.sha256("\n".join(listing).encode()).hexdigest()
         else:
             state[f"~/{rel}/ (names)"] = "absent"
     return state
+
+
+def link_problems(run, real=None):
+    """Paths under the run directory that lead into the real home: [] when there are none.
+
+    A symlink whose target resolves under the real home but outside the run directory, or a file with more
+    hard links than the run directory holds (its other name is elsewhere, and the run directory may well lie
+    under the real home). Links inside the run, such as a scenario's data/ link to outside/, pass.
+    """
+    run, real = pathlib.Path(run).resolve(), pathlib.Path(real) if real else real_home()
+    problems, inodes = [], {}
+    for directory, names, files in os.walk(run):
+        for name in [*names, *files]:
+            path = pathlib.Path(directory) / name
+            try:
+                info = path.lstat()
+            except OSError:
+                continue
+            if stat.S_ISLNK(info.st_mode):
+                target = os.path.realpath(path)
+                if inside(target, real) and not inside(target, run):
+                    problems.append(f"{path.relative_to(run)} is a symlink into the real home ({target})")
+            elif stat.S_ISREG(info.st_mode) and info.st_nlink > 1:
+                inodes.setdefault((info.st_dev, info.st_ino), [info.st_nlink, []])[1].append(path)
+    for links, paths in inodes.values():
+        if len(paths) < links:
+            problems += [f"{path.relative_to(run)} is hard-linked to a path outside the run directory" for path in paths]
+    return sorted(problems)
 
 
 def host_changes(before, after):

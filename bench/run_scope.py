@@ -15,8 +15,9 @@ last, result.json, so a run is finished only once it is judged. No model judges 
 By default (`--container`) the worker runs in the scope image (scope/Dockerfile) with the bench-only token
 from --token-file, the run directory as its only mount, no host environment, and a network that reaches
 only the allowed hosts through an egress proxy (scope_container.py). result.json records the isolation
-under "isolation". The run is flagged invalid (invalid.json) and not scored if the host's
-~/.claude/settings.json, ~/.claude.json or ~/.ssh file listing changed while it ran. A VISP arm cannot run
+under "isolation". The run is flagged invalid (invalid.json) and not scored if the host state the guard
+watches changed while it ran, or the run directory gained a link into the real home (scope_container.host_state,
+link_problems). A VISP arm cannot run
 in the container yet: its build is not in the image. `--no-container` runs the worker on the host as
 before; the run then aborts before the worker starts if its HOME is the real home or a path under the fake
 home links into it (scope_env.check_home_isolation), which the sign-in link materialize() makes always
@@ -97,6 +98,9 @@ def run_in_container(run, arm, args):
         raise SystemExit("run aborted: " + "; ".join(problems))
     removed = drop_host_signin(run)
     check_home_isolation(run / "home", run)
+    links = containers.link_problems(run)
+    if links:
+        raise SystemExit("run aborted: the run directory links into the real home:\n  - " + "\n  - ".join(links))
     token = containers.read_token(args.token_file)
     real = real_home()
     host_before = containers.host_state(real)
@@ -108,7 +112,8 @@ def run_in_container(run, arm, args):
     host_after = containers.host_state(real)
     leaks = containers.redact_files(run, token)
     result = json.loads(containers.redact_text(json.dumps(result), token))
-    changed = containers.host_changes(host_before, host_after)
+    # A link the worker made into the real home would let a later host-side step (scoring) reach it.
+    changed = containers.host_changes(host_before, host_after) + containers.link_problems(run)
     result["claudeProjects"] = str(run.resolve() / "home" / ".claude" / "projects")
     # The CLI that ran is the image's, not the one on the host's PATH that run_session recorded.
     result["claudeVersion"] = (str(facts.get("claude") or "").split() or [None])[0]
