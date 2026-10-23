@@ -49,7 +49,7 @@ import threading
 import time
 
 from chains import is_chain, step_files
-from common import RUNS, stop_recorded
+from common import RUNS, claude_version, stop_recorded
 from judge import CHECKLISTS, GAMES
 from presets import preset, split_worker_modes, visp_build, worker_env
 from run_carryover import batch_mode, planned_sessions
@@ -341,8 +341,18 @@ def drive(args, tasks, arms, runs, extra=None):
     try:
         known = {entry["name"] for entry in runs}
         kept = [entry for entry in (previous or {}).get("runs", []) if entry["name"] not in known]
-        manifest = {"batch": args.batch, "preset": args.preset, "settings": settings, "tasks": tasks,
-                    "arms": [{"label": name, "arm": arm} for name, arm in arms], "reps": args.reps,
+        # A later pass with fewer arms or tasks keeps the arms and tasks of the runs it keeps.
+        now = {name for name, _ in arms}
+        carried = [arm for arm in (previous or {}).get("arms", [])
+                   if arm["label"] not in now and any(entry["label"] == arm["label"] for entry in kept)]
+        version = claude_version()
+        if previous and previous.get("claudeVersion") not in (None, version):
+            log(directory, f"warning: this batch was started with Claude Code {previous['claudeVersion']}, "
+                           f"the one on PATH is {version}; runs of one batch should share a version")
+        manifest = {"batch": args.batch, "preset": args.preset, "settings": settings,
+                    "tasks": list(dict.fromkeys([*tasks, *(entry["task"] for entry in kept)])),
+                    "arms": [{"label": name, "arm": arm} for name, arm in arms] + carried, "reps": args.reps,
+                    "claudeVersion": version,
                     "created": (previous or {}).get("created") or time.strftime("%Y-%m-%dT%H:%M:%S"),
                     "driverPid": os.getpid(), "spendCap": args.spend_cap, "runs": runs + kept, **(extra or {})}
         manifest_path.write_text(json.dumps(manifest, indent=2))

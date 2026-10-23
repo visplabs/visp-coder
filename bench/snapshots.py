@@ -10,11 +10,17 @@ task.
 A source is eligible when its session-1 README states the item cap on no line other than the
 create-item bullet (the detector of b3-why-forget.md section 2.3: 29 of the 100 b3 and b3-pilot
 snapshots have such a line, and 25 of those 29 carried the cap; 17 of the other 71 did) and its code
-names the cap with a constant. Each eligible snapshot is restored into a new run in two variants:
+names the cap with a constant. Each eligible snapshot is restored into a new run in up to four variants:
 
-- control:      the snapshot as session 1 left it.
-- readme-scope: one line added to the README contract, a quote of the request's own convention
-                (tasks/archive-carryover/conventions.md) with the constant instead of the number.
+- control:         the snapshot as session 1 left it, the second request as the arm ran it.
+- oracle:          the same snapshot, the second request followed by the convention in the user's words
+                   (tasks/archive-carryover/conventions.md, the plain task's, whatever the source was). The ceiling.
+- readme-natural:  one line added to the README after its Errors line, worded as the 29 README sentences that
+                   were there already were ("item quantity above N"), naming the constant. No scope wording.
+- claudemd-line:   the same line in a CLAUDE.md block (Claude Code loads CLAUDE.md and skips AGENTS.md when it
+                   exists, so it is CLAUDE.md), the README unchanged.
+
+Every variant of a snapshot is one run of the same batch, so they share the time and the Claude Code version.
 
 The new run has session1/ (the source's result, hidden-stage1.json and carriers.json, memory.tar,
 and the snapshot of the variant) and the second prompt of the source with the run's own paths. Nothing
@@ -30,7 +36,9 @@ import random
 import re
 import shutil
 import tarfile
+import time
 
+from common import claude_version
 from runfacts import invalid, is_finished
 
 BENCH = pathlib.Path(__file__).resolve().parent
@@ -38,13 +46,15 @@ SOURCE_BATCHES = ("b3", "b3-pilot")
 SOURCE_TASKS = ("archive-carryover", "archive-carryover-raised")
 SOURCE_ARMS = ("bare", "bare-automemory")
 TASK = "archive-carryover"
-VARIANTS = ("readme-scope", "control")
+VARIANTS = ("control", "oracle", "readme-natural", "claudemd-line")
+# The first two are queued first: the ceiling and the baseline every other variant is read against.
+FIRST = ("control", "oracle")
 # A README line that states the cap: the number or the constant. The create-item bullet
 # (`POST /v1/items`, no path after it) states it too and is the one line every snapshot has.
 CAP = re.compile(r"\b10[,_]?000\b|\bMAX_\w*QUANTITY\b")
 CREATE = re.compile(r"POST /v1/items`")
 CONSTANT = re.compile(r"^(MAX_\w*QUANTITY)\s*=\s*10000\b", re.MULTILINE)
-QUOTE = "Item quantity limit (the request's words): \"{}\""
+ERRORS = re.compile(r"^- Errors?:")
 
 
 def scope_lines(readme):
@@ -75,41 +85,77 @@ def constant_name(files):
 
 
 def convention(task=TASK):
-    """The session-1 convention about the cap, in the request's words (conventions.md)."""
-    for line in (BENCH / "tasks" / task / "conventions.md").read_text().splitlines():
-        if line.startswith("Items hold at most"):
-            return line.strip()
-    raise ValueError(f"no item-cap line in tasks/{task}/conventions.md")
+    """The session-1 conventions of the plain task, in the request's words (conventions.md)."""
+    return (BENCH / "tasks" / task / "conventions.md").read_text().strip()
 
 
-def scope_sentence(constant):
-    """The README line for a snapshot: the convention, quoted, naming the constant instead of the number."""
-    words = convention()
-    if "10000" not in words:
-        raise ValueError(f"the convention does not name 10000: {words}")
-    return "- " + QUOTE.format(words.replace("10000", f"`{constant}`"))
+def oracle_prompt(second):
+    """The second request with the conventions after it, as setup_arm.py writes prompt2-oracle.txt.
+
+    `second` is the source's prompt2.txt. The conventions are the plain task's: a -raised source's own
+    conventions.md names the raised limit, which its snapshot (taken before that) does not have.
+    """
+    return f"{second}\n{convention()}\n"
 
 
-def insert_sentence(readme, sentence):
-    """The README with the sentence as a new bullet after the create-item bullet (else at the end)."""
+def limit_line(constant):
+    """One natural line about the cap, as the README sentences written in session 1 read."""
+    return f"- Limits: item quantity above 10000 (`{constant}`) is 422 `invalid_request`."
+
+
+def claude_md(existing, constant):
+    """A CLAUDE.md with the line in a Limits block (appended when the snapshot already has one)."""
+    block = f"## Limits\n\n{limit_line(constant)}\n"
+    if existing:
+        return existing.rstrip("\n") + "\n\n" + block
+    return f"# Project notes\n\n{block}"
+
+
+def insert_line(readme, line):
+    """The README with the line as a new bullet after its Errors line, else after the create-item bullet,
+    else at the end."""
     lines = readme.split("\n")
-    at = next((i for i, line in enumerate(lines) if CREATE.search(line)), None)
+    at = next((i for i, text in enumerate(lines) if ERRORS.match(text)), None)
     if at is None:
-        return readme.rstrip("\n") + "\n\n" + sentence + "\n"
-    return "\n".join(lines[:at + 1] + [sentence] + lines[at + 1:])
+        at = next((i for i, text in enumerate(lines) if CREATE.search(text)), None)
+    if at is None:
+        return readme.rstrip("\n") + "\n\n" + line + "\n"
+    return "\n".join(lines[:at + 1] + [line] + lines[at + 1:])
 
 
-def rewrite(source, target, sentence):
-    """Copy a snapshot tar, adding the sentence to its README. Other members are copied unchanged."""
+def rewrite(source, target, edits):
+    """Copy a snapshot tar, replacing or adding files. Other members are copied unchanged.
+
+    `edits` maps a file name to a function from its old text (None when the snapshot lacks it) to its new text.
+    """
     with tarfile.open(source) as old, tarfile.open(target, "w") as new:
         for member in old.getmembers():
             data = old.extractfile(member) if member.isfile() else None
-            if member.name == "README.md":
-                text = insert_sentence(data.read().decode(), sentence).encode()
+            if member.name in edits:
+                text = edits[member.name](data.read().decode()).encode()
                 member.size = len(text)
                 new.addfile(member, io.BytesIO(text))
             else:
                 new.addfile(member, data)
+        for name in edits.keys() - set(old.getnames()):
+            text = edits[name](None).encode()
+            info = tarfile.TarInfo(name)
+            info.size, info.mode, info.mtime = len(text), 0o644, int(time.time())
+            new.addfile(info, io.BytesIO(text))
+
+
+def edits_for(variant, constant):
+    """The file edits a variant makes to the snapshot (none for control and oracle)."""
+    if variant == "readme-natural":
+        return {"README.md": lambda text: insert_line(text, limit_line(constant))}
+    if variant == "claudemd-line":
+        return {"CLAUDE.md": lambda text: claude_md(text, constant)}
+    return {}
+
+
+def session_mode(variant):
+    """The run_carryover mode of a variant's second session: oracle states the conventions, the rest are fresh."""
+    return "oracle" if variant == "oracle" else "fresh"
 
 
 def eligible(root, batches=SOURCE_BATCHES):
@@ -167,39 +213,43 @@ def entries(batch, selected, every, variants, timeout=2700):
 
     A source's number is its place among `every` eligible source of its arm, not among the sample,
     so its run names stay the same whatever --limit selected. Both variants of a source share the
-    number. The queue goes by number, then arm, then variant.
+    number. The queue runs control and oracle first, then the rest, each by number, arm, then variant.
     """
     numbers = {source["run"]: 1 + sum(1 for other in every if other["arm"] == source["arm"]
                                       and other["run"] < source["run"]) for source in every}
-    runs = []
-    for source in sorted(selected, key=lambda s: (numbers[s["run"]], s["arm"])):
-        for variant in variants:
-            runs.append({"name": run_name(batch, source["arm"], variant, numbers[source["run"]]), "task": TASK,
-                         "kind": "carryover", "arm": source["arm"], "label": f"{source['arm']}-{variant}",
-                         "rep": numbers[source["run"]], "timeout": timeout, "twoSessions": True, "mode": "fresh",
-                         "snapshot": {"source": source["run"], "variant": variant, "constant": source["constant"]},
-                         "note": f"{variant} of {source['run']}"})
-    return runs
+    pairs = sorted(((variant, source) for variant in variants for source in selected),
+                   key=lambda pair: (pair[0] not in FIRST, numbers[pair[1]["run"]], pair[1]["arm"],
+                                     VARIANTS.index(pair[0])))
+    return [{"name": run_name(batch, source["arm"], variant, numbers[source["run"]]), "task": TASK,
+             "kind": "carryover", "arm": source["arm"], "label": f"{source['arm']}-{variant}",
+             "rep": numbers[source["run"]], "timeout": timeout, "twoSessions": True, "mode": session_mode(variant),
+             "snapshot": {"source": source["run"], "variant": variant, "constant": source["constant"]},
+             "note": f"{variant} of {source['run']}"} for variant, source in pairs]
 
 
-def prepare(root, entry, preset_name):
-    """Make the run directory of a planned snapshot rerun under root/runs, ready for snapshot_rerun.py --run."""
+def prepare(root, entry, preset_name, version=None):
+    """Make the run directory of a planned snapshot rerun under root/runs, ready for snapshot_rerun.py --run.
+
+    `version` is the Claude Code version to record (default: the one on PATH). The source's own is kept
+    as sourceClaudeVersion (None for the runs made before arm.json recorded it).
+    """
     plan = entry["snapshot"]
     source = root / "runs" / plan["source"]
     run = root / "runs" / entry["name"]
     arm = json.loads((source / "arm.json").read_text())
     if arm.get("preset") != preset_name:
         raise ValueError(f"{plan['source']} was made with preset {arm.get('preset')}, not {preset_name}")
+    if plan["variant"] not in VARIANTS:
+        raise ValueError(f"unknown variant {plan['variant']}")
     first = run / "session1"
     first.mkdir(parents=True)
     (run / "project").mkdir()
     snapshot = source / "session1" / "snapshot.tar"
-    if plan["variant"] == "readme-scope":
-        rewrite(snapshot, first / "snapshot.tar", scope_sentence(plan["constant"]))
-    elif plan["variant"] == "control":
-        shutil.copyfile(snapshot, first / "snapshot.tar")
+    edits = edits_for(plan["variant"], plan["constant"])
+    if edits:
+        rewrite(snapshot, first / "snapshot.tar", edits)
     else:
-        raise ValueError(f"unknown variant {plan['variant']}")
+        shutil.copyfile(snapshot, first / "snapshot.tar")
     for name in ("hidden-stage1.json", "carriers.json", "memory.tar"):
         if (source / "session1" / name).is_file():
             shutil.copyfile(source / "session1" / name, first / name)
@@ -207,11 +257,19 @@ def prepare(root, entry, preset_name):
     (first / "result.json").write_text(json.dumps(
         {**result, "run": entry["name"], "restoredFrom": plan["source"]}, indent=2))
     # The prompts name the run's paths: the project directory and the auto memory beside it.
-    for prompt in sorted(source.glob("prompt*.txt")):
-        text = prompt.read_text()
+    second = None
+    for name in ("prompt.txt", "prompt2.txt"):
+        text = (source / name).read_text()
         # The run directory the prompt was written for (the source's real path, even if it is reached by a link).
         named = re.search(r"Your project directory is (\S+)/project\.", text)
-        (run / prompt.name).write_text(text.replace(named.group(1) if named else str(source), str(run)))
-    (run / "arm.json").write_text(json.dumps({**arm, "task": TASK, "snapshotRerun": {
-        "source": plan["source"], "variant": plan["variant"], "constant": plan["constant"],
-        "sentence": scope_sentence(plan["constant"]) if plan["variant"] == "readme-scope" else None}}))
+        text = text.replace(named.group(1) if named else str(source), str(run))
+        (run / name).write_text(text)
+        second = text if name == "prompt2.txt" else second
+    (run / "prompt2-oracle.txt").write_text(oracle_prompt(second))
+    (run / "arm.json").write_text(json.dumps({
+        **arm, "task": TASK, "claudeVersion": version or claude_version(),
+        "sourceClaudeVersion": arm.get("claudeVersion"),
+        "snapshotRerun": {"source": plan["source"], "variant": plan["variant"], "constant": plan["constant"],
+                          "mode": session_mode(plan["variant"]),
+                          "added": limit_line(plan["constant"]) if edits else None,
+                          "in": sorted(edits) or None}}))
