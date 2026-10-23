@@ -38,7 +38,7 @@ import {
   type ProductSlice,
   type ProductState,
 } from "./model.js";
-import { changeEscalation, featureProfile, profileSettings } from "./profile.js";
+import { changeEscalation, escalatedReviewer, featureProfile, profileSettings } from "./profile.js";
 import { runRegressionGate } from "./regression/regression-gate.js";
 import {
   type RegressionGateReport,
@@ -231,6 +231,7 @@ async function finishExecution(
     captures: [...record.state.captures, ...pictures.captures],
     ...(escalation ? { profileEscalation: escalation } : {}),
   };
+  Object.assign(next, escalatedReviewer(workspace, { ...record, state: next }));
   const current: ProductRecord = { ...record, state: next };
   const gaps = await executionGaps(workspace, current, slice, after.value, commands, executions);
   if (source !== after.value)

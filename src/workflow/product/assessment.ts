@@ -408,6 +408,9 @@ export function finalProductAssessmentGaps(
   /** VISP launches the reviewer, so a missing assessment is not the worker's to write. */
   launched = false,
 ): string[] {
+  // A lean feature with no reviewer (D13) is accepted on its checks: nobody would assess it. In
+  // batch B2 the reviewer-off arm asked for that assessment, and workers looped on accept and next.
+  if (record.state.criticLeanOff) return productFeedbackGaps(record, subject, slice);
   const latest = new Map(
     applicableReviews(record, subject)
       .filter(

@@ -555,6 +555,8 @@ export const productStateSchema = z
     criticDefault: historicalCriticConfigSchema.optional(),
     criticBudgetVersion: z.literal(1).optional(),
     criticEnabled: z.boolean().optional(),
+    /** The lean profile turned the reviewer off (no critic mode was set); escalation turns it on. */
+    criticLeanOff: z.boolean().optional(),
     criticManual: z.boolean().optional(),
     userFeedback: z.array(userFeedbackRecordSchema).optional(),
     checkpoints: z

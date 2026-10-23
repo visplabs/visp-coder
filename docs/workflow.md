@@ -161,13 +161,15 @@ After a failure, `work` includes the failing output and says whether it describe
 | --- | --- | --- |
 | Slices | One slice for the whole request (`visp work --check`), unless the user asks for parts | Any number, planned in the brief |
 | Picture requests | Drafted whole before any check (`draftFirst: visual`) | Check first |
-| Review | One review when the feature is done (`reviewCadence: feature`), by `critic.leanModel` | Each slice, by `critic.model` |
+| Review | None unless `critic.mode` is set (accepted on its checks); with a mode set, one review when the feature is done (`reviewCadence: feature`), by `critic.leanModel` | Each slice, by `critic.model` |
 | Review rounds | At most two; the second only while a required finding is open | Up to `critic.maxCalls` |
 | Reviewer findings | Gaps against the request are required; the rest are notes (`requestGaps: required`) | The reviewer's own labels |
 | Independent tester | None on a new project | On a new project |
 | Regression gate | `advise` | `advise` |
 
 Both profiles keep the verbatim request capture, project rules, earlier-request recall, declared scope with hook enforcement, and the requirement listing below. A switch set in `visp.yml` (`draftFirst`, `reviewCadence`, `requestGaps`) wins over the profile.
+
+**No reviewer by default.** A lean feature runs no VISP reviewer unless a critic mode is set (`critic.mode` or the legacy `critic.enabled` in `visp.yml`, or your personal critic defaults): in batch B2, lean features with and without VISP's reviewer passed the same hidden checks and probes, and the reviewer cost more. Such a feature closes and is accepted on its checks, with no reviewer assessment asked for. The critic's launch and model stay configured, so the rule reader and recall still run, and a feature that escalates to the full profile turns on the full profile's reviewer at its next `visp done`.
 
 **The lean reviewer.** Under `critic.harness: claude-code` a lean feature is reviewed by `claude-haiku-5-5` unless `critic.leanModel` names another; other hosts use `critic.model`. That Haiku reviewer runs at `low` reasoning effort unless `critic.leanReasoningEffort` says otherwise (other hosts keep `critic.reasoningEffort`; `visp init` sets Codex to `medium`): at `high`, the Haiku reviewer thought for about 32k tokens and took 150–176 s per review in batch leandef1 (Sonnet at high: 22–75 s), close to the 180 s call timeout, so reviews timed out and `done` and `next` waited out their budgets. In the October critic ablation (picture tasks, five runs per arm) a Haiku 5.5 reviewer scored 7.53 against Sonnet's 7.60, within noise, at about a third of the cost per run ($0.13 against $0.37). The host's own review was not chosen: it spends the worker's tokens, VISP cannot bound or observe it, and in September weak workers skipped the handoff. The reviewer is pinned when the feature starts. The same model reads the standing rules in a lean feature's request (on 8 held-out prompts with 15 rules, Haiku 5.5 found all 15, as Sonnet 5.5 did); choosing earlier decisions stays with `critic.model`.
 

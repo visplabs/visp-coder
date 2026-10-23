@@ -125,7 +125,8 @@ export async function runProductDoneReviewed(
     done.value.task,
     done.value.subjectDigest,
   );
-  if (!checksPassed(done.value, state, owed)) return done;
+  // A lean feature with no reviewer (D13) closes on its checks; nothing is started or reported.
+  if (!checksPassed(done.value, state, owed) || record?.state.criticLeanOff) return done;
   const skipped = await reviewNotNeeded(
     workspace,
     feature,
