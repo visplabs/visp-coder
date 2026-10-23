@@ -145,6 +145,22 @@ describe("recall of earlier requests", () => {
     expect(state).toMatchObject({ criticEnabled: false, criticLeanOff: true });
   });
 
+  // D13 was measured with Claude Code only (B2); a Codex project keeps its pinned reviewer.
+  it("keeps the reviewer of a lean feature under a Codex reviewer", async () => {
+    await project({}, { harness: "codex", launch: "codex-exec" }, "lean");
+    gate.mockResolvedValue([]);
+    const created = await feature("Archive items", ARCHIVING);
+    const state = JSON.parse(
+      await readFile(
+        join(workspace?.root ?? "", ".visp/features", created.brief.feature, "product-state.json"),
+        "utf8",
+      ),
+    );
+    expect(state.criticEnabled).toBe(true);
+    expect(state.criticLeanOff).toBeUndefined();
+    expect(state.criticDefault).toMatchObject({ harness: "codex" });
+  });
+
   // VISP calls a model only when the project lets it launch the reviewer.
   it("does not recall with a reviewer the host runs", async () => {
     await project({}, { enabled: true, harness: "claude-code" });

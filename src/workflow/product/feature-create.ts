@@ -299,8 +299,9 @@ interface FeatureCriticPolicy {
 }
 
 /**
- * The reviewer a new feature pins. A lean feature reviews with the lean model, and runs no
- * reviewer at all unless a critic mode was set (D13): in batch B2 lean with and without VISP's
+ * The reviewer a new feature pins. A lean feature reviews with the lean model; under a Claude
+ * Code reviewer it runs none at all unless a critic mode was set (D13): in batch B2 (Claude Code,
+ * Haiku 5.5 worker) lean with and without VISP's
  * reviewer scored the same hidden checks and probes, and the reviewer cost more. It keeps the
  * full reviewer's configuration, which an escalation to the full profile turns on.
  */
@@ -311,7 +312,12 @@ function featureCritic(
 ): FeatureCriticPolicy & { leanOff?: true } {
   const { policy } = resolved;
   if (profile.name !== "lean" || !policy.config) return policy;
-  if (resolved.sources.mode.source === "built-in" && policy.enabled)
+  // B2 measured Claude Code with a Haiku worker only; other hosts keep their pinned reviewer.
+  if (
+    resolved.sources.mode.source === "built-in" &&
+    policy.enabled &&
+    policy.config.harness === "claude-code"
+  )
     return { ...policy, enabled: false, leanOff: true };
   return { ...policy, config: leanCriticConfig(workspace, policy.config) };
 }
