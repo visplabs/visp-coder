@@ -43,6 +43,8 @@ def raised(base, cap_checks, old_limit):
     return results
 
 
+CREATE = "create exactly 50000 succeeds"
+PLAIN_RESTOCK = "new:restock returns and persists quantity with existing holds"
 ALL = {role: True for role in carry.ROLES}
 NONE = {role: False for role in carry.ROLES}
 PASSING = real("co1-archive-carryover-bare-1")
@@ -111,6 +113,33 @@ class RaisedLabels(unittest.TestCase):
         self.assertEqual(self.label({**ALL, "boundary": False, "concurrent": False}, True)["carry"], "partial")
         # The cap checks pass but the replaced limit still holds: not current, not stale.
         self.assertEqual(self.label(ALL, False)["carry"], "partial")
+
+    def test_a_create_cap_back_at_10000_is_stale_not_forgot(self):
+        # The last session put the create cap back to 10000. 50000 cannot be created, so the items the
+        # four restock checks start from do not exist and all four fail, as they do when no cap is enforced.
+        for old in (True, False):
+            with self.subTest(restock_past_10000_works=old):
+                found = self.label(NONE, old, **{CREATE: False})
+                self.assertEqual(found["carry"], "stale")
+                self.assertIs(found["oldLimit"], old)
+
+    def test_no_cap_at_all_is_still_forgot_when_the_create_check_passes(self):
+        self.assertEqual(self.label(NONE, True)["carry"], "forgot")
+        self.assertTrue(next(r for r in raised(PASSING, NONE, True) if r["name"] == CREATE)["passed"])
+
+    def test_a_create_check_that_fails_beside_a_working_restock_cap_is_partial(self):
+        # Say the item body changed: creation works but is not the body the check expects, so the
+        # boundary check fails with it. Rejection still works, so the old limit is not enforced anywhere.
+        found = self.label({**ALL, "boundary": False}, True, **{CREATE: False})
+        self.assertEqual(found["carry"], "partial")
+
+    def test_a_create_check_that_fails_in_a_service_whose_restock_does_not_work_is_partial(self):
+        found = self.label(NONE, False, **{CREATE: False, PLAIN_RESTOCK: False})
+        self.assertEqual(found["carry"], "partial")
+
+    def test_the_create_check_is_needed_for_a_label(self):
+        results = [r for r in raised(PASSING, ALL, True) if r["name"] != CREATE]
+        self.assertEqual(carry.outcome(RAISED, results)["carry"], "unknown")
 
     def test_a_restock_that_does_not_work_is_not_called_stale_or_forgot(self):
         broken = {"at_cap": True, "quantity": True, "boundary": False, "concurrent": False}

@@ -11,24 +11,30 @@ feature decisions of session 1 to session 2's paths; four of those checks are ab
 `archive-carryover` (cap 10000 from session 1): `carried` if all four pass, else `lost`.
 
 `archive-carryover-raised` (the intermediate session raised the cap to 50000): the task adds
-`restock past the replaced 10000 limit succeeds` (9000 + 6000 is accepted). Then:
+`restock past the replaced 10000 limit succeeds` (9000 + 6000 is accepted), and its core group has
+`create exactly 50000 succeeds`. Then:
 
 - `current`: the four cap checks and the past-the-old-limit check pass.
-- `stale`: the old limit is enforced: the past-the-old-limit, boundary and concurrent checks fail
-  while both rejection-only checks pass (a 10000 cap rejects 50000-and-over restocks too) and plain
-  restock works
-  (`restock returns and persists quantity with existing holds`, so a restock that rejects everything
-  is not called stale).
-- `forgot`: no cap is enforced: both rejection-only checks fail.
-- `partial`: anything else (a cap at some other value, an off-by-one, a race).
+- `stale`: the old limit is enforced, in one of two ways. In restock: the past-the-old-limit, boundary
+  and concurrent checks fail while both rejection-only checks pass (a 10000 cap rejects 50000-and-over
+  restocks too) and plain restock works (`restock returns and persists quantity with existing holds`,
+  so a restock that rejects everything is not called stale). In creation: `create exactly 50000
+  succeeds` fails, no restock cap check shows a working cap and plain restock works. A last session that
+  puts the create cap back to 10000 cannot create the items the four cap checks start from (49995 to
+  50000 units), so all four fail, exactly as they do when no cap is enforced; only the create check tells
+  the two apart.
+- `forgot`: no cap is enforced: both rejection-only checks fail although 50000 can be created.
+- `partial`: anything else (a cap at some other value, an off-by-one, a race, or a failed create check
+  beside a restock cap that works).
 - `unknown`: the result lacks the checks the label needs (hidden.json from another task or version).
 
 What the checks cannot tell: `stale` means "rejects what a low cap rejects and cannot grow an item
-past 15000"; a cap below 15000 that is not 10000 reads as `stale` too, and a cap between 15000 and
-50000 reads as `partial`. A restock that does not work at all (the plain-restock check fails) is
-`partial`, never `forgot` or `stale`. The four cap checks passed or failed together in all of co1
-and co2, and no co1 or co2 run is a -raised run, so the -raised labels are tested on results
-derived from the real check names, not on a real run.
+past 15000", or "cannot create 50000"; a restock cap below 15000 that is not 10000 reads as `stale` too,
+and so does a create limit below 50000, while a restock cap between 15000 and 50000 reads as `partial`.
+A restock that does not work at all (the plain-restock check fails) is `partial`, never `forgot` or
+`stale`. The four cap checks passed or failed together in all of co1 and co2, and no co1 or co2 run is a
+-raised run, so the -raised labels are tested on results derived from the real check names, not on a
+real run. In the 40 -raised runs of b3 every run created 50000, so none was stale in creation.
 
 The primary outcome is the carry: `carried` for archive-carryover, `current` for -raised.
 `hidden` is untouched; this reads the same hidden.json.
@@ -53,6 +59,7 @@ MAX_P = 0.05
 COUNTS = ("visp_carried", "visp_runs", "bare_carried", "bare_runs")
 OLD_LIMIT = "restock past the replaced 10000 limit"
 PLAIN_RESTOCK = "new:restock returns and persists quantity"
+CREATE_AT_CAP = "create exactly 50000 succeeds"  # core group: no prefix
 
 
 def find(results, fragment, group="memory:"):
@@ -74,12 +81,13 @@ def cap_checks(results):
 
 
 def outcome(task, results):
-    """{"carry": label, "capChecks": {role: passed}, "oldLimit": passed or None} for a carryover task, else None."""
+    """{"carry": label, "capChecks": {role: passed}, "oldLimit": passed or None, "createAtCap": passed or None}
+    for a carryover task, else None."""
     if task not in CARRY_TASKS:
         return None
     caps = cap_checks(results)
     record = {"carry": "unknown", "capChecks": {role: passed(result) for role, result in caps.items()},
-              "oldLimit": None}
+              "oldLimit": None, "createAtCap": None}
     if len(caps) != len(ROLES):
         return record
     if task == "archive-carryover":
@@ -87,12 +95,15 @@ def outcome(task, results):
         return record
     old = find(results, OLD_LIMIT)
     plain = next((r for r in results if r["name"].startswith(PLAIN_RESTOCK)), None)
-    if old is None or plain is None:
+    created = next((r for r in results if r["name"] == CREATE_AT_CAP), None)
+    if old is None or plain is None or created is None:
         return record
-    record["oldLimit"] = passed(old)
+    record["oldLimit"], record["createAtCap"] = passed(old), passed(created)
     rejecting = passed(caps["at_cap"]) and passed(caps["quantity"])
     if all(passed(result) for result in caps.values()) and passed(old):
         record["carry"] = "current"
+    elif not passed(created) and not rejecting and passed(plain):
+        record["carry"] = "stale"
     elif not passed(caps["at_cap"]) and not passed(caps["quantity"]) and passed(plain):
         record["carry"] = "forgot"
     elif rejecting and passed(plain) and not any(passed(check) for check in (old, caps["boundary"], caps["concurrent"])):
