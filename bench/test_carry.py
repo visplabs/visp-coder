@@ -6,7 +6,9 @@ archive-carryover (the projects are not copied). Those runs are all archive-carr
 archive-carryover-raised run exists yet, so the -raised cases are built from the real
 archive-carryover check names with the cap 50000 and the check the -raised task adds.
 """
+import itertools
 import json
+import math
 import pathlib
 import sys
 import tempfile
@@ -41,6 +43,8 @@ def raised(base, cap_checks, old_limit):
     return results
 
 
+CREATE = "create exactly 50000 succeeds"
+PLAIN_RESTOCK = "new:restock returns and persists quantity with existing holds"
 ALL = {role: True for role in carry.ROLES}
 NONE = {role: False for role in carry.ROLES}
 PASSING = real("co1-archive-carryover-bare-1")
@@ -110,6 +114,33 @@ class RaisedLabels(unittest.TestCase):
         # The cap checks pass but the replaced limit still holds: not current, not stale.
         self.assertEqual(self.label(ALL, False)["carry"], "partial")
 
+    def test_a_create_cap_back_at_10000_is_stale_not_forgot(self):
+        # The last session put the create cap back to 10000. 50000 cannot be created, so the items the
+        # four restock checks start from do not exist and all four fail, as they do when no cap is enforced.
+        for old in (True, False):
+            with self.subTest(restock_past_10000_works=old):
+                found = self.label(NONE, old, **{CREATE: False})
+                self.assertEqual(found["carry"], "stale")
+                self.assertIs(found["oldLimit"], old)
+
+    def test_no_cap_at_all_is_still_forgot_when_the_create_check_passes(self):
+        self.assertEqual(self.label(NONE, True)["carry"], "forgot")
+        self.assertTrue(next(r for r in raised(PASSING, NONE, True) if r["name"] == CREATE)["passed"])
+
+    def test_a_create_check_that_fails_beside_a_working_restock_cap_is_partial(self):
+        # Say the item body changed: creation works but is not the body the check expects, so the
+        # boundary check fails with it. Rejection still works, so the old limit is not enforced anywhere.
+        found = self.label({**ALL, "boundary": False}, True, **{CREATE: False})
+        self.assertEqual(found["carry"], "partial")
+
+    def test_a_create_check_that_fails_in_a_service_whose_restock_does_not_work_is_partial(self):
+        found = self.label(NONE, False, **{CREATE: False, PLAIN_RESTOCK: False})
+        self.assertEqual(found["carry"], "partial")
+
+    def test_the_create_check_is_needed_for_a_label(self):
+        results = [r for r in raised(PASSING, ALL, True) if r["name"] != CREATE]
+        self.assertEqual(carry.outcome(RAISED, results)["carry"], "unknown")
+
     def test_a_restock_that_does_not_work_is_not_called_stale_or_forgot(self):
         broken = {"at_cap": True, "quantity": True, "boundary": False, "concurrent": False}
         results = raised(PASSING, broken, False)
@@ -127,23 +158,61 @@ class RaisedLabels(unittest.TestCase):
         self.assertIsNone(carry.outcome("reservations-api", PASSING))
 
 
+def brute_force(strata):
+    """P(VISP's carried runs summed over the tasks >= the observed sum), by listing every table. Floats."""
+    def pmf(n1, n2, carried, k):
+        if k < max(0, carried - n2) or k > min(n1, carried):
+            return 0.0
+        return math.comb(n1, k) * math.comb(n2, carried - k) / math.comb(n1 + n2, carried)
+
+    seen = sum(x1 for x1, _, _, _ in strata)
+    ranges = [range(max(0, x1 + x2 - n2), min(n1, x1 + x2) + 1) for x1, n1, x2, n2 in strata]
+    total = 0.0
+    for counts in itertools.product(*ranges):
+        if sum(counts) >= seen:
+            total += math.prod(pmf(n1, n2, x1 + x2, k) for k, (x1, n1, x2, n2) in zip(counts, strata))
+    return total
+
+
 class Statistics(unittest.TestCase):
-    def test_fisher_matches_the_hypergeometric_by_hand(self):
+    def test_one_task_is_fishers_exact_test(self):
         # 10 of 10 against 14 of 20: C(20,14) / C(30,24).
-        self.assertAlmostEqual(carry.fisher_greater(10, 10, 14, 20), 38760 / 593775)
-        self.assertAlmostEqual(carry.fisher_greater(10, 10, 14, 20), 0.0653, places=4)
+        self.assertAlmostEqual(carry.stratified_greater([(10, 10, 14, 20)]), 38760 / 593775)
+        self.assertAlmostEqual(carry.stratified_greater([(10, 10, 14, 20)]), 0.0653, places=4)
 
     def test_equal_rates_give_a_p_near_one_and_a_lower_rate_a_p_above_one_half(self):
-        self.assertGreater(carry.fisher_greater(5, 10, 10, 20), 0.5)
-        self.assertGreater(carry.fisher_greater(3, 10, 10, 20), 0.9)
+        self.assertGreater(carry.stratified_greater([(5, 10, 10, 20)]), 0.5)
+        self.assertGreater(carry.stratified_greater([(3, 10, 10, 20)]), 0.9)
 
     def test_the_p_is_a_probability_and_counts_the_observed_table(self):
-        self.assertAlmostEqual(carry.fisher_greater(0, 5, 0, 5), 1.0)
-        self.assertAlmostEqual(carry.fisher_greater(5, 5, 0, 5), 1 / 252)
+        self.assertAlmostEqual(carry.stratified_greater([(0, 5, 0, 5)]), 1.0)
+        self.assertAlmostEqual(carry.stratified_greater([(5, 5, 0, 5)]), 1 / 252)
 
     def test_the_planned_power_case(self):
-        # Pooled over two tasks: 20 VISP runs all carrying against 40 bare runs at 70%: p is below 0.01.
-        self.assertLess(carry.fisher_greater(20, 20, 28, 40), 0.01)
+        # One task: 20 VISP runs all carrying against 40 bare runs at 70%: p is below 0.01.
+        self.assertLess(carry.stratified_greater([(20, 20, 28, 40)]), 0.01)
+
+    def test_several_tasks_match_a_listing_of_every_table(self):
+        for strata in ([(3, 4, 1, 4), (2, 3, 1, 5)],
+                       [(10, 10, 14, 20), (7, 10, 8, 20)],
+                       [(4, 6, 2, 6), (1, 5, 3, 5), (6, 8, 3, 7)],
+                       [(45, 50, 45, 50), (9, 30, 15, 50)]):
+            with self.subTest(strata):
+                self.assertAlmostEqual(carry.stratified_greater(strata), brute_force(strata), places=12)
+
+    def test_the_tasks_are_summed_not_pooled(self):
+        # The case that fooled the pooled test: equal rates within each task (90% and 30%), but VISP ran
+        # mostly the high-rate task and bare mostly the low-rate one.
+        strata = [(54, 60, 18, 20), (6, 20, 18, 60)]
+        pooled = (sum(s[0] for s in strata), sum(s[1] for s in strata), sum(s[2] for s in strata), sum(s[3] for s in strata))
+        self.assertLess(carry.stratified_greater([pooled]), 0.001)
+        self.assertAlmostEqual(carry.stratified_greater(strata), 0.5849, places=4)
+
+    def test_a_task_where_every_run_agrees_adds_nothing(self):
+        informative = [(3, 4, 1, 4)]
+        every_run_carried, none_carried, one_arm_only = (5, 5, 5, 5), (0, 3, 0, 2), (4, 4, 0, 0)
+        self.assertAlmostEqual(carry.stratified_greater(informative + [every_run_carried, none_carried, one_arm_only]),
+                               carry.stratified_greater(informative))
 
 
 def row(run, arm, task, label, reruns=None):
@@ -184,7 +253,12 @@ class Table(unittest.TestCase):
         both = pairs["develop", "bare"]
         self.assertEqual((both["visp_carried"], both["visp_runs"], both["bare_carried"], both["bare_runs"]),
                          (17, 20, 22, 40))
-        self.assertAlmostEqual(both["p"], carry.fisher_greater(17, 20, 22, 40))
+        # One stratum per task: archive-carryover 10/10 against 14/20, -raised 7/10 against 8/20.
+        self.assertAlmostEqual(both["p"], carry.stratified_greater([(10, 10, 14, 20), (7, 10, 8, 20)]))
+        self.assertAlmostEqual(both["p"], 0.0155, places=4)
+        self.assertEqual([(t["task"], t["visp_carried"], t["visp_runs"], t["bare_carried"], t["bare_runs"])
+                          for t in both["per_task"]], [(ARCHIVE, 10, 10, 14, 20), (RAISED, 7, 10, 8, 20)])
+        self.assertEqual([round(100 * t["delta"]) for t in both["per_task"]], [30, 30])
         self.assertTrue(both["meets"])
         # The norecall arm ran one task, so the bare arm is counted on that task only.
         norecall = pairs["develop-norecall", "bare"]
@@ -195,7 +269,9 @@ class Table(unittest.TestCase):
     def test_the_table_prints_the_comparisons(self):
         text = carry.markdown(MANIFEST, self.rows())
         self.assertIn("| develop | bare | archive-carryover, archive-carryover-raised | 17/20 | 22/40 | +30 |", text)
-        self.assertIn("one-sided Fisher exact p", text)
+        self.assertIn("one-sided exact p, stratified by task", text)
+        self.assertIn("| develop | bare | archive-carryover | 10/10 | 14/20 | +30 |", text)
+        self.assertIn("| develop | bare | archive-carryover-raised | 7/10 | 8/20 | +30 |", text)
 
     def test_unlabelled_runs_are_listed_and_left_out_of_the_comparison(self):
         rows = self.rows() + [row("x-1", "develop", ARCHIVE, None)]
@@ -207,6 +283,85 @@ class Table(unittest.TestCase):
 
     def test_a_batch_without_carryover_tasks(self):
         self.assertIn("No carryover task", carry.markdown({"tasks": ["rainfall-chart"], "arms": []}, []))
+
+
+def cells(arm, task, runs, kept):
+    """`runs` valid runs of an arm on a task, `kept` of them carried."""
+    won, missed = ("carried", "lost") if task == ARCHIVE else ("current", "forgot")
+    return [row(f"{arm}-{task}-{i}", arm, task, won if i < kept else missed) for i in range(runs)]
+
+
+class TaskMix(unittest.TestCase):
+    """Runs dropped as invalid change an arm's mix of tasks; the comparison must not read that as a gain."""
+    MIX = {"tasks": [ARCHIVE, RAISED],
+           "arms": [{"label": "bare", "arm": "bare"}, {"label": "develop", "arm": "visp:develop"}]}
+
+    def pair(self, rows, tasks=None):
+        [found] = carry.comparisons(rows, carry.arms_of(self.MIX), tasks or self.MIX["tasks"])
+        return found
+
+    def runs(self, bare_archive, bare_raised, visp_archive, visp_raised):
+        """Each argument is (valid runs, carried)."""
+        return (cells("bare", ARCHIVE, *bare_archive) + cells("bare", RAISED, *bare_raised)
+                + cells("develop", ARCHIVE, *visp_archive) + cells("develop", RAISED, *visp_raised))
+
+    def test_identical_rates_with_raised_runs_lost_show_no_gain(self):
+        # Both arms carry 90% of archive-carryover and 30% of -raised, 50 runs of each planned (the cells of
+        # ten runs, five times over, so the carried counts are whole runs). VISP lost 20 of its -raised runs:
+        # pooled it is at 54 of 80 (67.5%) against bare's 60 of 100 (60%), +7.5 points from the mix alone.
+        found = self.pair(self.runs((50, 45), (50, 15), (50, 45), (30, 9)))
+        self.assertEqual((found["visp_carried"], found["visp_runs"], found["bare_carried"], found["bare_runs"]),
+                         (54, 80, 60, 100))
+        self.assertAlmostEqual(found["delta"], 0.075)
+        self.assertEqual([t["delta"] for t in found["per_task"]], [0, 0])
+        self.assertAlmostEqual(found["p"], 0.5777, places=4)
+        self.assertFalse(found["meets"])
+
+    def test_a_task_mix_alone_does_not_meet_the_gain_rule(self):
+        # The same rates again, VISP with 60 archive-carryover and 20 -raised runs, bare with 20 and 60.
+        # Pooled, VISP is 30 points ahead at p 0.0001, which the old rule called a gain.
+        rows = self.runs((20, 18), (60, 18), (60, 54), (20, 6))
+        found = self.pair(rows)
+        self.assertAlmostEqual(found["delta"], 0.30)
+        self.assertLess(carry.stratified_greater([(60, 80, 36, 80)]), 0.001)
+        self.assertEqual([t["delta"] for t in found["per_task"]], [0, 0])
+        self.assertAlmostEqual(found["p"], 0.5849, places=4)
+        self.assertFalse(found["meets"])
+
+    def test_a_gain_within_both_tasks_still_meets_the_rule(self):
+        found = self.pair(self.runs((10, 5), (10, 4), (10, 10), (10, 9)))
+        self.assertAlmostEqual(found["delta"], 0.5)
+        self.assertEqual([round(100 * t["delta"]) for t in found["per_task"]], [50, 50])
+        self.assertLess(found["p"], 0.001)
+        self.assertTrue(found["meets"])
+
+    def test_a_large_gain_that_is_not_significant_does_not_meet_the_rule(self):
+        found = self.pair(cells("bare", ARCHIVE, 5, 2) + cells("develop", ARCHIVE, 5, 4), [ARCHIVE])
+        self.assertAlmostEqual(found["delta"], 0.4)
+        self.assertGreater(found["p"], 0.05)
+        self.assertFalse(found["meets"])
+
+    def test_exactly_twenty_points_is_enough(self):
+        # 1.0 - 0.8 is 0.19999999999999996 in floating point, so the delta is compared in whole runs.
+        found = self.pair(cells("bare", ARCHIVE, 25, 20) + cells("develop", ARCHIVE, 25, 25), [ARCHIVE])
+        self.assertLess(found["p"], 0.05)
+        self.assertTrue(found["meets"])
+        short = self.pair(cells("bare", ARCHIVE, 25, 21) + cells("develop", ARCHIVE, 25, 25), [ARCHIVE])
+        self.assertFalse(short["meets"])
+
+    def test_a_task_one_arm_has_no_labelled_run_on_is_not_counted_for_the_other(self):
+        rows = (cells("bare", ARCHIVE, 20, 14) + cells("bare", RAISED, 20, 6)
+                + cells("develop", ARCHIVE, 20, 18) + [row("develop-unscored", "develop", RAISED, None)])
+        found = self.pair(rows)
+        self.assertEqual(found["tasks"], [ARCHIVE])
+        self.assertEqual((found["visp_carried"], found["visp_runs"], found["bare_carried"], found["bare_runs"]),
+                         (18, 20, 14, 20))
+
+    def test_the_table_names_the_stratified_test_and_prints_each_task(self):
+        text = carry.markdown(self.MIX, self.runs((50, 45), (50, 15), (50, 45), (30, 9)))
+        self.assertIn("| develop | bare | archive-carryover, archive-carryover-raised | 54/80 | 60/100 | +8 | 0.578 | no |", text)
+        self.assertIn("| develop | bare | archive-carryover | 45/50 | 45/50 | +0 |", text)
+        self.assertIn("| develop | bare | archive-carryover-raised | 9/30 | 15/50 | +0 |", text)
 
 
 class ReportFacts(unittest.TestCase):
