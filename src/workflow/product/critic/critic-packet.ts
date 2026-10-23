@@ -153,7 +153,7 @@ export async function criticPacket(
     current: {
       ...independent,
       sources: sources.value,
-      ...(sourceOnly ? { images: [], observationSequence: undefined } : {}),
+      ...(sourceOnly ? { images: [] } : {}),
       evidence,
     },
     ...(understanding

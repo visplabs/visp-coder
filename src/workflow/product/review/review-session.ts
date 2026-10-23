@@ -32,7 +32,8 @@ const sessionSchema = z
     version: z.literal(1),
     id: z.string().uuid(),
     selection: reviewSelectionSchema,
-    reviewMode: z.enum(["current", "observation-preview"]),
+    // Sessions prepared before the observation-preview mode was removed carry "current".
+    reviewMode: z.literal("current").optional(),
     evidenceIds: z.array(z.string()),
     generatedReferences: generatedSourceReferencesSchema.optional(),
     images: z.array(
@@ -80,7 +81,6 @@ export function prepareReviewSession(
       images: images.map(({ path, sha256 }) => ({ path, sha256 })),
       id,
       selection: bundle.selection,
-      reviewMode: workspace.config.workflow.reviewMode,
       generatedReferences: generatedSourceReferences(sources.value, bundle.sources),
       evidenceIds: deliveredReviewEvidenceIds(
         evidence,
@@ -186,7 +186,7 @@ export async function submitReviewSession(
     );
     if (!loaded.ok) return loaded;
     const session = loaded.value;
-    const bound = validateSessionBinding(workspace, record.value, session, options.task);
+    const bound = validateSessionBinding(record.value, session, options.task);
     if (!bound.ok) return bound;
     const evidence = await validateSessionEvidence(workspace, session, judgments.value);
     if (!evidence.ok) return evidence;
@@ -249,18 +249,10 @@ async function sessionGeneratedReferences(
 }
 
 function validateSessionBinding(
-  workspace: WorkspaceState,
   record: ProductRecord,
   session: z.infer<typeof sessionSchema>,
   task: string | undefined,
 ): Result<void> {
-  if (session.reviewMode !== workspace.config.workflow.reviewMode)
-    return err(
-      vispError(
-        "EVIDENCE_FAILED",
-        "Review mode changed; prepare a new session so its instructions and provenance agree",
-      ),
-    );
   if (
     session.selection.feature !== record.brief.feature ||
     (task !== undefined && session.selection.task !== task)

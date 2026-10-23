@@ -14,7 +14,6 @@ import {
   type ProductOutcome,
   type ProductSlice,
 } from "../model.js";
-import { observationSequence } from "../observation-preview.js";
 import { reproductionContextDigest } from "../reproduction-bindings.js";
 import type { ProductRecord } from "../store.js";
 import { productContractDigest } from "../subject.js";
@@ -128,9 +127,6 @@ export async function inspectSelectedImages(
     captures,
     [
       ...(selection.value?.images.map((entry) => entry.id) ?? []),
-      ...(workspace.config.workflow.reviewMode === "observation-preview" && !options.groups?.length
-        ? observationSequence(record, subject, slice).states.map((entry) => entry.id)
-        : []),
       ...reviewImageReferences(options, record, subject, slice, imageGroups.length > 0),
     ],
     imageGroups,

@@ -24,7 +24,6 @@ import {
   type ProductSlice,
   reviewerContextSchema,
 } from "../model.js";
-import type { observationSequence } from "../observation-preview.js";
 import { rulesForRequest } from "../project-rules.js";
 import {
   currentRegressionGate,
@@ -73,7 +72,6 @@ export interface ProductReviewOptions extends ProductSelection {
 }
 export interface ProductReviewBundle {
   readonly ambiguities?: readonly import("../tester/request-ambiguities.js").RequestAmbiguity[];
-  readonly observationSequence?: ReturnType<typeof observationSequence>;
   readonly policyVersion: typeof PRODUCT_REVIEW_POLICY;
   readonly feedbackPlan: ReturnType<typeof productFeedbackPlan>;
   readonly feature: string;
@@ -204,10 +202,7 @@ async function review(
   const gaps = [...reviewImageGaps(outcomes, images.gaps, captures.length > 0)];
   const challenges = productReviewChallenges(record, slice);
   let coverage = currentCoverage(record, subject.value);
-  const reviewer = reviewerContextSchema.safeParse({
-    ...(reviewerInput(options, latest?.reviewer) as object),
-    reviewMode: workspace.config.workflow.reviewMode,
-  });
+  const reviewer = reviewerContextSchema.safeParse(reviewerInput(options, latest?.reviewer));
   if (!reviewer.success)
     return err(
       vispError("ARTIFACT_INVALID", `Invalid reviewer context: ${reviewer.error.message}`),

@@ -75,6 +75,10 @@ const DECLARED = [
   [PYTHON, "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py", "-v"],
   [PYTHON, "-m", "unittest", "discover"],
   [PYTHON, "-I", "-m", "unittest", "discover", "-s", "tests", "-t", ".", "-v"],
+  // Flags that stand before another option, which a value-taking option would have swallowed.
+  [PYTHON, "-m", "unittest", "discover", "-v", "-s", "tests"],
+  [PYTHON, "-m", "unittest", "discover", "-s", "tests", "-v", "-p", "test_*.py"],
+  [PYTHON, "-m", "unittest", "discover", "-b", "-c", "-s", "tests"],
 ];
 
 describe.skipIf(!hasPython)("the narrowed form of a declared unittest discover check", () => {

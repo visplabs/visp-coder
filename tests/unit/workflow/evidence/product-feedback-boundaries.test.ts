@@ -544,14 +544,14 @@ it("schedules first-render visual judgment and detects repeated captures without
   expect(plan?.assess).toContain("theme is not aesthetic success");
   // The worker is sent to the review handoff by default, and to `visp done` when VISP launches it.
   expect(plan?.command).toContain("--handoff");
-  const launched = productFeedbackPlan(subject, "current", slice, "current", {
+  const launched = productFeedbackPlan(subject, "current", slice, {
     reviewer: "visp",
   }).visualCheckpoint;
   expect(launched?.command).toMatch(/^visp done --feature \S+ --task T001$/);
   expect(launched?.imageStatus).toContain("VISP's independent reviewer receives the actual image");
   expect(launched?.imageStatus).not.toContain("review handoff");
   // Once VISP's reviewer cannot run again the images go to the human reviewer.
-  const gone = productFeedbackPlan(subject, "current", slice, "current", {
+  const gone = productFeedbackPlan(subject, "current", slice, {
     reviewer: "gone",
   }).visualCheckpoint;
   expect(gone?.command).toMatch(/^visp pr --feature \S+$/);

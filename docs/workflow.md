@@ -265,4 +265,4 @@ The record is honest by construction. A result reads `passed` only for a run VIS
 
 `visp pr --full` adds the full handoff document after the record: decisions, every check's command, the independent tests with the request text each relies on, review attribution, and the tester's networked commands. `visp pr --json` returns the record as data in `data.record` (version 1), next to the Markdown in `data.markdown`.
 
-`visp handoff` shows the current status in the same form as `status`. Neither command publishes anything.
+`visp pr` and `visp status` publish nothing.

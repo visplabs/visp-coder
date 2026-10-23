@@ -20,7 +20,6 @@ critic:                     # see docs/critic.md
 
 workflow:
   strictness: standard      # relaxed, standard, strict, locked
-  reviewMode: current       # current or observation-preview
   maxChangedFiles: 40
   blockedPaths: [".env", ".env.*", node_modules, dist, build, .git]
   validationCommands: []    # for example: - pnpm test
@@ -62,7 +61,6 @@ telemetry:
 | `critic.leanReasoningEffort` | The lean reviewer's reasoning effort (`low`, `medium`, `high`, `xhigh`). Unset: `low` for the default Haiku reviewer under `claude-code`; otherwise `critic.reasoningEffort`, which also applies to full features. |
 | `critic.existingCodeTests` | Experimental. With `launch: codex-exec`, also runs the independent tester on existing codebases, in a disposable copy with network access. See [the critic guide](critic.md#independent-acceptance-tests). |
 | `workflow.strictness` | Default rule strictness until a policy is recorded; afterwards use `visp policy set-strictness <mode>`. `locked` is `strict` with overrides refused. |
-| `workflow.reviewMode` | `observation-preview` is an opt-in review mode; see [product review](product-review.md). |
 | `workflow.maxChangedFiles` | Changed-file ceiling for an authorized slice. A recorded policy limit takes precedence. |
 | `workflow.blockedPaths` | Paths rejected by explicit `visp guard` checks and Claude's edit hook regardless of slice scope. A slash-free pattern matches at any directory depth, without regard to case. Git-listed changes are checked again at commit and `done`; ignored `.env` and `.env.*` files are hashed at authorization and checked at `done`. Ignored build output is not checked after a shell write. Blocked files are left out of the source VISP delivers and of the tester's execution-mode copy. |
 | `workflow.validationCommands` | Commands run with every slice's checks as `CONFIG_1`, `CONFIG_2`, … One entry is one command, run without a shell; write `pnpm test` and `pnpm lint` as two entries, or give an argument list such as `["pnpm", "test", "--", "--reporter=dot"]`. |

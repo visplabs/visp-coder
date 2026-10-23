@@ -2,8 +2,9 @@
 
 A run is RUNS/runs/<name>. A one-session run has result.json and project/ there; a two-session
 run made by run_carryover.py has session1/result.json and <mode>/result.json with the finished
-project in <mode>/project; a chain run made by run_chain.py has step<k>/result.json per step, the
-project in project/, and chain.json once finished. The worker's Claude Code transcripts are found under
+project in <mode>/project, and <mode>/intermediate.json for a mode with an intermediate session; a
+chain run made by run_chain.py has step<k>/result.json per step, the project in project/, and
+chain.json once finished. The worker's Claude Code transcripts are found under
 ~/.claude/projects by the path the project had while it ran (always <run>/project).
 
 Time categories, from consecutive transcript events (each gap is counted once, under the event
@@ -63,6 +64,10 @@ def _steps(command):
             yield words[0], command
 
 
+# The label suffix of an intermediate session, which no result is scored on.
+MIDDLE = " intermediate"
+
+
 def is_chain_run(run):
     return (run / "step1").is_dir() or (run / "chain.json").is_file()
 
@@ -74,8 +79,10 @@ def sessions(run):
         return [(path.parent.name, path) for path in found]
     if (run / "session1").is_dir():
         found = [("session1", run / "session1" / "result.json")]
-        found += [(path.parent.name, path) for path in sorted(run.glob("*/result.json"))
-                  if path.parent.name != "session1"]
+        modes = sorted({path.parent for name in ("result.json", "intermediate.json") for path in run.glob(f"*/{name}")})
+        for mode in modes:
+            if mode.name != "session1":
+                found += [(f"{mode.name}{MIDDLE}", mode / "intermediate.json"), (mode.name, mode / "result.json")]
         return [(label, path) for label, path in found if path.is_file()]
     return [("run", run / "result.json")] if (run / "result.json").is_file() else []
 
@@ -84,7 +91,8 @@ def final_project(run):
     """The finished project: <run>/project, or the second session's for a two-session run."""
     if is_chain_run(run):
         return run / "project"
-    seconds = [path.parent for label, path in sessions(run) if label not in ("run", "session1")]
+    seconds = [path.parent for label, path in sessions(run) if label not in ("run", "session1")
+               and not label.endswith(MIDDLE)]
     return seconds[0] / "project" if seconds else run / "project"
 
 
@@ -92,7 +100,9 @@ def is_finished(run, two_sessions=False):
     if is_chain_run(run):
         return (run / "chain.json").is_file()
     if two_sessions:
-        return any(label != "session1" for label, _ in sessions(run))
+        # A run that cannot be scored stops early (a failed intermediate session); it is not redone.
+        return (run / "invalid.json").is_file() or any(
+            label != "session1" and not label.endswith(MIDDLE) for label, _ in sessions(run))
     return (run / "result.json").is_file()
 
 

@@ -116,7 +116,7 @@ function command(
 
 /** Models read CLI text through a shell; --full keeps complete status data for tools. */
 function cliText(name: string, opts: ProductOptions, value: unknown): string {
-  if (name === "status" || name === "handoff") {
+  if (name === "status") {
     const status = value as {
       feature?: string;
       outcomes?: unknown[];
@@ -175,7 +175,7 @@ async function execute(
     }
     const result = await run(loaded.value, opts);
     const presented =
-      result.ok && ["status", "handoff"].includes(name) && !opts.full
+      result.ok && name === "status" && !opts.full
         ? compactProductStatus(result.value)
         : result.ok
           ? result.value
@@ -491,11 +491,6 @@ export const prCommand = () =>
     false,
     runProductReport,
   ).option("--full", "Add the full handoff document after the record");
-export const handoffCommand = () =>
-  command("handoff", "Alias for the current product status", false, runProductStatus).option(
-    "--full",
-    "Include the full brief and product state in --json output",
-  );
 export const migrateCommand = () =>
   command(
     "migrate",

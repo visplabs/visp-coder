@@ -89,14 +89,12 @@ export async function prepareReviewCalibration(directory: string, input: unknown
   }
   const assignments = cases
     .flatMap((entry) =>
-      ["current", "observation-preview"].flatMap((mode) =>
-        Array.from({ length: 3 }, (_, repetition) => ({
-          id: `${entry.id}.${mode}.${repetition + 1}`,
-          case: entry.id,
-          mode,
-          repetition: repetition + 1,
-        })),
-      ),
+      Array.from({ length: 3 }, (_, repetition) => ({
+        id: `${entry.id}.current.${repetition + 1}`,
+        case: entry.id,
+        mode: "current",
+        repetition: repetition + 1,
+      })),
     )
     .sort((a, b) =>
       sha256(`${comparison.seed}:${a.id}`).localeCompare(sha256(`${comparison.seed}:${b.id}`)),
@@ -118,10 +116,6 @@ export async function prepareReviewCalibration(directory: string, input: unknown
     currentInstructions: {
       text: productReviewInstructions({ visual: true }),
       sha256: sha256(productReviewInstructions({ visual: true })),
-    },
-    previewInstructions: {
-      text: productReviewInstructions({ visual: true, observationFirst: true }),
-      sha256: sha256(productReviewInstructions({ visual: true, observationFirst: true })),
     },
     metrics: [
       "missedDefects",

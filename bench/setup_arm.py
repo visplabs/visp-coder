@@ -1,7 +1,15 @@
 """Prepare one benchmark project and write the actor prompt for it.
 
 Usage: setup_arm.py <task> <arm> <run_name> [--skill <id>]... [--preset default]
-arm: bare | speckit | bmad | visp:<build> (Claude Code worker) | visp-codex:<build> (Codex worker)
+arm: bare | bare-automemory | bare-rule-line | speckit | bmad | visp:<build> (Claude Code worker) | visp-codex:<build> (Codex worker)
+A worker mode suffix (`bare+compact100k`, `visp:<build>+lean+compact100k`; presets.WORKER_ENV_MODES) sets
+environment variables for the Claude Code worker only; arm.json records armSpec, workerModes and workerEnv.
+bare-automemory is bare with Claude Code's auto memory on, in a directory of the run; every other arm has it off.
+bare-rule-line is bare with a CLAUDE.md that tells the worker to record the conventions the user states in it
+(prompts.RULE_LINE; no model, the form VISP could ship). arm.json records claudeVersion, the Claude Code version
+on PATH when the run was set up.
+The automemory prompt names that directory as writable and readable besides the project (prompts.py);
+arm.json "memoryPrompt" records the path, and runs made before that fix have none.
 <build> is a name given to build_visp.sh; `visp:<build>+lean+nocritic` adds modes from presets.py,
 each a set of visp.yml keys. arm.json records them and the settings `visp doctor --settings` reports. --skill seeds and admits a bundled VISP skill, so an
 arm with it differs from one without only by that skill. --preset (presets.py) sets VISP's
@@ -12,7 +20,8 @@ works only inside the project. Every arm receives the same task and constraints.
 
 A two-session task (session1.md, session2.md, conventions.md) also gets prompt2.txt and
 prompt2-oracle.txt, the second request without and with the first session's conventions;
-run_carryover.py runs both sessions. A chain task (steps/step1.md ... stepN.md) gets
+run_carryover.py runs both sessions. A task with intermediate.md also gets prompt-intermediate.txt, the
+request of the session between them. A chain task (steps/step1.md ... stepN.md) gets
 prompt-step<k>.txt for every step, prompt.txt being the first; run_chain.py runs them in order.
 """
 import argparse
@@ -23,8 +32,10 @@ import shutil
 import subprocess
 
 from chains import step_files
-from common import RUNS
-from presets import arm_record, config_yaml, critic_yaml, effective_settings, preset, visp_build
+from common import RUNS, claude_version
+from presets import (arm_record, config_yaml, critic_yaml, effective_settings, preset, split_worker_modes, visp_build,
+                     worker_env)
+from prompts import RULE_LINE, common, memory_directory
 
 BENCH = pathlib.Path(__file__).resolve().parent
 parser = argparse.ArgumentParser()
@@ -35,7 +46,11 @@ parser.add_argument("--skill", action="append", default=[])
 parser.add_argument("--preset", default="default")
 args = parser.parse_args()
 settings = preset(args.preset)
-task_name, arm, name = args.task, args.arm, args.run
+task_name, name = args.task, args.run
+# A worker environment mode (`bare+compact100k`) sets variables for the worker; the arm is what remains.
+arm, worker_modes = split_worker_modes(args.arm)
+if worker_modes and arm.startswith("visp-codex:"):
+    raise SystemExit(f"{worker_modes[0]} sets Claude Code variables; a Codex worker does not read them")
 if args.skill and not arm.startswith("visp"):
     raise SystemExit("--skill applies only to VISP arms")
 root = RUNS / "runs" / name / "project"
@@ -70,16 +85,12 @@ start = task_dir / "start"
 if start.is_dir():
     shutil.copytree(start, root, dirs_exist_ok=True)
 
-COMMON = (
-    f"Your project directory is {root}. Run every shell command from that directory "
-    f"(start each command with `cd {root} && `) and create or edit files only inside it. "
-    "Do not read other directories. No dependency downloads or network APIs; the standard "
-    "library is available. Do not ask questions: make reasonable assumptions and continue. "
-    "Do not delegate to other agents. Build it, run your tests, and finish with a short report "
-    "of what you actually verified."
-)
-if arm == "bare":
+COMMON = common(root, arm)
+if arm in ("bare", "bare-automemory", "bare-rule-line"):
     workflow = "Use ordinary coding: write the code and tests directly."
+    if arm == "bare-rule-line":
+        # Bare plus one stock instruction that Claude Code loads by itself, committed with the scaffold.
+        (root / "CLAUDE.md").write_text(RULE_LINE)
 elif arm == "speckit":
     sh(["specify", "init", "--here", "--force", "--non-interactive", "--integration", "claude"])
     workflow = (
@@ -139,9 +150,16 @@ if sessions:
     (root.parent / "prompt2.txt").write_text(f"{workflow}\n\n{COMMON}\n\nTask:\n\n{second}")
     (root.parent / "prompt2-oracle.txt").write_text(
         f"{workflow}\n\n{COMMON}\n\nTask:\n\n{second}\n{conventions}\n")
+if sessions and (task_dir / "intermediate.md").is_file():
+    intermediate = (task_dir / "intermediate.md").read_text()
+    (root.parent / "prompt-intermediate.txt").write_text(f"{workflow}\n\n{COMMON}\n\nTask:\n\n{intermediate}")
 for number, step in enumerate(steps, start=1):
     (root.parent / f"prompt-step{number}.txt").write_text(f"{workflow}\n\n{COMMON}\n\nTask:\n\n{step.read_text()}")
 # The headless runner puts the arm's VISP build on PATH so installed hooks find it.
 (root.parent / "arm.json").write_text(json.dumps({"task": task_name, "arm": arm, "shim": shim_dir, "skills": args.skill,
-                                                 "preset": args.preset, "settings": settings, **arm_config}))
+                                                 "preset": args.preset, "settings": settings, **arm_config, "claudeVersion": claude_version(),
+                                                 "memory": "auto" if arm == "bare-automemory" else "off",
+                                                 **({"armSpec": args.arm, "workerModes": worker_modes,
+                                                     "workerEnv": worker_env(worker_modes)} if worker_modes else {}),
+                                                 **({"memoryPrompt": str(memory_directory(root))} if arm == "bare-automemory" else {})}))
 print(json.dumps({"root": str(root), "prompt": str(root.parent / "prompt.txt")}))
