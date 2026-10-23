@@ -116,7 +116,7 @@
       "action": "fix",
       "completion": "handoff",
       "command": "visp pr --feature 001-return-two-from-the-public",
-      "objective": "The independent review budget is spent. Run visp pr; the remaining findings go to a human reviewer",
+      "objective": "The independent review budget is spent. Run visp pr (it prints the evidence record and changes and pushes nothing); the remaining findings go to a human reviewer",
       "criticAdvice": {
         "status": "unavailable",
         "guidance": "Use the recorded findings to choose the next correction; delegate nothing and run no review command. VISP's reviewer cannot review a new version now: Feature critic call budget exhausted; unresolved. Follow `visp next`: it says when to run visp done again and when to hand off with visp pr.",

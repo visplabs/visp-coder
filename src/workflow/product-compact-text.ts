@@ -376,10 +376,19 @@ function compactBriefText(name: string, value: unknown, channel: ReplyChannel = 
     .filter((text): text is string => typeof text === "string")
     .map((text) => `\nWarning: ${text}`)
     .join("");
-  const notes = [data.duplicateNote, data.testsNote, data.requirementsNote, data.draftNote]
+  const notes = [
+    data.duplicateNote,
+    data.testsNote,
+    data.requirementsNote,
+    data.draftNote,
+    data.workNote,
+  ]
     .filter((text): text is string => typeof text === "string")
     .map((text) => `\nNote: ${text}`)
     .join("");
+  // `visp feature --check` also started the slice: the work reply carries the next step.
+  if (data.work !== undefined)
+    return `${name}: ${JSON.stringify({ feature: brief.feature, profile: data.profile, redactionNotice: data.redactionNotice })}${warning}${notes}${requirementsText(data.requirements)}${rulesText(data.projectRules)}${memoryText(data.projectMemory, data.projectMemoryLaterChanges)}\n${compactProductText("work", data.work, channel)}`;
   // The adapter does not choose the next slice; visp_next owns that decision.
   const wording = WORDING[channel];
   const feature = String(brief.feature);

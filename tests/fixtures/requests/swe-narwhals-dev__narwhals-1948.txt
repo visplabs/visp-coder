@@ -1,0 +1,113 @@
+This project uses VISP. Read CLAUDE.md and the VISP instructions it references before starting, and follow them.
+
+Your project directory is /bench/run/project. Run every shell command from that directory (start each command with `cd /bench/run/project && `) and create or edit files only inside it. Do not read other directories. No dependency downloads or network APIs. The local Python does not have this project's dependencies: run the project's tests with `./swe-test <command>`, which applies your current changes to the repository inside its prepared environment and runs <command> from the repository root (for example `./swe-test python -m pytest -x tests/test_<area>.py`). Do not ask questions: make reasonable assumptions and continue. Do not delegate to other agents. Fix the issue, run the relevant tests, and finish with a short report of what you actually verified.
+
+Task:
+
+Resolve this GitHub issue in the narwhals-dev/narwhals repository (its source is in the project directory). Change the project's source so the reported problem is fixed. Hidden tests will check the fix, and the existing tests must keep passing.
+
+[Bug]: `is_duplicated` method results in different outputs for pyarrow vs. polars
+### Describe the bug
+
+As I was exploring narwhals, I noticed `df.is_duplicated()` produces unexpected results for pyarrow tables. When null values are present in a a table, `is_duplidated` defaults to `True` for pyarrow tables. See reproducible example.
+
+
+### Steps or code to reproduce the bug
+
+
+
+``` python
+import polars as pl
+import pyarrow as pa
+import narwhals as nw
+
+url_data = "https://raw.githubusercontent.com/great-expectations/gx_tutorials/main/data/yellow_tripdata_sample_2019-01.csv"
+
+data = {
+    "col1": [1, 2, 3],
+    "col2": ["one", None, None]
+}
+
+eagr_df = pl.DataFrame(data)
+arrw_df = pa.Table.from_pydict(data)
+arrw_df_from_pl = eagr_df.to_arrow()
+```
+
+``` python
+@nw.narwhalify
+def add_dupl_col(df: nw.typing.IntoFrame):
+    df = df.with_columns(is_duplicated=df.is_duplicated())
+    return df.to_polars()
+```
+
+``` python
+(
+    add_dupl_col(eagr_df),
+    add_dupl_col(arrw_df),
+    add_dupl_col(arrw_df_from_pl),
+)
+```
+
+    (shape: (3, 3)
+     ┌──────┬──────┬───────────────┐
+     │ col1 ┆ col2 ┆ is_duplicated │
+     │ ---  ┆ ---  ┆ ---           │
+     │ i64  ┆ str  ┆ bool          │
+     ╞══════╪══════╪═══════════════╡
+     │ 1    ┆ one  ┆ false         │
+     │ 2    ┆ null ┆ false         │
+     │ 3    ┆ null ┆ false         │
+     └──────┴──────┴───────────────┘,
+     shape: (3, 3)
+     ┌──────┬──────┬───────────────┐
+     │ col1 ┆ col2 ┆ is_duplicated │
+     │ ---  ┆ ---  ┆ ---           │
+     │ i64  ┆ str  ┆ bool          │
+     ╞══════╪══════╪═══════════════╡
+     │ 1    ┆ one  ┆ false         │
+     │ 2    ┆ null ┆ true          │
+     │ 3    ┆ null ┆ true          │
+     └──────┴──────┴───────────────┘,
+     shape: (3, 3)
+     ┌──────┬──────┬───────────────┐
+     │ col1 ┆ col2 ┆ is_duplicated │
+     │ ---  ┆ ---  ┆ ---           │
+     │ i64  ┆ str  ┆ bool          │
+     ╞══════╪══════╪═══════════════╡
+     │ 1    ┆ one  ┆ false         │
+     │ 2    ┆ null ┆ true          │
+     │ 3    ┆ null ┆ true          │
+     └──────┴──────┴───────────────┘)
+
+
+### Expected results
+
+Same output for polars and pyarrow tables
+
+### Actual results
+
+See above
+
+### Please run narwhals.show_version() and enter the output below.
+
+```shell
+System:
+    python: 3.11.10 (main, Sep  7 2024, 01:03:31) [Clang 15.0.0 (clang-1500.3.9.4)]
+executable: /Users/sinan/personal/explore-narhwals/.venv/bin/python
+   machine: macOS-15.2-arm64-arm-64bit
+
+Python dependencies:
+     narwhals: 1.25.0
+       pandas: 2.2.3
+       polars: 1.21.0
+         cudf: 
+        modin: 
+      pyarrow: 19.0.0
+        numpy: 2.2.2
+```
+
+### Relevant log output
+
+```shell
+
+```

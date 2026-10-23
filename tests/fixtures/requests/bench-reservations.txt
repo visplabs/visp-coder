@@ -1,0 +1,17 @@
+This project uses VISP. Read CLAUDE.md and the VISP instructions it references before starting, and follow them. Run every command with `export PATH=/bench/shims/visp-leandef2:$PATH` first so `visp` is the project's build.
+
+Your project directory is /bench/run/project. Run every shell command from that directory (start each command with `cd /bench/run/project && `) and create or edit files only inside it. Do not read other directories. No dependency downloads or network APIs; the standard library is available. Do not ask questions: make reasonable assumptions and continue. Do not delegate to other agents. Build it, run your tests, and finish with a short report of what you actually verified.
+
+Task:
+
+This repository already contains a working inventory reservation HTTP API; its contract is in README.md. Extend it without changing any existing behavior:
+
+1. Bundle reservations. `POST /v1/reservations` also accepts `{"lines": [{"sku": "<sku>", "quantity": <integer >= 1>}, ...], "ttlSeconds": <integer 1..3600>}`: 1 to 20 lines, each SKU at most once. A request must use exactly one shape: either `sku` and `quantity`, or `lines`; both, neither, an empty or oversized `lines`, a repeated SKU, or any invalid line is 422 `invalid_request`.
+   - All or nothing: if any line's SKU is unknown the response is 404 `not_found`; if any line lacks available stock it is 409 `insufficient_stock`; in both cases nothing is held.
+   - Success returns 201 `{"id": "<string>", "lines": [{"sku", "quantity"}, ...], "expiresAt": "<ISO 8601 UTC>"}` with lines in request order. The response for the single-SKU shape is unchanged.
+   - `Idempotency-Key` works for bundles exactly as for single reservations.
+2. `DELETE /v1/reservations/<id>` and `POST /v1/reservations/<id>/confirm` act on every line of a bundle at once, with the same status codes as for single reservations. Confirming a bundle reduces every line's item quantity.
+3. New `GET /v1/reservations/<id>` returns 200 `{"id", "status", "lines": [{"sku", "quantity"}, ...], "expiresAt"}` for either shape (a single reservation has one line). `status` is `active`, `confirmed`, `released` or `expired` (an unconfirmed, unreleased reservation past `expiresAt`). Unknown id is 404 `not_found`. `/v1/reservations/<id>` is now a known path for `GET` and `DELETE` only.
+4. Keep the existing tests passing and add tests for the new behavior. Update the README contract.
+
+Use only the Python standard library. Run the service with `./start.sh <port>` as before.

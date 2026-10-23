@@ -200,12 +200,17 @@ describe("the minimal profile", () => {
     // 452 -> 475: a one-line scope declaration. In OverEager-Bench declaring scope took Claude
     // Code's out-of-scope actions from 17.1% to 0.0% of runs; the longer scope and requirement
     // rules live in the standard guide, and the feature and done replies carry the accounting.
-    expect(guide.length / 4).toBeLessThanOrEqual(475);
+    // 475 -> 525: done, verify, accept, next and pr run in the foreground, alone (16 of 18 lean
+    // runs in batches leandef1 and leandef2 backgrounded done and were refused by the hook), and
+    // the first command is `feature --check`.
+    expect(guide.length / 4).toBeLessThanOrEqual(525);
     expect(guide).toContain("Edit only what the request needs");
-    expect(guide).toContain("At its id, run visp work");
-    expect(guide).toContain("Leave feature running; background it on blocking hosts");
+    expect(guide).toContain("run visp work unless --check did");
     expect(guide).toContain(
-      "feature/done/verify/accept/next with the host's maximum shell timeout",
+      "Only feature may be backgrounded (leave it running on blocking hosts)",
+    );
+    expect(guide).toContain(
+      "done/verify/accept/next/pr in the foreground, alone, with the host's maximum shell timeout",
     );
     expect(guide).toContain("scope.allowed");
     expect(guide).toContain("runnable");
@@ -260,7 +265,7 @@ describe("generated workflow routing", () => {
       expect(guide).toContain("only when visp next prints it");
       expect(guide).toContain("run or delegate no review");
       expect(guide).toContain("never rerun feature");
-      expect(guide).toContain("At its id, run visp work");
+      expect(guide).toContain("run visp work unless --check did");
       expect(guide).not.toContain("visp review --prepare");
       expect(commandGuide()).toContain("No category declarations, example-coverage ledger");
       expect(guide).toContain("reviewer.context honestly");
@@ -274,10 +279,10 @@ describe("generated workflow routing", () => {
     expect(guide).toContain("Only when `visp next` prints a critic command");
     expect(guide).not.toContain("--source-only");
     expect(guide).toContain(
-      "on a blocking shell (Claude Code Bash) start it with run_in_background:true and read its output for the id",
+      "on a blocking shell (Claude Code Bash) start it with run_in_background:true and read its output for the result",
     );
     expect(guide).toContain(
-      'Once it prints the feature id, run visp work --feature <id> --check "<test command>" for one slice.',
+      'Once it prints, you have the slice (without --check, run visp work --feature <id> --check "<test command>" for one).',
     );
     expect(guide).toContain("Never start feature again: a repeat can create a second feature.");
     expect(guide).not.toContain("wait for it to return");

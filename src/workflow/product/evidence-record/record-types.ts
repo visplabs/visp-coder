@@ -18,6 +18,11 @@ export interface EvidenceRecord {
   readonly asked: EvidenceAsked;
   /** One entry per requirement, in the brief's order. */
   readonly done: readonly RequirementEvidence[];
+  /**
+   * The worker's account of each requirement `visp feature` listed, with what VISP could check
+   * of it. Absent when the request listed fewer than two.
+   */
+  readonly accounts?: readonly EvidenceAccount[];
   /** Checks no requirement names, such as the independent tester's suite for the whole request. */
   readonly suites: readonly CheckEvidence[];
   readonly changed: EvidenceChanges;
@@ -111,7 +116,28 @@ export interface RequirementEvidence {
   };
 }
 
+/** A listed requirement (R001…) and the worker's account of it at `visp done`. */
+export interface EvidenceAccount {
+  readonly requirement: string;
+  readonly statement: string;
+  readonly account: "open" | "done" | "not-done";
+  /** The check a done account cites, and the tests or words the worker gave with it. */
+  readonly check?: string;
+  readonly note?: string;
+  /** Why a not-done requirement is not done, in the worker's words. */
+  readonly reason?: string;
+  /**
+   * - `verified`: every named test is in the check's latest output as passed, or the suite passed
+   *   and the test files define it (the detail says which).
+   * - `claimed`: a named test could not be confirmed from the output (the detail gives the reason).
+   * - `no-names`: the account names no test; only the check's own result stands.
+   */
+  readonly verification?: "verified" | "claimed" | "no-names";
+  readonly detail?: string;
+}
+
 export type EvidenceGapKind =
+  | "account"
   | "requirement"
   | "check"
   | "regression"
