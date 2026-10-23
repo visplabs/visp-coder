@@ -30,6 +30,16 @@ def isolate():
     return UNSHARE if probe.returncode == 0 else []
 
 
+@functools.cache
+def claude_version():
+    """The Claude Code version on PATH (`claude --version`: "2.1.300 (Claude Code)" -> "2.1.300"), or None."""
+    try:
+        words = subprocess.run(["claude", "--version"], capture_output=True, text=True, timeout=60).stdout.split()
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return words[0] if words else None
+
+
 def run_worker(argv, cwd, env, timeout, pid_file, stdin=None, pass_fds=()):
     """Run a worker CLI in its own session, its pid recorded in pid_file while it runs.
 

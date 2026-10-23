@@ -110,6 +110,8 @@ def run_in_container(run, arm, args):
     result = json.loads(containers.redact_text(json.dumps(result), token))
     changed = containers.host_changes(host_before, host_after)
     result["claudeProjects"] = str(run.resolve() / "home" / ".claude" / "projects")
+    # The CLI that ran is the image's, not the one on the host's PATH that run_session recorded.
+    result["claudeVersion"] = (str(facts.get("claude") or "").split() or [None])[0]
     result["isolation"] = {"mode": "container", "image": args.image, "imageClaude": facts.get("claude"),
                            "imageDigest": facts.get("digest"), "names": session.names, "env": sorted(session.env),
                            "credential": str(args.token_file), "allowHosts": list(args.allow_host),

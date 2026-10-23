@@ -128,7 +128,8 @@ def container_env(arm, run, proxy):
            "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB": "1",
            "HTTPS_PROXY": url, "https_proxy": url, "HTTP_PROXY": url, "http_proxy": url,
            "NO_PROXY": "localhost,127.0.0.1,::1", "no_proxy": "localhost,127.0.0.1,::1"}
-    for key, value in (arm.get("env") or {}).items():
+    # The task's own variables (arm.json "env") and a worker mode's (presets.WORKER_ENV_MODES, "workerEnv").
+    for key, value in {**(arm.get("env") or {}), **(arm.get("workerEnv") or {})}.items():
         if key not in ("HOME", "PATH"):
             env[key] = value
     return env

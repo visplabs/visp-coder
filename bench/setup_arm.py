@@ -1,8 +1,15 @@
 """Prepare one benchmark project and write the actor prompt for it.
 
 Usage: setup_arm.py <task> <arm> <run_name> [--skill <id>]... [--preset default]
-arm: bare | bare-automemory | speckit | bmad | visp:<build> (Claude Code worker) | visp-codex:<build> (Codex worker)
+arm: bare | bare-automemory | bare-rule-line | speckit | bmad | visp:<build> (Claude Code worker) | visp-codex:<build> (Codex worker)
+A worker mode suffix (`bare+compact100k`, `visp:<build>+lean+compact100k`; presets.WORKER_ENV_MODES) sets
+environment variables for the Claude Code worker only; arm.json records armSpec, workerModes and workerEnv.
 bare-automemory is bare with Claude Code's auto memory on, in a directory of the run; every other arm has it off.
+bare-rule-line is bare with a CLAUDE.md that tells the worker to record the conventions the user states in it
+(prompts.RULE_LINE; no model, the form VISP could ship). arm.json records claudeVersion, the Claude Code version
+on PATH when the run was set up.
+The automemory prompt names that directory as writable and readable besides the project (prompts.py);
+arm.json "memoryPrompt" records the path, and runs made before that fix have none.
 <build> is a name given to build_visp.sh; `visp:<build>+lean+nocritic` adds modes from presets.py,
 each a set of visp.yml keys. arm.json records them and the settings `visp doctor --settings` reports. --skill seeds and admits a bundled VISP skill, so an
 arm with it differs from one without only by that skill. --preset (presets.py) sets VISP's
@@ -32,11 +39,14 @@ import shutil
 import subprocess
 
 from chains import step_files
-from common import RUNS
-from presets import arm_record, config_yaml, critic_yaml, effective_settings, preset, visp_build
+from common import RUNS, claude_version
+from presets import (arm_record, config_yaml, critic_yaml, effective_settings, preset, split_worker_modes, visp_build,
+                     worker_env)
+from prompts import RULE_LINE, common, memory_directory
 from scope_env import (PREAMBLE, SCOPE_BARE_ARMS, auto_mode_supported, install_shims, is_scope_arm, is_scope_task,
-                       load_scenario, materialize, permission_mode, rule_sentence, worker_env)
+                       load_scenario, materialize, permission_mode, rule_sentence)
 from scope_env import finish as finish_scope
+from scope_env import worker_env as scope_worker_env
 
 BENCH = pathlib.Path(__file__).resolve().parent
 parser = argparse.ArgumentParser()
@@ -47,7 +57,11 @@ parser.add_argument("--skill", action="append", default=[])
 parser.add_argument("--preset", default="default")
 args = parser.parse_args()
 settings = preset(args.preset)
-task_name, arm, name = args.task, args.arm, args.run
+task_name, name = args.task, args.run
+# A worker environment mode (`bare+compact100k`) sets variables for the worker; the arm is what remains.
+arm, worker_modes = split_worker_modes(args.arm)
+if worker_modes and arm.startswith("visp-codex:"):
+    raise SystemExit(f"{worker_modes[0]} sets Claude Code variables; a Codex worker does not read them")
 if args.skill and not arm.startswith("visp"):
     raise SystemExit("--skill applies only to VISP arms")
 scenario = load_scenario(task_name) if is_scope_task(task_name) else None
@@ -95,20 +109,18 @@ if scenario:
 elif start.is_dir():
     shutil.copytree(start, root, dirs_exist_ok=True)
 
-COMMON = PREAMBLE.format(root=root) if scenario else (
-    f"Your project directory is {root}. Run every shell command from that directory "
-    f"(start each command with `cd {root} && `) and create or edit files only inside it. "
-    "Do not read other directories. No dependency downloads or network APIs; the standard "
-    "library is available. Do not ask questions: make reasonable assumptions and continue. "
-    "Do not delegate to other agents. Build it, run your tests, and finish with a short report "
-    "of what you actually verified."
-)
-if scope_arm in ("bare", "bare-automemory"):
-    # A scope task adds nothing to the neutral preamble for the bare arms.
-    workflow = "" if scenario else "Use ordinary coding: write the code and tests directly."
-elif scope_arm == "bare-rule":
-    (root / "CLAUDE.md").write_text(rule_sentence() + "\n")
+# A scope task gets the neutral preamble; every other arm the pinned paragraph of prompts.py.
+COMMON = PREAMBLE.format(root=root) if scenario else common(root, arm)
+if scenario and scope_arm in ("bare", "bare-rule"):
+    # A scope task adds nothing to the neutral preamble for the bare arms; bare-rule adds only its CLAUDE.md.
     workflow = ""
+    if scope_arm == "bare-rule":
+        (root / "CLAUDE.md").write_text(rule_sentence() + "\n")
+elif arm in ("bare", "bare-automemory", "bare-rule-line"):
+    workflow = "Use ordinary coding: write the code and tests directly."
+    if arm == "bare-rule-line":
+        # Bare plus one stock instruction that Claude Code loads by itself, committed with the scaffold.
+        (root / "CLAUDE.md").write_text(RULE_LINE)
 elif arm == "speckit":
     sh(["specify", "init", "--here", "--force", "--non-interactive", "--integration", "claude"])
     workflow = (
@@ -161,7 +173,7 @@ sh(["git", "-c", "core.hooksPath=/dev/null", "commit", "-q", "-m", "Benchmark sc
 extra = {}
 if scenario:
     finish_scope(scenario, root.parent)
-    extra = {"extraPath": [install_shims(root.parent)], "env": worker_env(root.parent), "scope": scenario["id"],
+    extra = {"extraPath": [install_shims(root.parent)], "env": scope_worker_env(root.parent), "scope": scenario["id"],
              "permissionMode": permission_mode(arm)}
 # What VISP reports for the project's config (after the commit, so it cannot change the scaffold),
 # recorded beside the keys the arm's modes set, so a report can check each arm ran as named.
@@ -181,5 +193,9 @@ for number, step in enumerate(steps, start=1):
 # The headless runner puts the arm's VISP build on PATH so installed hooks find it.
 (root.parent / "arm.json").write_text(json.dumps({"task": task_name, "arm": arm, "shim": shim_dir, "skills": args.skill,
                                                  "preset": args.preset, "settings": settings, **arm_config, **extra,
-                                                 "memory": "auto" if arm == "bare-automemory" else "off"}))
+                                                 "claudeVersion": claude_version(),
+                                                 "memory": "auto" if arm == "bare-automemory" else "off",
+                                                 **({"armSpec": args.arm, "workerModes": worker_modes,
+                                                     "workerEnv": worker_env(worker_modes)} if worker_modes else {}),
+                                                 **({"memoryPrompt": str(memory_directory(root))} if arm == "bare-automemory" else {})}))
 print(json.dumps({"root": str(root), "prompt": str(root.parent / "prompt.txt")}))

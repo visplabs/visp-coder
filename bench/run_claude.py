@@ -21,7 +21,7 @@ import pathlib
 import shutil
 import time
 
-from common import RUNS, isolate, run_worker
+from common import RUNS, claude_version, isolate, run_worker
 from runfacts import CLAUDE_PROJECTS, project_key
 
 MODEL = "claude-haiku-4-5-20251001"
@@ -77,6 +77,8 @@ def worker_env(arm):
         env.pop("CLAUDE_CODE_DISABLE_AUTO_MEMORY", None)
     else:
         env["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] = "1"
+    # A worker mode of the arm (presets.WORKER_ENV_MODES), e.g. compact100k; arm.json has the variables.
+    env.update(arm.get("workerEnv") or {})
     return env
 
 
@@ -168,6 +170,8 @@ def run_session(project, arm, prompt, model=None, timeout=2700, resume=None, eff
 
     return {
         "arm": arm["arm"], "preset": arm.get("preset"), "model": model, "effort": effort, "permissionMode": mode, "seconds": round(time.time() - started), "timedOut": timed_out,
+        # The CLI on the host's PATH; a container run (run_scope.py) replaces it with the image's.
+        "claudeVersion": claude_version(),
         "autoMemory": {
             "setting": memory_setting(arm), "enabled": settings["autoMemoryEnabled"], "settings": settings,
             "env": {key: env.get(key) for key in ("CLAUDE_CODE_DISABLE_AUTO_MEMORY",)},
@@ -176,6 +180,7 @@ def run_session(project, arm, prompt, model=None, timeout=2700, resume=None, eff
             # Memory Claude Code kept at its own location despite the setting: always empty.
             "outsideFiles": listing(default_memory(project)),
         },
+        **({"workerEnv": arm["workerEnv"]} if arm.get("workerEnv") else {}),
         "turns": sum(entry.get("num_turns") or 0 for entry in turns), "userTurns": len(turns),
         "isError": any(entry.get("is_error") for entry in turns),
         "sessionId": next((entry["session_id"] for entry in reversed(turns) if entry.get("session_id")), None),

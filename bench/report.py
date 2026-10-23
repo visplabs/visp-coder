@@ -68,7 +68,7 @@ from common import RUNS
 import scope_report
 from diffscope import run_scope
 from judge import CHECKLISTS, GAMES
-from presets import arm_title, mode_config, mode_difference, scalar, visp_build
+from presets import arm_title, mode_config, mode_difference, scalar, split_worker_modes, visp_build, worker_env
 from probe import has_probes, summarize as probe_summary
 from runfacts import final_project, invalid, is_finished, mark_if_invalid, sessions, timing, transcripts
 from scope_env import is_scope_task
@@ -398,13 +398,17 @@ def is_visp(spec):
 
 def pair_note(base, cand):
     """What sets two arms apart, for the heading of their comparison."""
+    (base_arm, base_env), (cand_arm, cand_env) = split_worker_modes(base), split_worker_modes(cand)
+    env = f"; worker modes {'+'.join(base_env) or 'none'} -> {'+'.join(cand_env) or 'none'}" if base_env != cand_env else ""
     if is_visp(base) and is_visp(cand) and visp_build(base)[0] == visp_build(cand)[0]:
         diff = mode_difference(visp_build(base)[1], visp_build(cand)[1])
         if not diff:
-            return "same build and same config keys"
+            return "same build and same config keys" + env
         keys = ", ".join(f"{key} {'unset' if before is None else before} -> {'unset' if after is None else after}"
                          for key, (before, after) in diff.items())
-        return f"same build, config differs only in: {keys}"
+        return f"same build, config differs only in: {keys}" + env
+    if base_arm == cand_arm and base_env != cand_env:
+        return f"same arm{env}"
     return "different builds or workflows"
 
 
@@ -416,11 +420,34 @@ def fmt(value, metric=None):
     return f"{value:g}" if isinstance(value, (int, float)) else str(value)
 
 
+def version_warnings(manifest):
+    """Warnings when the runs of a batch were made with different Claude Code versions.
+
+    The version is the one arm.json recorded at set-up and each worker session's result.json at run time
+    (a restored first session is not counted); a run from before they were recorded counts as "unrecorded".
+    """
+    by_label = {}
+    for entry in manifest.get("runs", []):
+        run = RUNS / "runs" / entry["name"]
+        arm = load(run / "arm.json")
+        if arm is None:
+            continue
+        ran = {result["claudeVersion"] for _, path in sessions(run) if (result := load(path))
+               and "restoredFrom" not in result and result.get("claudeVersion")}
+        by_label.setdefault(entry["label"], set()).update(ran or {arm.get("claudeVersion") or "unrecorded"})
+    if len(set().union(*by_label.values())) <= 1:
+        return []
+    detail = "; ".join(f"{label}: {', '.join(sorted(versions))}" for label, versions in by_label.items())
+    return [f"Claude Code versions differ between the runs of this batch ({detail}); a difference between arms may "
+            "be the CLI, not the arm."]
+
+
 def markdown(manifest, rows, groups, comparisons, excluded, unfinished, show_runs):
     out = [f"## Batch {manifest['batch']} (preset {manifest['preset']})", ""]
     worker = manifest["settings"]["worker"]
     out.append(f"Worker {worker['model']} ({worker['effort'] or 'default effort'}); "
                f"{len(rows)} valid runs; {len(excluded)} invalid runs excluded; {len(unfinished)} unfinished.")
+    out += [f"**Warning:** {warning}" for warning in version_warnings(manifest)]
     probed = any(g["probes"] is not None for g in groups.values())
     out += ["", "| Task | Arm | n | Hidden |" + (" Probes | Probes from findings |" if probed else "") +
             " Judge | Checklist | Code | Wall s | Idle s | Model s | VISP s | Own s "
@@ -444,6 +471,8 @@ def markdown(manifest, rows, groups, comparisons, excluded, unfinished, show_run
     for label, spec in specs.items():
         keys = ", ".join(f"{key}: {value}" for key, value in mode_config(visp_build(spec)[1]).items()) \
             if is_visp(spec) else ""
+        variables = ", ".join(f"{key}={value}" for key, value in worker_env(split_worker_modes(spec)[1]).items())
+        keys = "; ".join(part for part in (keys, f"worker env {variables}" if variables else "") if part)
         out.append(f"| {label} | {arm_title(spec)} | {keys or '–'} |")
     out.append("")
     out.append("Scores are means over valid runs (– where a run has no score yet); times are medians (wall: all "
@@ -490,6 +519,7 @@ def scope_header(manifest, scope_rows, excluded, unfinished):
     out = [f"## Batch {manifest['batch']} (preset {manifest['preset']})", "",
            f"Worker {worker['model']} ({worker['effort'] or 'default effort'}); {len(scope_rows)} scope runs with a "
            f"verdict; {len(excluded)} invalid runs excluded; {len(unfinished)} unfinished."]
+    out += [f"**Warning:** {warning}" for warning in version_warnings(manifest)]
     if excluded:
         out += ["", "Invalid runs, excluded:", ""] + [f"- {name}: {reason}" for name, reason in excluded]
     if unfinished:
@@ -735,6 +765,8 @@ def main():
         raise SystemExit("give --batch, or --compare BATCH:LABEL ...")
     directory = RUNS / "batches" / args.batch
     manifest, rows, excluded, unfinished = load_batch(args.batch, args.score, args.score_jobs, args.carry)
+    for warning in version_warnings(manifest):
+        print(f"warning: {warning}", file=sys.stderr)
     if args.carry:
         print(carry.markdown(manifest, rows))
         return
@@ -780,7 +812,7 @@ def main():
                   task: {**verdict, "checks": [dict(zip(fields, check)) for check in verdict["checks"]]}
                   for task, verdict in result["tasks"].items()}} for cand, result in comparisons.items()},
               "invalid": [{"run": name, "reason": reason} for name, reason in excluded],
-              "unfinished": unfinished, "scope": scope_summary}
+              "unfinished": unfinished, "scope": scope_summary, "warnings": version_warnings(manifest)}
     (args.json or directory / "report.json").write_text(json.dumps(report, indent=2))
 
 

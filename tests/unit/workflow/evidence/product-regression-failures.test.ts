@@ -3,6 +3,7 @@ import {
   classifyRegression,
   failureIdentities,
   type RegressionRun,
+  rejectedCommandLine,
 } from "../../../../src/workflow/product/regression/regression-failures.js";
 
 const ROOT = "/work/project";
@@ -281,5 +282,33 @@ describe("classifyRegression", () => {
         reason: "the old code failed without naming its failing tests",
       },
     ]);
+  });
+});
+
+describe("rejectedCommandLine", () => {
+  it("returns the error a runner printed when it rejected its command line", () => {
+    expect(
+      rejectedCommandLine(
+        [
+          "usage: python3 -m unittest [-h] [-v] [-q] [--locals] [-f] [-c] [-b]",
+          "                           [-k TESTNAMEPATTERNS]",
+          "                           [tests ...]",
+          "python3 -m unittest: error: unrecognized arguments: -s",
+          "",
+        ].join("\n"),
+      ),
+    ).toBe("python3 -m unittest: error: unrecognized arguments: -s");
+    expect(
+      rejectedCommandLine(
+        "ERROR: usage: pytest [options] [file_or_dir]\n  pytest: error: unrecognized arguments: -x2\n",
+      ),
+    ).toBe("pytest: error: unrecognized arguments: -x2");
+  });
+
+  it("returns nothing for a test failure or a usage line without an error", () => {
+    expect(rejectedCommandLine("FAIL: test_x (tests.T.test_x)\nAssertionError: 1 != 2\n")).toBe(
+      undefined,
+    );
+    expect(rejectedCommandLine("usage: tool [-h]\nfrom the test's own output\n")).toBe(undefined);
   });
 });

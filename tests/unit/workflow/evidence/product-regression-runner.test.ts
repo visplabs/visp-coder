@@ -179,6 +179,148 @@ describe("declaredRunner", () => {
   });
 });
 
+describe("a declared unittest discover check", () => {
+  const exists = (path: string) => path === "tests";
+  const source =
+    "import unittest\nclass ApiTests(unittest.TestCase):\n    def test_x(self): pass\n";
+  const narrowed = (declared: string[], classes: string[] = []) => {
+    const runner = declaredRunner(declared, exists);
+    return testFileCommand("tests/test_api.py", source, none, {
+      runners: runner ? [runner] : [],
+      classes,
+    });
+  };
+
+  it("names the module, not a start directory, whatever options the check declares", () => {
+    expect(narrowed(["python3", "-m", "unittest", "discover", "-s", "tests"])).toEqual([
+      "python3",
+      "-m",
+      "unittest",
+      "tests.test_api",
+    ]);
+    expect(
+      narrowed(["python3", "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py"]),
+    ).toEqual(["python3", "-m", "unittest", "tests.test_api"]);
+    expect(narrowed(["python", "-m", "unittest", "discover"])).toEqual([
+      "python",
+      "-m",
+      "unittest",
+      "tests.test_api",
+    ]);
+    expect(narrowed(["python3", "-m", "unittest", "discover", "tests"])).toEqual([
+      "python3",
+      "-m",
+      "unittest",
+      "tests.test_api",
+    ]);
+    expect(
+      narrowed(["python3", "-m", "unittest", "discover", "-s", "tests", "-t", ".", "-v"]),
+    ).toEqual(["python3", "-m", "unittest", "-v", "tests.test_api"]);
+  });
+
+  it("keeps the interpreter, its flags and the options that are not discovery's", () => {
+    expect(narrowed(["python3", "-B", "-m", "unittest", "discover", "-s", "tests", "-v"])).toEqual([
+      "python3",
+      "-B",
+      "-m",
+      "unittest",
+      "-v",
+      "tests.test_api",
+    ]);
+    // Isolated mode leaves the working directory off the import path, which a module name needs.
+    expect(
+      narrowed(["python3", "-I", "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py"]),
+    ).toEqual(["python3", "-E", "-s", "-m", "unittest", "tests.test_api"]);
+  });
+
+  it("keeps the flag that stands before the start directory, and the option after it", () => {
+    const kept = ["python3", "-m", "unittest", "-v", "tests.test_api"];
+    expect(narrowed(["python3", "-m", "unittest", "discover", "-v", "-s", "tests"])).toEqual(kept);
+    expect(
+      narrowed(["python3", "-m", "unittest", "discover", "-s", "tests", "-v", "-p", "test_*.py"]),
+    ).toEqual(kept);
+    expect(
+      narrowed(["python3", "-m", "unittest", "discover", "-v", "-t", ".", "-p", "test_*.py"]),
+    ).toEqual(kept);
+  });
+
+  it("keeps unittest's flags in whatever order, none of them taking the next argument", () => {
+    for (const declared of [
+      ["discover", "-c", "-b", "-s", "tests"],
+      ["discover", "-b", "-c", "-s", "tests"],
+      ["discover", "-c", "-s", "tests", "-b"],
+      ["discover", "-s", "tests", "-c", "-b"],
+    ])
+      expect(narrowed(["python3", "-m", "unittest", ...declared])).toEqual([
+        "python3",
+        "-m",
+        "unittest",
+        ...declared.filter((arg) => arg === "-c" || arg === "-b"),
+        "tests.test_api",
+      ]);
+    for (const flag of [
+      "-v",
+      "-q",
+      "-f",
+      "-c",
+      "-b",
+      "--verbose",
+      "--quiet",
+      "--failfast",
+      "--catch",
+      "--buffer",
+      "--locals",
+    ])
+      expect(narrowed(["python3", "-m", "unittest", "discover", flag, "-s", "tests"])).toEqual([
+        "python3",
+        "-m",
+        "unittest",
+        flag,
+        "tests.test_api",
+      ]);
+  });
+
+  it("keeps the value of the options that take one and drops where discovery looks", () => {
+    expect(
+      narrowed(["python3", "-m", "unittest", "discover", "-k", "double", "-v", "-s", "tests"]),
+    ).toEqual(["python3", "-m", "unittest", "-k", "double", "-v", "tests.test_api"]);
+    expect(
+      narrowed(["python3", "-m", "unittest", "discover", "--durations", "3", "-s", "tests"]),
+    ).toEqual(["python3", "-m", "unittest", "--durations", "3", "tests.test_api"]);
+    expect(
+      narrowed([
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-v",
+        "--start-directory",
+        "tests",
+        "--pattern",
+        "test_*.py",
+        "--top-level-directory",
+        ".",
+      ]),
+    ).toEqual(["python3", "-m", "unittest", "-v", "tests.test_api"]);
+  });
+
+  it("narrows to classes by dotted name", () => {
+    expect(
+      narrowed(["python3", "-m", "unittest", "discover", "-s", "tests"], ["ApiTests"]),
+    ).toEqual(["python3", "-m", "unittest", "tests.test_api.ApiTests"]);
+  });
+
+  it("still runs a file path after a check that names no discovery", () => {
+    expect(narrowed(["python3", "-m", "unittest", "-v"])).toEqual([
+      "python3",
+      "-m",
+      "unittest",
+      "-v",
+      "tests/test_api.py",
+    ]);
+  });
+});
+
 describe("pythonTestClasses", () => {
   it("names the classes whose bodies mention the changed module", () => {
     expect(pythonTestClasses(MANAGEMENT, ["createsuperuser"])).toEqual([
