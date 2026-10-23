@@ -2,6 +2,8 @@
 
 Usage: setup_arm.py <task> <arm> <run_name> [--skill <id>]... [--preset default]
 arm: bare | bare-automemory | speckit | bmad | visp:<build> (Claude Code worker) | visp-codex:<build> (Codex worker)
+A worker mode suffix (`bare+compact100k`, `visp:<build>+lean+compact100k`; presets.WORKER_ENV_MODES) sets
+environment variables for the Claude Code worker only; arm.json records armSpec, workerModes and workerEnv.
 bare-automemory is bare with Claude Code's auto memory on, in a directory of the run; every other arm has it off.
 The automemory prompt names that directory as writable and readable besides the project (prompts.py);
 arm.json "memoryPrompt" records the path, and runs made before that fix have none.
@@ -28,7 +30,8 @@ import subprocess
 
 from chains import step_files
 from common import RUNS
-from presets import arm_record, config_yaml, critic_yaml, effective_settings, preset, visp_build
+from presets import (arm_record, config_yaml, critic_yaml, effective_settings, preset, split_worker_modes, visp_build,
+                     worker_env)
 from prompts import common, memory_directory
 
 BENCH = pathlib.Path(__file__).resolve().parent
@@ -40,7 +43,11 @@ parser.add_argument("--skill", action="append", default=[])
 parser.add_argument("--preset", default="default")
 args = parser.parse_args()
 settings = preset(args.preset)
-task_name, arm, name = args.task, args.arm, args.run
+task_name, name = args.task, args.run
+# A worker environment mode (`bare+compact100k`) sets variables for the worker; the arm is what remains.
+arm, worker_modes = split_worker_modes(args.arm)
+if worker_modes and arm.startswith("visp-codex:"):
+    raise SystemExit(f"{worker_modes[0]} sets Claude Code variables; a Codex worker does not read them")
 if args.skill and not arm.startswith("visp"):
     raise SystemExit("--skill applies only to VISP arms")
 root = RUNS / "runs" / name / "project"
@@ -146,5 +153,7 @@ for number, step in enumerate(steps, start=1):
 (root.parent / "arm.json").write_text(json.dumps({"task": task_name, "arm": arm, "shim": shim_dir, "skills": args.skill,
                                                  "preset": args.preset, "settings": settings, **arm_config,
                                                  "memory": "auto" if arm == "bare-automemory" else "off",
+                                                 **({"armSpec": args.arm, "workerModes": worker_modes,
+                                                     "workerEnv": worker_env(worker_modes)} if worker_modes else {}),
                                                  **({"memoryPrompt": str(memory_directory(root))} if arm == "bare-automemory" else {})}))
 print(json.dumps({"root": str(root), "prompt": str(root.parent / "prompt.txt")}))

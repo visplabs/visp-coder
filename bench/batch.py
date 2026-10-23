@@ -5,7 +5,9 @@ Usage: batch.py --batch <name> --tasks a,b,c --arms visp:visp-base,visp:visp-can
 
 An arm is anything setup_arm.py accepts, optionally labelled as label=arm; the label defaults to
 the build name for VISP arms (visp:visp-base -> visp-base, visp-codex:x -> codex-x) and to the
-arm itself otherwise; a mode joins the label with a dash (visp:cand+lean+nocritic -> cand-lean-nocritic). Runs are named <batch>-<task>-<label>-<rep> under $VISP_BENCH_RUNS/runs.
+arm itself otherwise; a mode joins the label with a dash (visp:cand+lean+nocritic -> cand-lean-nocritic). A worker mode ends the
+arm (bare+compact100k, visp:cand+compact100k; presets.WORKER_ENV_MODES) and sets environment variables for the
+Claude Code worker; the dry run shows them and arm.json records them. Runs are named <batch>-<task>-<label>-<rep> under $VISP_BENCH_RUNS/runs.
 
 The queue goes repetition by repetition, and within one through every task with the arms in an
 order that rotates per task, so machine load and a partial batch fall on every arm alike. A
@@ -49,7 +51,7 @@ import time
 from chains import is_chain, step_files
 from common import RUNS, stop_recorded
 from judge import CHECKLISTS, GAMES
-from presets import preset, visp_build
+from presets import preset, split_worker_modes, visp_build, worker_env
 from run_carryover import batch_mode, planned_sessions
 from runfacts import invalid, invalidity, is_finished, mark_if_invalid
 import snapshots
@@ -85,12 +87,21 @@ def label(spec):
         return spec.split(":", 1)[1].replace("+", "-"), spec
     if spec.startswith("visp-codex:"):
         return "codex-" + spec.split(":", 1)[1], spec
-    return spec, spec
+    return spec.replace("+", "-"), spec
+
+
+def worker_note(arm):
+    """What a worker mode of the arm sets, for the dry run; "" for none."""
+    modes = split_worker_modes(arm)[1]
+    return "worker env " + " ".join(f"{key}={value}" for key, value in worker_env(modes).items()) if modes else ""
 
 
 def plan(args):
     tasks = args.tasks.split(",")
     arms = [label(spec) for spec in args.arms.split(",")]
+    for _, arm in arms:
+        if split_worker_modes(arm)[1] and split_worker_modes(arm)[0].startswith("visp-codex:"):
+            raise SystemExit(f"{arm}: worker modes set Claude Code variables; a Codex worker does not read them")
     if len({name for name, _ in arms}) != len(arms):
         raise SystemExit("two arms share a label; name them as label=arm")
     runs = []
@@ -104,6 +115,7 @@ def plan(args):
                 runs.append({"name": f"{args.batch}-{task}-{name}-{rep}", "task": task, "kind": task_kind,
                              "arm": arm, "label": name, "rep": rep, "timeout": TIMEOUTS[task_kind],
                              "twoSessions": task_kind == "carryover",
+                             **({"note": worker_note(arm)} if worker_note(arm) else {}),
                              "mode": batch_mode(task) if task_kind == "carryover" else None})
     return tasks, arms, runs
 

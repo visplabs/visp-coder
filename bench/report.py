@@ -67,7 +67,7 @@ from chains import is_chain, run_summary
 from common import RUNS
 from diffscope import run_scope
 from judge import CHECKLISTS, GAMES
-from presets import arm_title, mode_config, mode_difference, scalar, visp_build
+from presets import arm_title, mode_config, mode_difference, scalar, split_worker_modes, visp_build, worker_env
 from probe import has_probes, summarize as probe_summary
 from runfacts import final_project, invalid, is_finished, mark_if_invalid, sessions, timing, transcripts
 
@@ -392,13 +392,17 @@ def is_visp(spec):
 
 def pair_note(base, cand):
     """What sets two arms apart, for the heading of their comparison."""
+    (base_arm, base_env), (cand_arm, cand_env) = split_worker_modes(base), split_worker_modes(cand)
+    env = f"; worker modes {'+'.join(base_env) or 'none'} -> {'+'.join(cand_env) or 'none'}" if base_env != cand_env else ""
     if is_visp(base) and is_visp(cand) and visp_build(base)[0] == visp_build(cand)[0]:
         diff = mode_difference(visp_build(base)[1], visp_build(cand)[1])
         if not diff:
-            return "same build and same config keys"
+            return "same build and same config keys" + env
         keys = ", ".join(f"{key} {'unset' if before is None else before} -> {'unset' if after is None else after}"
                          for key, (before, after) in diff.items())
-        return f"same build, config differs only in: {keys}"
+        return f"same build, config differs only in: {keys}" + env
+    if base_arm == cand_arm and base_env != cand_env:
+        return f"same arm{env}"
     return "different builds or workflows"
 
 
@@ -438,6 +442,8 @@ def markdown(manifest, rows, groups, comparisons, excluded, unfinished, show_run
     for label, spec in specs.items():
         keys = ", ".join(f"{key}: {value}" for key, value in mode_config(visp_build(spec)[1]).items()) \
             if is_visp(spec) else ""
+        variables = ", ".join(f"{key}={value}" for key, value in worker_env(split_worker_modes(spec)[1]).items())
+        keys = "; ".join(part for part in (keys, f"worker env {variables}" if variables else "") if part)
         out.append(f"| {label} | {arm_title(spec)} | {keys or '–'} |")
     out.append("")
     out.append("Scores are means over valid runs (– where a run has no score yet); times are medians (wall: all "

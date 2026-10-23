@@ -75,6 +75,8 @@ def worker_env(arm):
         env.pop("CLAUDE_CODE_DISABLE_AUTO_MEMORY", None)
     else:
         env["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] = "1"
+    # A worker mode of the arm (presets.WORKER_ENV_MODES), e.g. compact100k; arm.json has the variables.
+    env.update(arm.get("workerEnv") or {})
     return env
 
 
@@ -165,6 +167,7 @@ def run_session(project, arm, prompt, model=None, timeout=2700, resume=None, eff
             # Memory Claude Code kept at its own location despite the setting: always empty.
             "outsideFiles": listing(default_memory(project)),
         },
+        **({"workerEnv": arm["workerEnv"]} if arm.get("workerEnv") else {}),
         "turns": sum(entry.get("num_turns") or 0 for entry in turns), "userTurns": len(turns),
         "isError": any(entry.get("is_error") for entry in turns),
         "sessionId": next((entry["session_id"] for entry in reversed(turns) if entry.get("session_id")), None),

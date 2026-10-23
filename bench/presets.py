@@ -67,9 +67,43 @@ VISP_MODES = {
 }
 
 
+# Worker environment modes, an arm suffix after the arm and any VISP modes: `bare+compact100k`,
+# `visp:cand+lean+compact100k`. Each sets variables in the worker's environment (run_claude.worker_env)
+# and nothing in the project, so the prompt and the project files of the arm stay as they are.
+# compact100k: Claude Code compacts the conversation when it reaches about 90k tokens, so no request
+# passes the 100k price line (research-oct23.md C1). From https://code.claude.com/docs/en/env-vars:
+# CLAUDE_CODE_AUTO_COMPACT_WINDOW is "how full the context gets before compaction", from 100000 to 1000000
+# tokens, and beats the setting and the flag; CLAUDE_AUTOCOMPACT_PCT_OVERRIDE (1-100) is the percentage of
+# that window at which compaction triggers, and can only lower the threshold. Without them a model with a
+# native 1M window (Haiku 5.5) compacts at about 967K tokens (https://code.claude.com/docs/en/model-config).
+WORKER_ENV_MODES = {
+    "compact100k": {"CLAUDE_CODE_AUTO_COMPACT_WINDOW": "100000", "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "90"},
+}
+
+
+def split_worker_modes(arm):
+    """An arm spec without its worker environment modes, and those modes.
+
+    `visp:cand+lean+compact100k` -> ("visp:cand+lean", ["compact100k"]); `bare+compact100k` -> ("bare", ["compact100k"]).
+    """
+    head, *names = arm.split("+")
+    modes = [name for name in names if name in WORKER_ENV_MODES]
+    if len(set(modes)) != len(modes):
+        raise SystemExit(f"worker mode repeated in {arm}")
+    return "+".join([head, *(name for name in names if name not in WORKER_ENV_MODES)]), modes
+
+
+def worker_env(modes):
+    """The environment variables the worker modes set; {} for none."""
+    return {key: value for mode in modes for key, value in WORKER_ENV_MODES[mode].items()}
+
+
 def visp_build(arm):
-    """The build and modes of a VISP arm: `visp:visp-cand+lean+nocritic` -> ("visp-cand", "lean+nocritic")."""
-    build, _, mode = arm.split(":", 1)[1].partition("+")
+    """The build and modes of a VISP arm: `visp:visp-cand+lean+nocritic` -> ("visp-cand", "lean+nocritic").
+
+    Worker environment modes (`+compact100k`) are not VISP modes and are left out.
+    """
+    build, _, mode = split_worker_modes(arm)[0].split(":", 1)[1].partition("+")
     mode_config(mode)
     return build, mode or None
 
@@ -91,11 +125,13 @@ def mode_config(mode):
 
 
 def arm_title(arm):
-    """How a report names an arm: a VISP arm as `visp:<build>+<modes>`, any other as it is."""
-    if not arm.startswith(("visp:", "visp-codex:")):
-        return arm
-    build, mode = visp_build(arm)
-    return f"{arm.split(':', 1)[0]}:{build}" + (f"+{mode}" if mode else "")
+    """How a report names an arm: a VISP arm as `visp:<build>+<modes>`, any other as it is; worker modes follow."""
+    base, workers = split_worker_modes(arm)
+    suffix = "".join(f"+{name}" for name in workers)
+    if not base.startswith(("visp:", "visp-codex:")):
+        return base + suffix
+    build, mode = visp_build(base)
+    return f"{base.split(':', 1)[0]}:{build}" + (f"+{mode}" if mode else "") + suffix
 
 
 def mode_difference(base, candidate):
