@@ -238,6 +238,40 @@ The review rescued 0 hidden checks. One repair lost a check: a change made for a
 
 The probes for the review's findings passed in 0–20% of bare runs and 83–93% of repaired lean runs. One repair also caused a regression (`abs-out-of-range`). Limits: the probes were written after seeing the reviewer's findings, so they favour the reviewer by construction. Nine probes cover gaps that the bench's own reference solution shares. They cannot show what the reviewer misses. A fresh batch (B2) with new runs will test whether the gain repeats.
 
+## Lean batches after the pivot (October 23 2026)
+
+Both batches used the bench preset `quality-2026-10`: a Claude Haiku 5.5 worker at high effort, with VISP launching a Claude reviewer (`critic.launch: claude-exec`). A default Claude Code install leaves the reviewer to the host, so these results describe the `claude-exec` configuration.
+
+**B2, 8 runs per arm on three tasks.** The arms were bare, develop, a candidate build (#79 and #82), and the candidate with the reviewer off.
+
+| Task | Metric | Bare | Develop | Candidate | Candidate, reviewer off |
+| --- | --- | --- | --- | --- | --- |
+| reservations-bundles | hidden checks | 100% | 100% | 100% | 100% |
+| reservations-bundles | mean cost per run | $0.023 | $0.057 | $0.059 | $0.042 |
+| reservations-bundles | median wall | 111 s | 194 s | 194 s | 182 s |
+| spreadsheet-extend | hidden checks | 100% | 99.8% | 100% | 100% |
+| spreadsheet-extend | mean cost per run | $0.168 | $0.330 | $0.283 | $0.278 |
+| spreadsheet-extend | median wall | 439 s | 586 s | 490 s | 467 s |
+| lighthouse-pixel | judge | 7.875 | 7.75 | 7.875 | 8.0 |
+
+- **Quality.** Every arm held it. The probe checks (#84) for gaps the earlier reviews had found scored the same in every arm, so in this batch the reviewer did not change the product.
+- **Candidate against develop.** The candidate met the merge rule against develop, and was faster and cheaper on the extension task.
+- **Cost.** It is still over the target of near-bare cost: +$0.036 and +82 s on bundles, and 1.68× bare on extend.
+
+**B3, carryover over two or three sessions.** A convention from the first session (a 10000 restock cap) had to hold in later sessions without being restated.
+
+| Arm | Runs that kept the convention |
+| --- | --- |
+| Bare | 22 of 40 (55%) |
+| Bare with Claude Code auto memory | 14 of 40 (35%) |
+| VISP lean with recall | 13 of 14 (93%), interim: 6 more runs were still running |
+| VISP lean with recall off | 5 of 14 (36%) |
+
+- **Recall is the cause.** VISP beat bare by 38 points (one-sided exact test stratified by task, p = 0.009). With recall off it was no better than bare.
+- **Why bare misses it.** The cap is visible in the code in every run. Bare workers read it as applying only to item creation; the wider scope lives only in the earlier request.
+- **The auto-memory arm saved no memory files.** The bench prompt confined edits to the project, which kept its memory folder out of reach. #90 fixes this for later runs.
+- **Limits.** This is one task family and one worker model, and the VISP arm's results are interim.
+
 ## What made the difference
 
 **The harness must launch the critic itself.** In the first weak-agent pilot (Luna at low effort, a sentiment API with 36 hidden tests), bare coding scored 36 and both VISP arms 34: workers never ran a check that covered errors and never delegated review. A critic launched by VISP (`codex exec`, read-only) on the same code reported the two missing 405 responses, acceptance of `NaN` and a request that can hang without `Content-Length`, each with a next check. VISP now launches the reviewer after checks pass (`critic.launch: codex-exec`).
