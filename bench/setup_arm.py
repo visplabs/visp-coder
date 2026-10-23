@@ -3,6 +3,8 @@
 Usage: setup_arm.py <task> <arm> <run_name> [--skill <id>]... [--preset default]
 arm: bare | bare-automemory | speckit | bmad | visp:<build> (Claude Code worker) | visp-codex:<build> (Codex worker)
 bare-automemory is bare with Claude Code's auto memory on, in a directory of the run; every other arm has it off.
+The automemory prompt names that directory as writable and readable besides the project (prompts.py);
+arm.json "memoryPrompt" records the path, and runs made before that fix have none.
 <build> is a name given to build_visp.sh; `visp:<build>+lean+nocritic` adds modes from presets.py,
 each a set of visp.yml keys. arm.json records them and the settings `visp doctor --settings` reports. --skill seeds and admits a bundled VISP skill, so an
 arm with it differs from one without only by that skill. --preset (presets.py) sets VISP's
@@ -27,6 +29,7 @@ import subprocess
 from chains import step_files
 from common import RUNS
 from presets import arm_record, config_yaml, critic_yaml, effective_settings, preset, visp_build
+from prompts import common, memory_directory
 
 BENCH = pathlib.Path(__file__).resolve().parent
 parser = argparse.ArgumentParser()
@@ -72,14 +75,7 @@ start = task_dir / "start"
 if start.is_dir():
     shutil.copytree(start, root, dirs_exist_ok=True)
 
-COMMON = (
-    f"Your project directory is {root}. Run every shell command from that directory "
-    f"(start each command with `cd {root} && `) and create or edit files only inside it. "
-    "Do not read other directories. No dependency downloads or network APIs; the standard "
-    "library is available. Do not ask questions: make reasonable assumptions and continue. "
-    "Do not delegate to other agents. Build it, run your tests, and finish with a short report "
-    "of what you actually verified."
-)
+COMMON = common(root, arm)
 if arm in ("bare", "bare-automemory"):
     workflow = "Use ordinary coding: write the code and tests directly."
 elif arm == "speckit":
@@ -149,5 +145,6 @@ for number, step in enumerate(steps, start=1):
 # The headless runner puts the arm's VISP build on PATH so installed hooks find it.
 (root.parent / "arm.json").write_text(json.dumps({"task": task_name, "arm": arm, "shim": shim_dir, "skills": args.skill,
                                                  "preset": args.preset, "settings": settings, **arm_config,
-                                                 "memory": "auto" if arm == "bare-automemory" else "off"}))
+                                                 "memory": "auto" if arm == "bare-automemory" else "off",
+                                                 **({"memoryPrompt": str(memory_directory(root))} if arm == "bare-automemory" else {})}))
 print(json.dumps({"root": str(root), "prompt": str(root.parent / "prompt.txt")}))
