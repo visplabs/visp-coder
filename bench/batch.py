@@ -181,7 +181,7 @@ def isolation(runs, arms, announce):
     if any(arm.startswith("visp") for _, arm in arms):
         problems.append("a VISP arm cannot run a scope task in the container yet (its build is not in the image)")
     if announce:
-        print(f"scope isolation: container {scope_container.IMAGE} (Claude Code {(facts or {}).get('claude', '?')}), "
+        print(f"scope isolation: container {scope_container.IMAGE} ({(facts or {}).get('claude', 'no image')}), "
               f"token file {token_file}, egress only to {', '.join(scope_container.ALLOW_HOSTS)}")
         for problem in problems:
             print(f"warning: {problem}")
