@@ -31,7 +31,9 @@ describe("renderConfigTemplate", () => {
     expect(load("codex")?.launch).toBe("codex-exec");
     expect(load("codex")?.reasoningEffort).toBe("medium");
     expect(load("codex")?.webSearch).toBe(true);
-    expect(load("claude-code")?.launch).toBeUndefined();
+    expect(load("claude-code")?.launch).toBe("claude-exec");
+    expect(load("claude-code")?.harness).toBe("claude-code");
+    expect(load("cursor")?.launch).toBeUndefined();
   });
 
   it("loads when validation commands are present", () => {
