@@ -33,6 +33,7 @@ derived from the real check names, not on a real run.
 The primary outcome is the carry: `carried` for archive-carryover, `current` for -raised.
 `hidden` is untouched; this reads the same hidden.json.
 """
+import fractions
 import json
 import math
 import pathlib
@@ -46,6 +47,10 @@ ROLES = {
     "quantity": "restock cap uses quantity",
     "concurrent": "concurrent restocks one unit below the cap",
 }
+# The rule for beating bare: a pooled gain of at least 20 points (exactly: 1/5) at p below 0.05.
+MIN_GAIN = fractions.Fraction(1, 5)
+MAX_P = 0.05
+COUNTS = ("visp_carried", "visp_runs", "bare_carried", "bare_runs")
 OLD_LIMIT = "restock past the replaced 10000 limit"
 PLAIN_RESTOCK = "new:restock returns and persists quantity"
 
@@ -106,12 +111,30 @@ def for_hidden(task, hidden_path):
     return outcome(task, results) if results else None
 
 
-def fisher_greater(x1, n1, x2, n2):
-    """One-sided Fisher exact p that group 1's carry rate is above group 2's: P(X >= x1), X hypergeometric."""
-    total, carried = n1 + n2, x1 + x2
-    ways = math.comb(total, carried)
-    return sum(math.comb(n1, k) * math.comb(n2, carried - k)
-               for k in range(x1, min(n1, carried) + 1) if carried - k <= n2) / ways
+def stratified_greater(strata):
+    """One-sided exact p that group 1's carry rate is above group 2's, with one 2x2 table per task.
+
+    strata: [(x1, n1, x2, n2), ...], the carried and valid runs of group 1 and of group 2 in each task.
+    Given a task's total of carried runs, group 1's count in it is hypergeometric (Fisher's exact test
+    for that task alone). The statistic is group 1's carried runs summed over the tasks, and p is the
+    probability of a sum at least as large as the observed one under the convolution of those
+    distributions (the exact conditional test behind Cochran-Mantel-Haenszel). A task is never pooled with
+    another, so an arm that lost runs of one task cannot look better for having a different mix. A task
+    in which every run agrees, or only one group has runs, changes nothing.
+    """
+    ways, scale = {0: 1}, 1
+    for x1, n1, x2, n2 in strata:
+        carried = x1 + x2
+        scale *= math.comb(n1 + n2, carried)
+        table = {k: math.comb(n1, k) * math.comb(n2, carried - k)
+                 for k in range(max(0, carried - n2), min(n1, carried) + 1)}
+        combined = {}
+        for total, weight in ways.items():
+            for k, count in table.items():
+                combined[total + k] = combined.get(total + k, 0) + weight * count
+        ways = combined
+    seen = sum(x1 for x1, _, _, _ in strata)
+    return sum(weight for total, weight in ways.items() if total >= seen) / scale
 
 
 def tally(rows):
@@ -139,8 +162,18 @@ def pct(part, whole):
     return f"{100 * part / whole:.0f}%" if whole else "–"
 
 
+def gap(x1, n1, x2, n2):
+    """Group 1's carry rate minus group 2's, exactly."""
+    return fractions.Fraction(x1, n1) - fractions.Fraction(x2, n2)
+
+
 def comparisons(rows, arms, tasks):
-    """VISP against each bare arm, pooled over the tasks both ran: counts, rates, delta and one-sided p."""
+    """VISP against each bare arm over the tasks both have valid labelled runs on.
+
+    Counts and delta are pooled over those tasks; per_task has the counts and delta of each. p is
+    stratified_greater over the tasks, so the pooled delta can be moved by the arms' mix of tasks
+    but the p cannot. meets: a pooled delta of at least 20 points (compared exactly) and p < 0.05.
+    """
     found = []
     for visp_label, visp_spec in arms:
         if not is_visp(visp_spec):
@@ -148,19 +181,21 @@ def comparisons(rows, arms, tasks):
         for bare_label, bare_spec in arms:
             if is_visp(bare_spec) or not bare_spec.startswith("bare"):
                 continue
-            shared = [task for task in tasks
-                      if any(r["task"] == task and r["arm"] == visp_label for r in rows)
-                      and any(r["task"] == task and r["arm"] == bare_label for r in rows)]
-            left = [r for r in rows if r["arm"] == visp_label and r["task"] in shared and r.get("carry")]
-            right = [r for r in rows if r["arm"] == bare_label and r["task"] in shared and r.get("carry")]
-            if not left or not right:
+            per_task = []
+            for task in tasks:
+                left = [r for r in rows if r["arm"] == visp_label and r["task"] == task and r.get("carry")]
+                right = [r for r in rows if r["arm"] == bare_label and r["task"] == task and r.get("carry")]
+                if left and right:
+                    counts = (carried(left), len(left), carried(right), len(right))
+                    per_task.append({"task": task, **dict(zip(COUNTS, counts)), "delta": float(gap(*counts))})
+            if not per_task:
                 continue
-            x1, x2 = carried(left), carried(right)
-            delta = x1 / len(left) - x2 / len(right)
-            p = fisher_greater(x1, len(left), x2, len(right))
-            found.append({"visp": visp_label, "bare": bare_label, "tasks": shared, "visp_carried": x1,
-                          "visp_runs": len(left), "bare_carried": x2, "bare_runs": len(right),
-                          "delta": delta, "p": p, "meets": delta >= 0.20 and p < 0.05})
+            strata = [tuple(t[key] for key in COUNTS) for t in per_task]
+            totals = tuple(map(sum, zip(*strata)))
+            p = stratified_greater(strata)
+            found.append({"visp": visp_label, "bare": bare_label, "tasks": [t["task"] for t in per_task],
+                          **dict(zip(COUNTS, totals)), "delta": float(gap(*totals)), "per_task": per_task, "p": p,
+                          "meets": gap(*totals) >= MIN_GAIN and p < MAX_P})
     return found
 
 
@@ -193,14 +228,23 @@ def markdown(manifest, rows):
                        f"| {sum(r.get('carryReruns') or 0 for r in group)} |")
     pairs = comparisons(rows, arms, tasks)
     if pairs:
-        out += ["", "VISP against each bare arm, counts pooled over the tasks both ran; one-sided Fisher exact p "
-                "(VISP's carry rate above bare's). `meets` is a gain of at least 20 points with p < 0.05.", "",
+        out += ["", "VISP against each bare arm, over the tasks both ran. Delta is the difference in carry rate in points on "
+                "the counts pooled over those tasks; p is a one-sided exact p, stratified by task (VISP's carry rate "
+                "above bare's within each task, summed over the tasks), so an arm's different mix of tasks does not move "
+                "it. `meets` is a pooled gain of at least 20 points with p < 0.05.", "",
                 "| VISP arm | Bare arm | Tasks | VISP | Bare | Delta points | p | meets |",
                 "| --- | --- | --- | --- | --- | --- | --- | --- |"]
         for pair in pairs:
             out.append(f"| {pair['visp']} | {pair['bare']} | {', '.join(pair['tasks'])} "
                        f"| {pair['visp_carried']}/{pair['visp_runs']} | {pair['bare_carried']}/{pair['bare_runs']} "
                        f"| {100 * pair['delta']:+.0f} | {pair['p']:.3f} | {'yes' if pair['meets'] else 'no'} |")
+        out += ["", "The same, task by task:", "", "| VISP arm | Bare arm | Task | VISP | Bare | Delta points |",
+                "| --- | --- | --- | --- | --- | --- |"]
+        for pair in pairs:
+            for task in pair["per_task"]:
+                out.append(f"| {pair['visp']} | {pair['bare']} | {task['task']} "
+                           f"| {task['visp_carried']}/{task['visp_runs']} | {task['bare_carried']}/{task['bare_runs']} "
+                           f"| {100 * task['delta']:+.0f} |")
     unscored = [r["run"] for r in rows if r["task"] in tasks and not r.get("carry")]
     if unscored:
         out += ["", "Runs with no carry label (hidden checks not scored, or lacking the cap checks):", ""]
