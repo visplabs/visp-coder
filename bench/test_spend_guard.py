@@ -29,6 +29,44 @@ signal.signal(signal.SIGTERM, stop)
 pathlib.Path(sys.argv[-1] + ".ready").write_text("ready")
 time.sleep(60)
 """
+# A driver that never leaves on SIGTERM.
+STUBBORN_DRIVER = DRIVER.replace("signal.signal(signal.SIGTERM, stop)", "signal.signal(signal.SIGTERM, signal.SIG_IGN)")
+
+# A driver that starts the guard as its child, as batch.py does, and on SIGTERM does what batch.py's
+# on_signal does: stops the guard (always, as the old stop_guard did) and exits at once. The marker says
+# whether the stop record was on disk when the signal arrived.
+GUARDING_DRIVER = """import json, os, pathlib, signal, subprocess, sys, time
+bench, root, marker = (pathlib.Path(arg) for arg in sys.argv[3:6])
+directory = root / "batches" / "b3"
+(directory / "manifest.json").write_text(json.dumps(
+    {"batch": "b3", "runs": [{"name": "b3-t-bare-1"}], "driverPid": os.getpid()}))
+guard = None
+def stop(number, frame):
+    marker.write_text("record-present" if (directory / "stopped-by-spend-guard.json").exists() else "record-missing")
+    if guard is not None and guard.poll() is None:
+        guard.terminate()
+    os._exit(128 + number)
+signal.signal(signal.SIGTERM, stop)
+guard = subprocess.Popen([sys.executable, str(bench / "spend_guard.py"), "b3", "--cap", "5", "--interval", "0.1"])
+time.sleep(60)
+"""
+
+# The same, with batch.py's own on_signal and start_guard.
+BATCH_PY_DRIVER = """import argparse, importlib.util, json, os, pathlib, sys, time
+bench, root = (pathlib.Path(arg) for arg in sys.argv[3:5])
+sys.path.insert(0, str(bench))
+spec = importlib.util.spec_from_file_location("real_batch", bench / "batch.py")
+real = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(real)
+directory = root / "batches" / "b3"
+(directory / "manifest.json").write_text(json.dumps(
+    {"batch": "b3", "runs": [{"name": "b3-t-bare-1"}], "driverPid": os.getpid()}))
+lock = directory / "lock"
+lock.write_text(str(os.getpid()))
+real.on_signal(directory, lock)
+real.start_guard(directory, argparse.Namespace(batch="b3", spend_cap=5.0, spend_interval=0.1))
+time.sleep(60)
+"""
 
 
 def call(cost, role="worker"):
@@ -64,10 +102,10 @@ class Fixture(unittest.TestCase):
         (self.directory / "manifest.json").write_text(json.dumps(manifest))
         return manifest
 
-    def driver(self, batch="b3", script_name="batch.py"):
+    def driver(self, batch="b3", script_name="batch.py", source=DRIVER):
         """A fake driver: `<dir>/batch.py --batch <batch> <marker>`. Returns (process, marker path)."""
         script = self.root / script_name
-        script.write_text(DRIVER)
+        script.write_text(source)
         marker = self.root / f"marker-{len(self.drivers)}"
         process = subprocess.Popen([sys.executable, str(script), "--batch", batch, str(marker)])
         self.drivers.append(process)
@@ -217,6 +255,122 @@ class Guard(Fixture):
             handle.write(call(5.0) + "\n")
         self.assertEqual(guard.wait(30), 2)
         self.assertEqual(marker.read_text(), "terminated")
+
+
+class Stop(Fixture):
+    """What the guard leaves behind when it stops a driver: the record, the log line, the exit result."""
+
+    def over_the_cap(self, **extra):
+        process, marker = self.driver(**extra)
+        self.run_dir("b3-t-bare-1", call(7.0))
+        self.manifest(["b3-t-bare-1"], driverPid=process.pid)
+        return process, marker
+
+    def read_record(self, deadline=10):
+        """The stop record once it says it is complete, else whatever is there (None if nothing)."""
+        record, end = None, time.time() + deadline
+        while time.time() < end:
+            try:
+                record = json.loads((self.directory / spend_guard.STOP_FILE).read_text())
+            except (OSError, ValueError):
+                record = None
+            if record and record.get("complete"):
+                break
+            time.sleep(0.05)
+        return record
+
+    def launch(self, source, *extra):
+        """Start a driver script that starts the guard itself; returns (process, marker, guard log path)."""
+        script = self.root / "driver" / "batch.py"
+        script.parent.mkdir(exist_ok=True)
+        script.write_text(source)
+        self.run_dir("b3-t-bare-1", call(7.0))
+        marker, log = self.root / "marker", self.root / "guard.log"
+        with open(log, "w") as out:
+            process = subprocess.Popen([sys.executable, str(script), "--batch", "b3", str(BENCH), str(self.root),
+                                        str(marker), *extra], stdout=out, stderr=subprocess.STDOUT,
+                                       env={**os.environ, "VISP_BENCH_RUNS": str(self.root)})
+        self.drivers.append(process)
+        process.wait(30)  # it leaves on the guard's SIGTERM
+        return process, marker, log
+
+    def test_the_record_and_the_announcement_come_before_the_signal(self):
+        process, marker = self.over_the_cap()
+        seen = []
+
+        def announce(record):
+            seen.append((marker.exists(), record["signalled"], json.loads((self.directory / spend_guard.STOP_FILE).read_text())))
+
+        state, record = spend_guard.check("b3", 6.0, self.root, waited=10, announce=announce)
+        self.assertEqual(state, "over")
+        self.assertEqual(len(seen), 1)
+        signalled_yet, said_so, on_disk = seen[0]
+        self.assertFalse(signalled_yet)
+        self.assertFalse(said_so)
+        self.assertEqual((on_disk["driverPid"], on_disk["total"], on_disk["signalled"], on_disk["complete"]),
+                         (process.pid, 7.0, False, False))
+        self.assertEqual(marker.read_text(), "terminated")
+        finished = json.loads((self.directory / spend_guard.STOP_FILE).read_text())
+        self.assertEqual((finished["signalled"], finished["driverExited"], finished["complete"]), (True, True, True))
+        self.assertEqual(record, finished)
+
+    def test_a_failing_announcement_does_not_keep_the_driver_running(self):
+        process, marker = self.over_the_cap()
+
+        def announce(record):
+            raise BrokenPipeError("the log's reader is gone")
+
+        state, record = spend_guard.check("b3", 6.0, self.root, waited=10, announce=announce)
+        self.assertEqual((state, record["signalled"], record["driverExited"]), ("over", True, True))
+        self.assertEqual(marker.read_text(), "terminated")
+
+    def test_a_driver_that_stays_leaves_a_complete_record_saying_so(self):
+        process, _ = self.over_the_cap(source=STUBBORN_DRIVER)
+        state, record = spend_guard.check("b3", 6.0, self.root, waited=0.5)
+        self.assertEqual((state, record["signalled"], record["driverExited"], record["complete"]),
+                         ("over", True, False, True))
+        self.assertEqual(json.loads((self.directory / spend_guard.STOP_FILE).read_text()), record)
+        self.assertIsNone(process.poll())
+
+    def test_no_live_driver_still_leaves_a_complete_record(self):
+        process, _ = self.driver(batch="other")
+        self.run_dir("b3-t-bare-1", call(9.0))
+        self.manifest(["b3-t-bare-1"], driverPid=process.pid)
+        seen = []
+        state, record = spend_guard.check("b3", 6.0, self.root, announce=seen.append)
+        self.assertEqual((state, record["signalled"], record["complete"]), ("over", False, True))
+        self.assertIn("nothing was signalled", seen[0]["note"])
+        self.assertEqual(json.loads((self.directory / spend_guard.STOP_FILE).read_text()), record)
+
+    def test_sigterm_is_ignored_only_while_stopping(self):
+        process, _ = self.over_the_cap()
+        before = signal.getsignal(signal.SIGTERM)
+        during = []
+        spend_guard.check("b3", 6.0, self.root, waited=10, announce=lambda record: during.append(signal.getsignal(signal.SIGTERM)))
+        self.assertEqual(during, [signal.SIG_IGN])
+        self.assertEqual(signal.getsignal(signal.SIGTERM), before)
+
+    def test_a_driver_that_stops_its_guard_on_sigterm_still_gets_the_record_and_the_log_line(self):
+        # The case of the spend-guard stop of batch b2: batch.py's handler terminated the guard
+        # while it waited for the driver to leave, so neither the record nor the line appeared.
+        process, marker, log = self.launch(GUARDING_DRIVER)
+        record = self.read_record()
+        self.assertIsNotNone(record, "no stop record was written")
+        self.assertEqual((record["driverPid"], record["total"], record["signalled"], record["driverExited"],
+                          record["complete"]), (process.pid, 7.0, True, True, True))
+        self.assertEqual(marker.read_text(), "record-present")
+        text = log.read_text()
+        self.assertIn(f"$7.00 is over the $5.00 cap; stopping driver {process.pid}", text)
+        self.assertIn(f"driver {process.pid} exited", text)
+
+    def test_batch_pys_own_handler_leaves_the_record_and_the_log_line(self):
+        process, _, log = self.launch(BATCH_PY_DRIVER)
+        record = self.read_record()
+        self.assertIsNotNone(record, "no stop record was written")
+        self.assertEqual((record["driverPid"], record["signalled"], record["driverExited"], record["complete"]),
+                         (process.pid, True, True, True))
+        self.assertIn("is over the $5.00 cap; stopping driver", log.read_text())
+        self.assertFalse((self.directory / "lock").exists())  # the handler ran to its end
 
 
 class Hook(unittest.TestCase):

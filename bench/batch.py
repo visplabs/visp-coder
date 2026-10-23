@@ -276,6 +276,7 @@ def start_guard(directory, args):
 
 
 def stop_guard():
+    # A guard that is recording its own stop of this batch ignores the signal (spend_guard.ignoring_sigterm).
     if guard and guard.poll() is None:
         guard.terminate()
 
