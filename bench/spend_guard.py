@@ -10,8 +10,12 @@ discarded/<run>-* (a run moved aside by a restart or --rerun-invalid has spent i
 file named claude-calls*.jsonl anywhere in a run counts, so a judge or scoring call is included if a
 build logs it; today judge.py and code_judge.py call `claude` without the shim and are not logged.
 
-Above the cap it sends SIGTERM to the batch driver, which stops every run's runner and worker and
-exits (batch.py on_signal), and writes batches/<batch>/stopped-by-spend-guard.json with the total.
+Above the cap it writes batches/<batch>/stopped-by-spend-guard.json with the total and prints its log
+line, then sends SIGTERM to the batch driver, which stops every run's runner and worker and exits
+(batch.py on_signal), then waits for the driver to go and completes the record ("complete": true,
+"driverExited"). The record comes first because the driver's handler also terminates its guard; the
+guard ignores SIGTERM from the first write until the record is complete, so a record that says
+"complete": false means the guard was cut off by something else (SIGKILL, a reboot).
 The driver is the pid batch.py records in the manifest ("driverPid"), or failing that in the batch's
 lock file; the guard signals it only if /proc shows a live process whose command line is a batch.py
 run for this batch, so a recycled pid is left alone. It checks every `interval` seconds and exits when
@@ -21,6 +25,7 @@ stop record aside (batch.py does when it starts).
 Exit status: 0 when the driver ended with the spend under the cap, 2 after stopping the batch.
 """
 import argparse
+import contextlib
 import json
 import os
 import pathlib
@@ -112,29 +117,57 @@ def read_manifest(directory):
         return None
 
 
-def stop(directory, batch, cap, total, per_run, pid, waited=30):
-    """SIGTERM the driver, wait for it to exit, and record why. Returns the record."""
+def write_record(directory, record):
+    """Replace the stop record in one step, so nobody reads half of it."""
+    temporary = directory / f"{STOP_FILE}.tmp"
+    temporary.write_text(json.dumps(record, indent=2))
+    os.replace(temporary, directory / STOP_FILE)
+
+
+@contextlib.contextmanager
+def ignoring_sigterm():
+    """The driver's handler terminates its guard on the way out; the guard must outlive it to record the stop."""
+    previous = signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    try:
+        yield
+    finally:
+        signal.signal(signal.SIGTERM, previous)
+
+
+def stop(directory, batch, cap, total, per_run, pid, waited=30, announce=None):
+    """Record why, SIGTERM the driver, wait for it to exit, and complete the record. Returns the record.
+
+    The record is on disk and announce(record) has been called before the driver is signalled.
+    """
     record = {"batch": batch, "cap": cap, "total": total, "at": time.strftime("%Y-%m-%dT%H:%M:%S"),
-              "driverPid": pid, "signalled": False, "driverExited": None,
+              "driverPid": pid, "signalled": False, "driverExited": None, "complete": False,
               "perRun": dict(sorted(per_run.items(), key=lambda item: -item[1])[:20])}
     if pid is None:
         record["note"] = "no live driver was found; nothing was signalled"
-    else:
-        try:
-            os.kill(pid, signal.SIGTERM)
-            record["signalled"] = True
-        except OSError as problem:
-            record["note"] = f"could not signal {pid}: {problem}"
-        deadline = time.time() + waited
-        # An exited process that its parent has not reaped has an empty command line, so is_driver is False.
-        while record["signalled"] and time.time() < deadline and is_driver(pid, batch):
-            time.sleep(0.2)
-        record["driverExited"] = record["signalled"] and not is_driver(pid, batch)
-    (directory / STOP_FILE).write_text(json.dumps(record, indent=2))
+    with ignoring_sigterm():
+        write_record(directory, record)
+        if announce:
+            try:
+                announce(record)
+            except OSError:
+                pass  # a log whose reader is gone must not keep the batch running
+        if pid is not None:
+            try:
+                os.kill(pid, signal.SIGTERM)
+                record["signalled"] = True
+            except OSError as problem:
+                record["note"] = f"could not signal {pid}: {problem}"
+            deadline = time.time() + waited
+            # An exited process that its parent has not reaped has an empty command line, so is_driver is False.
+            while record["signalled"] and time.time() < deadline and is_driver(pid, batch):
+                time.sleep(0.2)
+            record["driverExited"] = record["signalled"] and not is_driver(pid, batch)
+        record["complete"] = True
+        write_record(directory, record)
     return record
 
 
-def check(batch, cap, root, waited=30):
+def check(batch, cap, root, waited=30, announce=None):
     """One look: ("over", record) after stopping the batch, ("running", total) or ("done", total)."""
     directory = root / "batches" / batch
     manifest = read_manifest(directory)
@@ -143,8 +176,27 @@ def check(batch, cap, root, waited=30):
     total, per_run = batch_spend(manifest, root)
     pid = driver_pid(manifest, directory, batch)
     if total > cap:
-        return "over", stop(directory, batch, cap, total, per_run, pid, waited)
+        return "over", stop(directory, batch, cap, total, per_run, pid, waited, announce)
     return ("running" if pid else "done"), total
+
+
+def say(message):
+    print(f"{time.strftime('%H:%M:%S')} spend guard: {message}", flush=True)
+
+
+def announce(record):
+    """The log line for a stop, printed before the driver is signalled."""
+    say(f"${record['total']:.2f} is over the ${record['cap']:.2f} cap; "
+        + (f"stopping driver {record['driverPid']}" if record["driverPid"] else record["note"]))
+
+
+def closing(record):
+    """What became of the driver, for the line after the wait (None when there was no driver)."""
+    if record["driverPid"] is None:
+        return None
+    if record["driverExited"]:
+        return f"driver {record['driverPid']} exited"
+    return record["note"] if not record["signalled"] else f"driver {record['driverPid']} is still running"
 
 
 def main():
@@ -155,15 +207,12 @@ def main():
     parser.add_argument("--once", action="store_true", help="look once and exit")
     args = parser.parse_args()
     while True:
-        state, value = check(args.batch, args.cap, RUNS)
-        stamp = time.strftime("%H:%M:%S")
+        state, value = check(args.batch, args.cap, RUNS, announce=announce)
         if state == "over":
-            print(f"{stamp} spend guard: ${value['total']:.2f} is over the ${args.cap:.2f} cap; "
-                  f"{'stopped driver ' + str(value['driverPid']) if value['signalled'] else value.get('note')}",
-                  flush=True)
+            if closing(value):
+                say(closing(value))
             raise SystemExit(2)
-        print(f"{stamp} spend guard: ${value:.2f} of ${args.cap:.2f}" + ("" if state == "running" else "; driver gone"),
-              flush=True)
+        say(f"${value:.2f} of ${args.cap:.2f}" + ("" if state == "running" else "; driver gone"))
         if state == "done" or args.once:
             return
         time.sleep(args.interval)
