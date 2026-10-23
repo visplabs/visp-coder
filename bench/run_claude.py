@@ -99,8 +99,13 @@ def worker(arm, model=None, effort=None):
     return model or settings.get("model") or MODEL, effort or settings.get("effort")
 
 
-def run_session(project, arm, prompt, model=None, timeout=2700, resume=None, effort=None):
-    """Run one user session (the prompt plus the arm's scripted follow-ups) and summarize it."""
+def run_session(project, arm, prompt, model=None, timeout=2700, resume=None, effort=None, launch=None):
+    """Run one user session (the prompt plus the arm's scripted follow-ups) and summarize it.
+
+    Each turn's `claude` command runs on the host in the namespace wrapper, or, given `launch`, through
+    launch(argv, timeout) -> (exit code, stdout, stderr, timed out): scope_container.py runs it in a container.
+    The permission mode is arm.json's "permissionMode", bypassPermissions by default.
+    """
     model, effort = worker(arm, model, effort)
     env = record_calls(worker_env(arm), pathlib.Path(project).parent / "claude-calls.jsonl")
     settings = memory_settings(arm, project)
@@ -111,11 +116,12 @@ def run_session(project, arm, prompt, model=None, timeout=2700, resume=None, eff
             raise SystemExit(f"{default_memory(project)} already holds memory; this run's path is not fresh")
         memory.mkdir(exist_ok=True)
     inherited = listing(memory) if memory else []
+    mode = arm.get("permissionMode") or "bypassPermissions"
     started = time.time()
 
     def turn(text, session=None):
-        argv = [*isolate(), "claude", "-p", text, "--model", model, "--output-format", "json",
-                "--permission-mode", "bypassPermissions", "--setting-sources", "project,local",
+        argv = ["claude", "-p", text, "--model", model, "--output-format", "json",
+                "--permission-mode", mode, "--setting-sources", "project,local",
                 "--settings", json.dumps(settings), "--strict-mcp-config"]
         if effort:
             argv += ["--effort", effort]
@@ -124,8 +130,11 @@ def run_session(project, arm, prompt, model=None, timeout=2700, resume=None, eff
         remaining = max(60, timeout - int(time.time() - started))
         # Own session: a worker signalling its shell's process group (`kill %1` without job
         # control) must not reach sibling runs in the same batch.
-        code, stdout, stderr, timed_out = run_worker(argv, project, env, remaining,
-                                                     pathlib.Path(project).parent / "worker.pid")
+        if launch:
+            code, stdout, stderr, timed_out = launch(argv, remaining)
+        else:
+            code, stdout, stderr, timed_out = run_worker([*isolate(), *argv], project, env, remaining,
+                                                         pathlib.Path(project).parent / "worker.pid")
         if timed_out:
             return {}, True
         try:
@@ -158,7 +167,7 @@ def run_session(project, arm, prompt, model=None, timeout=2700, resume=None, eff
         return sum(value for value in values if isinstance(value, int)) or None
 
     return {
-        "arm": arm["arm"], "preset": arm.get("preset"), "model": model, "effort": effort, "seconds": round(time.time() - started), "timedOut": timed_out,
+        "arm": arm["arm"], "preset": arm.get("preset"), "model": model, "effort": effort, "permissionMode": mode, "seconds": round(time.time() - started), "timedOut": timed_out,
         "autoMemory": {
             "setting": memory_setting(arm), "enabled": settings["autoMemoryEnabled"], "settings": settings,
             "env": {key: env.get(key) for key in ("CLAUDE_CODE_DISABLE_AUTO_MEMORY",)},

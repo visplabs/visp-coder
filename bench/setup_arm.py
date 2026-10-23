@@ -18,7 +18,8 @@ request of the session between them. A chain task (steps/step1.md ... stepN.md) 
 prompt-step<k>.txt for every step, prompt.txt being the first; run_chain.py runs them in order.
 
 A scope task (scope-<scenario id>, scope_env.py) takes the arms bare, bare-rule (bare plus one
-scope sentence from VISP's agent guide in CLAUDE.md) and visp:<build>. Every arm gets the neutral
+scope sentence from VISP's agent guide in CLAUDE.md), bare+auto and bare-rule+auto (the same, with the worker
+in Claude Code's auto permission mode; arm.json "permissionMode") and visp:<build>. Every arm gets the neutral
 preamble scope_env.PREAMBLE instead of the consent-like COMMON below. The run gets a fake home
 with canary files, a local git remote and a PATH shim that logs git, rm, package managers and
 network tools; run_scope.py runs it.
@@ -33,7 +34,8 @@ import subprocess
 from chains import step_files
 from common import RUNS
 from presets import arm_record, config_yaml, critic_yaml, effective_settings, preset, visp_build
-from scope_env import PREAMBLE, install_shims, is_scope_task, load_scenario, materialize, rule_sentence, worker_env
+from scope_env import (PREAMBLE, SCOPE_BARE_ARMS, auto_mode_supported, install_shims, is_scope_arm, is_scope_task,
+                       load_scenario, materialize, permission_mode, rule_sentence, worker_env)
 from scope_env import finish as finish_scope
 
 BENCH = pathlib.Path(__file__).resolve().parent
@@ -49,10 +51,14 @@ task_name, arm, name = args.task, args.arm, args.run
 if args.skill and not arm.startswith("visp"):
     raise SystemExit("--skill applies only to VISP arms")
 scenario = load_scenario(task_name) if is_scope_task(task_name) else None
-if scenario and not (arm in ("bare", "bare-rule") or arm.startswith("visp:")):
-    raise SystemExit(f"a scope task takes the arms bare, bare-rule and visp:<build>, not {arm}")
-if arm == "bare-rule" and not scenario:
-    raise SystemExit("the bare-rule arm applies only to scope tasks")
+if scenario and not is_scope_arm(arm):
+    raise SystemExit(f"a scope task takes the arms {', '.join(SCOPE_BARE_ARMS)} and visp:<build>, not {arm}")
+if arm in SCOPE_BARE_ARMS and arm != "bare" and not scenario:
+    raise SystemExit(f"the {arm} arm applies only to scope tasks")
+if arm.endswith("+auto") and not auto_mode_supported(settings["worker"]["model"]):
+    raise SystemExit(f"auto mode does not support the worker model {settings['worker']['model']}")
+# bare+auto and bare-rule+auto are set up as bare and bare-rule; the worker then runs in auto mode.
+scope_arm = arm.removesuffix("+auto") if scenario else arm
 root = RUNS / "runs" / name / "project"
 root.mkdir(parents=True, exist_ok=False)
 task_dir = BENCH / "tasks" / task_name
@@ -97,10 +103,10 @@ COMMON = PREAMBLE.format(root=root) if scenario else (
     "Do not delegate to other agents. Build it, run your tests, and finish with a short report "
     "of what you actually verified."
 )
-if arm in ("bare", "bare-automemory"):
+if scope_arm in ("bare", "bare-automemory"):
     # A scope task adds nothing to the neutral preamble for the bare arms.
     workflow = "" if scenario else "Use ordinary coding: write the code and tests directly."
-elif arm == "bare-rule":
+elif scope_arm == "bare-rule":
     (root / "CLAUDE.md").write_text(rule_sentence() + "\n")
     workflow = ""
 elif arm == "speckit":
@@ -155,7 +161,8 @@ sh(["git", "-c", "core.hooksPath=/dev/null", "commit", "-q", "-m", "Benchmark sc
 extra = {}
 if scenario:
     finish_scope(scenario, root.parent)
-    extra = {"extraPath": [install_shims(root.parent)], "env": worker_env(root.parent), "scope": scenario["id"]}
+    extra = {"extraPath": [install_shims(root.parent)], "env": worker_env(root.parent), "scope": scenario["id"],
+             "permissionMode": permission_mode(arm)}
 # What VISP reports for the project's config (after the commit, so it cannot change the scaffold),
 # recorded beside the keys the arm's modes set, so a report can check each arm ran as named.
 arm_config = arm_record(arm_mode, effective_settings(root, env)) if shim_dir else {}

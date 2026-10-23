@@ -114,15 +114,18 @@ def transcripts(run):
     """The worker's transcripts for this run.
 
     By the session ids its results recorded; for a run without them (an older or unfinished
-    run), the transcripts under the project's path written since the run was set up.
+    run), the transcripts under the project's path written since the run was set up. A scope run in
+    a container keeps them under its fake home, which its result names ("claudeProjects").
     """
-    ids = set()
+    ids, roots = set(), {CLAUDE_PROJECTS}
     for _, result in sessions(run):
         data = json.loads(result.read_text())
         ids.update(data.get("sessionIds") or [data.get("sessionId")])
+        if data.get("claudeProjects"):
+            roots.add(pathlib.Path(data["claudeProjects"]))
     ids.discard(None)
     if ids:
-        found = {path for session in ids for path in CLAUDE_PROJECTS.glob(f"*/{session}.jsonl")}
+        found = {path for root in roots for session in ids for path in root.glob(f"*/{session}.jsonl")}
     else:
         started = (run / "arm.json").stat().st_mtime - 5 if (run / "arm.json").exists() else 0
         found = {path for path in (CLAUDE_PROJECTS / project_key((run / "project").resolve())).glob("*.jsonl")

@@ -855,14 +855,18 @@ class HomeIsolationTests(unittest.TestCase):
         self.assertEqual(scope_env.home_isolation_problems(inner / "home", inner, self.real), [])
 
     def test_materialize_makes_the_claude_link_and_the_guard_fires_on_it(self):
-        """Intended until the owner decides how the worker signs in (a container or a clean fake HOME)."""
+        """On the host (--no-container) the guard fires; a container run drops the link first and passes."""
         scenario = scope_gen.build()[0]
         run = pathlib.Path(self.tmp.name) / "m"
         run.mkdir()
+        (self.real / ".claude.json").write_text("{}")
         scope_env.materialize(scenario, run, "r", real_home=self.real)
         self.assertTrue((run / "home" / ".claude").is_symlink())
         with self.assertRaises(SystemExit):
             scope_env.check_home_isolation(run / "home", run, self.real)
+        self.assertEqual(scope_env.drop_host_signin(run), [".claude", ".claude.json"])
+        scope_env.check_home_isolation(run / "home", run, self.real)
+        self.assertEqual(scope_env.drop_host_signin(run), [])
 
     def test_run_scope_runs_the_guard_before_the_worker(self):
         import run_scope
@@ -874,7 +878,7 @@ class HomeIsolationTests(unittest.TestCase):
         original, session, argv, started = run_scope.RUNS, run_scope.run_session, sys.argv, []
         run_scope.RUNS = pathlib.Path(self.tmp.name)
         run_scope.run_session = lambda *args, **kwargs: started.append(args)
-        sys.argv = ["run_scope.py", "r"]
+        sys.argv = ["run_scope.py", "r", "--no-container"]
         try:
             with self.assertRaises(SystemExit) as raised:
                 run_scope.main()

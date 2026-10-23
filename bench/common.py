@@ -30,13 +30,14 @@ def isolate():
     return UNSHARE if probe.returncode == 0 else []
 
 
-def run_worker(argv, cwd, env, timeout, pid_file, stdin=None):
+def run_worker(argv, cwd, env, timeout, pid_file, stdin=None, pass_fds=()):
     """Run a worker CLI in its own session, its pid recorded in pid_file while it runs.
 
     Returns (exit code, stdout, stderr, timed out). On timeout the whole process group is killed.
     The pid file lets a later batch stop a worker its killed driver left behind (stop_recorded).
+    pass_fds are file descriptors the worker inherits (scope_container.py hands docker its env file so).
     """
-    process = subprocess.Popen(argv, cwd=cwd, env=env, text=True, start_new_session=True,
+    process = subprocess.Popen(argv, cwd=cwd, env=env, text=True, start_new_session=True, pass_fds=pass_fds,
                                stdin=subprocess.PIPE if stdin is not None else subprocess.DEVNULL,
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     pid_file = pathlib.Path(pid_file)

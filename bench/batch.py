@@ -14,7 +14,9 @@ starts on the project the first left, notes kept. A -raised task runs in interme
 session of its intermediate.md between the two. A chain task (steps/) runs with run_chain.py:
 each step is a fresh session on the project the previous step left. A scope task (scope-<scenario id>,
 scope_env.py) runs with run_scope.py, 1200 s; `--tasks 'scope-*'` (or any glob) expands to the scenarios it
-matches, and its arms are bare, bare-rule and visp:<build>. Scope scenarios run only with `--split dev` or
+matches, and its arms are bare, bare-rule, bare+auto, bare-rule+auto (labels bare-auto, bare-rule-auto) and
+visp:<build>. Its worker runs in the scope container (scope_container.py): the batch does not start while the
+image or the token file is missing or a VISP arm is asked for, and --dry-run says so. Scope scenarios run only with `--split dev` or
 `--split heldout` (scope/split.json, scope_split.py); without the flag no scope scenario runs and the driver
 says so. Timeouts per session: games
 3600 s, every other task 2700 s (per step for a chain). A visp-codex arm runs with run_codex.py; every other arm with run_claude.py.
@@ -26,7 +28,7 @@ runners and workers before the driver exits. After each run, runfacts.py checks 
 stop (in CLI error results, API-error events and VISP's failed reviewer and tester records) and
 for a worker failure (the CLI ended a session in error: an API error, no response, a wrapper
 exit); such a run gets invalid.json and is never scored. After a usage limit no further runs
-start, since the limit applies to every run. --rerun-invalid moves invalid runs to discarded/ and
+start, since the limit applies to every run, and none after a scope run's host guard fired (run_scope.py). --rerun-invalid moves invalid runs to discarded/ and
 redoes them. --dry-run prints the queue and what would happen to each run, and changes nothing.
 
 --spend-cap USD starts spend_guard.py as a child: it sums the cost every run's claude-calls.jsonl
@@ -55,12 +57,16 @@ from chains import is_chain, step_files
 from common import RUNS, stop_recorded
 from judge import CHECKLISTS, GAMES
 from presets import preset, visp_build
+import scope_container
 import scope_split
 from run_carryover import batch_mode, planned_sessions
-from scope_env import is_scope_task, scope_tasks
+from scope_env import SCOPE_BARE_ARMS, auto_mode_supported, is_scope_arm, is_scope_task, scope_tasks
 from runfacts import invalid, invalidity, is_finished, mark_if_invalid
 
 BENCH = pathlib.Path(__file__).resolve().parent
+# Invalid runs that stop the batch: a usage limit applies to every run, and a host state change puts the
+# scope container's isolation in doubt (run_scope.py host guard).
+STOPPING = ("usage limit", "host state changed")
 TIMEOUTS = {"visual": 2700, "game": 3600, "carryover": 2700, "chain": 2700, "code": 2700, "scope": 1200}
 log_lock = threading.Lock()
 stop = threading.Event()
@@ -93,7 +99,7 @@ def label(spec):
         return spec.split(":", 1)[1].replace("+", "-"), spec
     if spec.startswith("visp-codex:"):
         return "codex-" + spec.split(":", 1)[1], spec
-    return spec, spec
+    return spec.replace("+", "-"), spec
 
 
 def expand(spec):
@@ -134,11 +140,10 @@ def plan(args):
     for rep in range(1, args.reps + 1):
         for index, task in enumerate(tasks):
             task_kind = kind(task)
-            if task_kind != "scope" and any(arm == "bare-rule" for _, arm in arms):
-                raise SystemExit("the bare-rule arm applies only to scope tasks")
-            if task_kind == "scope" and any(not (arm in ("bare", "bare-rule") or arm.startswith("visp:"))
-                                            for _, arm in arms):
-                raise SystemExit("a scope task takes the arms bare, bare-rule and visp:<build>")
+            if task_kind != "scope" and any(arm in SCOPE_BARE_ARMS and arm != "bare" for _, arm in arms):
+                raise SystemExit("the bare-rule and +auto arms apply only to scope tasks")
+            if task_kind == "scope" and any(not is_scope_arm(arm) for _, arm in arms):
+                raise SystemExit(f"a scope task takes the arms {', '.join(SCOPE_BARE_ARMS)} and visp:<build>")
             if task_kind in ("carryover", "chain") and any(arm.startswith("visp-codex:") for _, arm in arms):
                 raise SystemExit(f"{task} has several sessions, which {task_kind} runs make with Claude Code only")
             shift = (rep - 1 + index) % len(arms)
@@ -148,6 +153,25 @@ def plan(args):
                              "twoSessions": task_kind == "carryover",
                              "mode": batch_mode(task) if task_kind == "carryover" else None})
     return tasks, arms, runs
+
+
+def isolation(runs, arms, announce):
+    """Why the scope runs of a batch cannot start in their container (scope_container.preflight); [] when they can.
+
+    Reads no token, only the token file's metadata. With announce, prints what the runs will use.
+    """
+    if not any(entry["kind"] == "scope" for entry in runs):
+        return []
+    token_file = scope_container.default_token_file()
+    problems, facts = scope_container.preflight(scope_container.IMAGE, token_file)
+    if any(arm.startswith("visp") for _, arm in arms):
+        problems.append("a VISP arm cannot run a scope task in the container yet (its build is not in the image)")
+    if announce:
+        print(f"scope isolation: container {scope_container.IMAGE} (Claude Code {(facts or {}).get('claude', '?')}), "
+              f"token file {token_file}, egress only to {', '.join(scope_container.ALLOW_HOSTS)}")
+        for problem in problems:
+            print(f"warning: {problem}")
+    return problems
 
 
 def log(directory, message):
@@ -188,7 +212,7 @@ def execute(entry, args, directory):
     if action.startswith("skip"):
         return name, action
     if stop.is_set():
-        return name, "not started (usage limit)"
+        return name, "not started (batch stopped)"
     if action in ("redo", "rerun"):
         # A driver killed earlier can leave its runner and worker running in this directory.
         stopped = stop_recorded(run)
@@ -230,7 +254,7 @@ def execute(entry, args, directory):
     outcome = "finished" if is_finished(run, entry["twoSessions"]) else f"no result (exit {runner.returncode})"
     stopped = mark_if_invalid(run) if outcome == "finished" else None
     if stopped:
-        if stopped["reason"] == "usage limit":
+        if stopped["reason"] in STOPPING:
             stop.set()
         outcome = f"invalid ({stopped['reason']}): {stopped['source']}: {stopped['match'].strip()[:160]!r}"
     log(directory, f"{name}: {outcome} in {round(time.time() - started)} s {stdout.strip()[-200:]} "
@@ -322,6 +346,12 @@ def main():
         raise SystemExit(f"batch {args.batch} was started with preset {previous['preset']}, not {args.preset}")
     if previous and any(is_scope_task(task) for task in tasks) and previous.get("split") != args.split:
         raise SystemExit(f"batch {args.batch} was started with split {previous.get('split')}, not {args.split}")
+    if any(arm.endswith("+auto") for _, arm in arms) and not auto_mode_supported(settings["worker"]["model"]):
+        raise SystemExit(f"auto mode does not support the worker model {settings['worker']['model']} of preset "
+                         f"{args.preset} (https://code.claude.com/docs/en/permission-modes)")
+    scope_problems = isolation(runs, arms, args.dry_run)
+    if scope_problems and not args.dry_run:
+        raise SystemExit("scope runs cannot start:\n  - " + "\n  - ".join(scope_problems))
     builds = {visp_build(arm)[0] for _, arm in arms if arm.startswith(("visp:", "visp-codex:"))}
     missing = sorted(build for build in builds if not (RUNS / "shims" / build).is_dir())
     if missing:
@@ -364,7 +394,8 @@ def main():
         manifest["lastPass"] = {"finished": time.strftime("%Y-%m-%dT%H:%M:%S"), "outcomes": outcomes}
         manifest_path.write_text(json.dumps(manifest, indent=2))
         if stop.is_set():
-            log(directory, "stopped early: a usage limit was hit; run again with --rerun-invalid after it resets")
+            log(directory, "stopped early: a usage limit was hit or the host guard fired (see invalid.json); "
+                           "run again with --rerun-invalid once it is resolved")
         log(directory, "batch pass finished")
     finally:
         stop_guard()
