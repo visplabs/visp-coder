@@ -52,6 +52,16 @@ export function failureIdentities(output: string, roots: readonly string[]): Fai
   return [{ name: "", message: normalizeMessage(unnamedMessage(lines), roots) }];
 }
 
+/**
+ * The usage error a runner printed when it rejected its command line (argparse: unittest;
+ * pytest), else undefined. Such a run executed no test, so it says nothing about the code.
+ */
+export function rejectedCommandLine(output: string): string | undefined {
+  const text = stripVTControlCharacters(output);
+  if (!/^(?:ERROR: )?usage: /m.test(text)) return undefined;
+  return /^.+: error: .+$/m.exec(text)?.[0].trim();
+}
+
 type Parser = (lines: readonly string[]) => FailureIdentity[];
 
 const PARSERS: readonly Parser[] = [unittest, pytest, nodeSpec, nodeTap, pinned, vitest, jest, go];

@@ -27,6 +27,7 @@ import {
   classifyRegression,
   failureIdentities,
   type RegressionRun,
+  rejectedCommandLine,
 } from "./regression-failures.js";
 import {
   type RegressionGateReport,
@@ -299,10 +300,19 @@ async function runOnce(
   if (environment) return { kind: "environment", reason: run.redact(environment).slice(0, 300) };
   if (!output.ok || output.value.exitCode === 0) return { kind: "passed" };
   const raw = `${output.value.stdout}\n${output.value.stderr}`;
-  return {
-    kind: "failed",
-    failures: failureIdentities(run.redact(raw), [workspace.paths.root, ...(old?.roots ?? [])]),
-  };
+  const failures = failureIdentities(run.redact(raw), [
+    workspace.paths.root,
+    ...(old?.roots ?? []),
+  ]);
+  // A runner that rejects the command exits non-zero on the old code too, which would read as a
+  // failure both versions share: no test ran, so nothing is known.
+  const rejected = failures.every((failure) => !failure.name) && rejectedCommandLine(raw);
+  if (rejected)
+    return {
+      kind: "environment",
+      reason: `the runner rejected the command: ${run.redact(rejected).slice(0, 200)}`,
+    };
+  return { kind: "failed", failures };
 }
 
 function runEnvironmentFailure(
