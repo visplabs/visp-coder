@@ -52,6 +52,7 @@ from judge import CHECKLISTS, GAMES
 from presets import preset, visp_build
 from run_carryover import batch_mode, planned_sessions
 from runfacts import invalid, invalidity, is_finished, mark_if_invalid
+import snapshots
 
 BENCH = pathlib.Path(__file__).resolve().parent
 TIMEOUTS = {"visual": 2700, "game": 3600, "carryover": 2700, "chain": 2700, "code": 2700}
@@ -139,6 +140,23 @@ def discard(run, reason):
     return target
 
 
+def prepare(entry, args):
+    """Set a run up. Returns the reason it failed, or None.
+
+    An ordinary run is made by setup_arm.py; a snapshot rerun (entry["snapshot"], snapshots.py) is
+    made from a finished run's session-1 snapshot.
+    """
+    if entry.get("snapshot"):
+        try:
+            snapshots.prepare(RUNS, entry, args.preset)
+        except (OSError, ValueError, KeyError, SystemExit) as problem:
+            return str(problem)[-500:]
+        return None
+    setup = subprocess.run([sys.executable, str(BENCH / "setup_arm.py"), entry["task"], entry["arm"], entry["name"],
+                            "--preset", args.preset], capture_output=True, text=True)
+    return None if setup.returncode == 0 else setup.stderr.strip()[-500:]
+
+
 def execute(entry, args, directory):
     name, run = entry["name"], RUNS / "runs" / entry["name"]
     action = state(entry, args.rerun_invalid)
@@ -155,13 +173,14 @@ def execute(entry, args, directory):
         if stopped:
             log(directory, f"{name}: stopped processes {stopped} left by an earlier batch")
         log(directory, f"{name}: moved to {discard(run, 'invalid' if action == 'rerun' else 'unfinished')}")
-    setup = subprocess.run([sys.executable, str(BENCH / "setup_arm.py"), entry["task"], entry["arm"], name,
-                            "--preset", args.preset], capture_output=True, text=True)
-    if setup.returncode != 0:
-        log(directory, f"{name}: setup failed: {setup.stderr.strip()[-500:]}")
+    problem = prepare(entry, args)
+    if problem:
+        log(directory, f"{name}: setup failed: {problem}")
         return name, "setup failed"
     timeout = str(entry["timeout"])
-    if entry["twoSessions"]:
+    if entry.get("snapshot"):
+        argv = [str(BENCH / "snapshot_rerun.py"), "--run", name, "--timeout", timeout]
+    elif entry["twoSessions"]:
         argv = [str(BENCH / "run_carryover.py"), name, "--modes", entry["mode"], "--timeout", timeout]
     elif entry["kind"] == "chain":
         argv = [str(BENCH / "run_chain.py"), name, "--timeout", timeout]
@@ -263,8 +282,26 @@ def main():
                         help="stop the batch above this total cost (spend_guard.py); counts runs already made")
     parser.add_argument("--spend-interval", type=float, default=60, help="seconds between the guard's looks")
     args = parser.parse_args()
-    settings = preset(args.preset)
     tasks, arms, runs = plan(args)
+    drive(args, tasks, arms, runs)
+
+
+def describe(entry):
+    """The tail of a dry-run line: sessions, then what sets the run apart (a snapshot's source, worker env)."""
+    sessions = f" x{1 + len(planned_sessions(entry['mode']))} sessions" if entry["twoSessions"] else ""
+    if entry["kind"] == "chain":
+        sessions = f" x{len(step_files(entry['task']))} steps"
+    if entry.get("snapshot"):
+        sessions = " x1 session (second only)"
+    return f"{entry['timeout']} s{sessions}" + (f" {entry['note']}" if entry.get("note") else "")
+
+
+def drive(args, tasks, arms, runs, extra=None):
+    """Run (or, with --dry-run, list) the planned runs; `extra` is added to the manifest.
+
+    args needs batch, jobs, preset, reps, dry_run, rerun_invalid, spend_cap and spend_interval.
+    """
+    settings = preset(args.preset)
     directory = RUNS / "batches" / args.batch
     manifest_path = directory / "manifest.json"
     previous = json.loads(manifest_path.read_text()) if manifest_path.exists() else None
@@ -283,11 +320,8 @@ def main():
         if args.spend_cap is not None:
             print(f"spend guard: stops the batch above ${args.spend_cap:.2f}, looking every {args.spend_interval:g} s")
         for entry in runs:
-            sessions = f" x{1 + len(planned_sessions(entry['mode']))} sessions" if entry["twoSessions"] else ""
-            if entry["kind"] == "chain":
-                sessions = f" x{len(step_files(entry['task']))} steps"
             print(f"{state(entry, args.rerun_invalid, record=False):13} {entry['name']:60} {entry['arm']:30} "
-                  f"{entry['kind']:9} {entry['timeout']} s{sessions}")
+                  f"{entry['kind']:9} {describe(entry)}")
         return
     directory.mkdir(parents=True, exist_ok=True)
     lock_path = lock(directory)
@@ -298,7 +332,7 @@ def main():
         manifest = {"batch": args.batch, "preset": args.preset, "settings": settings, "tasks": tasks,
                     "arms": [{"label": name, "arm": arm} for name, arm in arms], "reps": args.reps,
                     "created": (previous or {}).get("created") or time.strftime("%Y-%m-%dT%H:%M:%S"),
-                    "driverPid": os.getpid(), "spendCap": args.spend_cap, "runs": runs + kept}
+                    "driverPid": os.getpid(), "spendCap": args.spend_cap, "runs": runs + kept, **(extra or {})}
         manifest_path.write_text(json.dumps(manifest, indent=2))
         log(directory, f"batch {args.batch}: {len(runs)} runs, preset {args.preset}, {args.jobs} at a time")
         if args.spend_cap is not None:

@@ -30,6 +30,7 @@ import time
 from common import RUNS
 
 STOP_FILE = "stopped-by-spend-guard.json"
+DRIVERS = ("batch.py", "snapshot_rerun.py")
 # Directories of a run that hold a worker's project, never a call log.
 PRUNE = {"project", ".git", "node_modules", "memory", "__pycache__"}
 
@@ -81,12 +82,12 @@ def batch_spend(manifest, root):
 
 
 def is_driver(pid, batch):
-    """Whether pid is a live `batch.py ... --batch <batch>` process."""
+    """Whether pid is a live `batch.py ... --batch <batch>` process (or snapshot_rerun.py, which drives the same way)."""
     try:
         argv = pathlib.Path(f"/proc/{pid}/cmdline").read_bytes().decode(errors="replace").split("\0")
     except OSError:
         return False
-    if not any(pathlib.PurePath(word).name == "batch.py" for word in argv):
+    if not any(pathlib.PurePath(word).name in DRIVERS for word in argv):
         return False
     return any(word == f"--batch={batch}" or (word == "--batch" and argv[i + 1:i + 2] == [batch])
                for i, word in enumerate(argv))
