@@ -38,9 +38,9 @@ it.skipIf(process.platform === "win32")(
       .getActiveResourcesInfo()
       .filter((name) => name === "PipeWrap").length;
     const started = Date.now();
-    await expect(launchChrome({ binary, startupTimeoutMs: 800 })).rejects.toThrow(
-      /Browser unavailable/,
-    );
+    await expect(
+      launchChrome({ binary, startupTimeoutMs: 800, startupRetries: 0 }),
+    ).rejects.toThrow(/Browser unavailable/);
     expect(Date.now() - started).toBeLessThan(8_000);
     const helpers = (await readFile(pids, "utf8")).trim().split("\n").map(Number);
     expect(helpers).toHaveLength(1);

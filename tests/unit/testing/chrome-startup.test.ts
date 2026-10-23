@@ -3,7 +3,7 @@ import { EventEmitter } from "node:events";
 import { access } from "node:fs/promises";
 import { PassThrough } from "node:stream";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { launchChrome } from "../../../src/testing/chrome-transport.js";
+import { browserStartupTimeoutMs, launchChrome } from "../../../src/testing/chrome-transport.js";
 
 vi.mock("node:child_process", () => ({ spawn: vi.fn() }));
 let child: ChildProcess;
@@ -103,5 +103,37 @@ describe("Chrome startup diagnostics", () => {
     const [software, usual] = vi.mocked(spawn).mock.calls.map((call) => call[1] as string[]);
     expect(software).toContain("--disable-gpu");
     expect(usual).not.toContain("--disable-gpu");
+  });
+
+  it("starts Chrome once more after a startup timeout, and only then", async () => {
+    vi.mocked(spawn).mockImplementation(() => child);
+    await expect(
+      launchChrome({ binary: "/installed/chromium", startupTimeoutMs: 20 }),
+    ).rejects.toThrow(/timed out/);
+    expect(spawn).toHaveBeenCalledTimes(2);
+
+    vi.mocked(spawn).mockClear();
+    await expect(
+      launchChrome({ binary: "/installed/chromium", startupTimeoutMs: 20, startupRetries: 0 }),
+    ).rejects.toThrow(/timed out/);
+    expect(spawn).toHaveBeenCalledTimes(1);
+
+    vi.mocked(spawn).mockClear();
+    vi.mocked(spawn).mockImplementation(() => {
+      queueMicrotask(() => child.emit("close", 1, null));
+      return child;
+    });
+    await expect(launchChrome({ binary: "/installed/chromium" })).rejects.toThrow(/exit code 1/);
+    expect(spawn).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("browserStartupTimeoutMs", () => {
+  it("defaults to 10 s and takes a positive whole number of milliseconds from the environment", () => {
+    const name = "VISP_BROWSER_STARTUP_TIMEOUT_MS";
+    expect(browserStartupTimeoutMs({})).toBe(10_000);
+    expect(browserStartupTimeoutMs({ [name]: "30000" })).toBe(30_000);
+    for (const ignored of ["", "0", "-5", "1.5", "soon", "99999999999"])
+      expect(browserStartupTimeoutMs({ [name]: ignored })).toBe(10_000);
   });
 });
