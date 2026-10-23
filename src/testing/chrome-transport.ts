@@ -6,7 +6,17 @@ import { killCommandGroup } from "../core/exec.js";
 import { productExecutionEnvironment } from "../core/execution-environment.js";
 import { bounded } from "./deadline.js";
 
-export const BROWSER_STARTUP_TIMEOUT_MS = 10_000;
+const BROWSER_STARTUP_TIMEOUT_MS = 10_000;
+/** Overrides the startup timeout for slow hosts (shared CI runners); other values use the default. */
+const STARTUP_TIMEOUT_ENV = "VISP_BROWSER_STARTUP_TIMEOUT_MS";
+
+/** How long Chrome gets to print its debugging endpoint and accept the connection. */
+export function browserStartupTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
+  const value = env[STARTUP_TIMEOUT_ENV]?.trim() ?? "";
+  const parsed = /^\d+$/.test(value) ? Number(value) : 0;
+  return parsed > 0 && parsed <= 2_147_483_647 ? parsed : BROWSER_STARTUP_TIMEOUT_MS;
+}
+
 export class BrowserUnavailableError extends Error {
   constructor(
     message: string,
@@ -44,12 +54,38 @@ export interface ChromeTransport {
 }
 
 /**
+ * Launches Chrome, once more when the first start timed out. Slow hosts occasionally need longer
+ * than the timeout for a cold start, and a second try on a warm disk cache usually succeeds; a
+ * missing browser, a permission failure or an early exit is not retried, since it would repeat.
+ */
+export async function launchChrome(
+  options: Parameters<typeof launchBrowser>[0] & { startupRetries?: number } = {},
+): Promise<ChromeTransport> {
+  for (let retries = options.startupRetries ?? 1; ; retries--) {
+    try {
+      return await launchBrowser(options);
+    } catch (cause) {
+      if (retries <= 0 || !startupTimedOut(cause)) throw cause;
+    }
+  }
+}
+
+function startupTimedOut(cause: unknown): boolean {
+  return (
+    cause instanceof BrowserUnavailableError &&
+    cause.kind === "startup" &&
+    cause.cause instanceof Error &&
+    /timed out/.test(cause.cause.message)
+  );
+}
+
+/**
  * New process and profile only. No browser download, user session, or sandbox-disabling flag.
  * `gpu: false` renders in software: without a GPU, Chrome otherwise composites through
  * SwiftShader, whose first screenshot took 8-10 s on a loaded 2-core host. Pages that need
  * WebGL (a game a journey captures) keep the default.
  */
-export async function launchChrome(
+async function launchBrowser(
   options: {
     binary?: string;
     startupTimeoutMs?: number;
@@ -101,15 +137,9 @@ export async function launchChrome(
     }
   }
   try {
-    const endpoint = await debuggingEndpoint(
-      child,
-      options.startupTimeoutMs ?? BROWSER_STARTUP_TIMEOUT_MS,
-    );
-    connection = await connect(
-      endpoint,
-      options.startupTimeoutMs ?? BROWSER_STARTUP_TIMEOUT_MS,
-      options.operationTimeoutMs ?? 5_000,
-    );
+    const startupTimeoutMs = options.startupTimeoutMs ?? browserStartupTimeoutMs();
+    const endpoint = await debuggingEndpoint(child, startupTimeoutMs);
+    connection = await connect(endpoint, startupTimeoutMs, options.operationTimeoutMs ?? 5_000);
     return { send: connection.send, onEvent: connection.onEvent, close };
   } catch (cause) {
     await close();

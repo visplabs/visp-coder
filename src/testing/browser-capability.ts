@@ -1,10 +1,10 @@
 import { captureScreenshot, pageConnection } from "./browser-session.js";
-import { BROWSER_STARTUP_TIMEOUT_MS, launchChrome } from "./chrome-transport.js";
+import { browserStartupTimeoutMs, launchChrome } from "./chrome-transport.js";
 
 /** Only a new blank target: no project navigation, evidence, download, or user browser. */
 export async function probeBrowserCapability(): Promise<void> {
   const transport = await launchChrome({
-    startupTimeoutMs: BROWSER_STARTUP_TIMEOUT_MS,
+    startupTimeoutMs: browserStartupTimeoutMs(),
     operationTimeoutMs: 2000,
   });
   try {
