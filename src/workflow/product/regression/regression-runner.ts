@@ -16,6 +16,8 @@ export interface DeclaredRunner {
   readonly prefix: readonly string[];
   /** Django labels are dotted paths below the runner's directory. */
   readonly labelRoot?: string;
+  /** `unittest discover`: a test runs by dotted module name, as discovery names it. */
+  readonly discover?: boolean;
 }
 
 export type TestLanguage = "python" | "javascript";
@@ -120,8 +122,10 @@ export function declaredRunner(
   const { style, end } = found;
   const labelRoot =
     style === "django" ? posix.normalize(dirname(argv[end - 1] ?? "")).replace(/^\.\//, "") : "";
-  const kept: string[] = [];
   const rest = argv.slice(end);
+  if (style === "unittest" && rest.includes("discover"))
+    return { style, prefix: discoverPrefix(argv.slice(0, end), rest), discover: true };
+  const kept: string[] = [];
   for (let index = 0; index < rest.length; index++) {
     const arg = rest[index] ?? "";
     if (VALUED.has(arg)) {
@@ -134,6 +138,37 @@ export function declaredRunner(
     prefix: [...argv.slice(0, end), ...kept],
     ...(style === "django" ? { labelRoot } : {}),
   };
+}
+
+/** Options of `unittest discover` that choose where to look, which a named module replaces. */
+const DISCOVER_VALUED = new Set([
+  "-s",
+  "--start-directory",
+  "-t",
+  "--top-level-directory",
+  "-p",
+  "--pattern",
+]);
+
+/**
+ * What stays of a `unittest discover` check once the start directory, top-level directory and
+ * pattern are gone: the interpreter and its flags, then the options such as `-v`. A name
+ * resolves from the working directory, which isolated mode (`-I`) leaves off the import path,
+ * so `-I` becomes its other two parts.
+ */
+function discoverPrefix(runner: readonly string[], rest: readonly string[]): string[] {
+  const kept: string[] = [];
+  let found = false;
+  for (let index = 0; index < rest.length; index++) {
+    const arg = rest[index] ?? "";
+    if (DISCOVER_VALUED.has(arg)) index++;
+    else if (!found && arg === "discover") found = true;
+    else if (arg.startsWith("-")) {
+      kept.push(arg);
+      if (VALUED.has(arg) && rest[index + 1] !== undefined) kept.push(rest[++index] as string);
+    }
+  }
+  return [...runner.flatMap((arg) => (arg === "-I" ? ["-E", "-s"] : [arg])), ...kept];
 }
 
 function runnerToken(
@@ -248,6 +283,8 @@ function targets(runner: DeclaredRunner, path: string, classes: readonly string[
   }
   if (runner.style === "pytest")
     return classes.length ? classes.map((name) => `${path}::${name}`) : [path];
+  if (runner.style === "unittest" && runner.discover)
+    return classes.length ? classes.map((name) => `${dotted(path)}.${name}`) : [dotted(path)];
   if (runner.style === "unittest")
     return classes.length ? classes.map((name) => `${dotted(path)}.${name}`) : [path];
   return [path];
