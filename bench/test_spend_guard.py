@@ -199,6 +199,17 @@ class Guard(Fixture):
         self.assertEqual((written["cap"], written["total"]), (6.0, 6.25))
         self.assertEqual(list(written["perRun"]), ["b3-t-visp-1", "b3-t-bare-1"])  # largest spend first
 
+    def test_a_snapshot_rerun_driver_is_stopped_and_recorded_like_batch_py(self):
+        process, marker = self.driver(script_name="snapshot_rerun.py")
+        self.run_dir("b3-t-bare-1", call(7.0))
+        self.manifest(["b3-t-bare-1"], driverPid=process.pid)
+        state, record = spend_guard.check("b3", 6.0, self.root, waited=10)
+        self.assertEqual(state, "over")
+        self.assertEqual((record["signalled"], record["driverExited"], record["complete"]), (True, True, True))
+        self.assertEqual(marker.read_text(), "terminated")
+        written = json.loads((self.directory / spend_guard.STOP_FILE).read_text())
+        self.assertEqual((written["driverPid"], written["complete"]), (process.pid, True))
+
     def test_under_the_cap_it_leaves_the_driver_alone(self):
         process, marker = self.driver()
         self.run_dir("b3-t-bare-1", call(3.0))

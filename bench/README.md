@@ -321,7 +321,7 @@ Carry outcome (`carry.py`). For `archive-carryover` and `archive-carryover-raise
 The powered carryover test compares three arms on `archive-carryover-raised`: `bare`, `bare-automemory` and `visp:<build>+lean`.
 
 - `intermediate` mode: the first session, then a session whose request is the task's `intermediate.md` (raise the item limit to 50,000), then the second session, each a fresh `claude -p` on the project as the session before left it, in every arm. Nothing is scripted or seeded: the old path that rewrote the limit in the code and wrote the request into VISP's store alone is gone. `verify_intermediate` then runs the raised-limit checks (`create above 50000`, `create exactly 50000`). If the intermediate session ends in a CLI error or a usage limit, or the limit does not hold, the run gets `invalid.json` (reason `worker failure`, `usage limit` or `intermediate feature not verified`), the second session is not run and `report.py` excludes it. The failed project is kept in `<mode>/project`. `outdated`, `outdated-kw` and `recall-outdated` use the same intermediate session, after their stores are seeded.
-- `bare-automemory` is `bare` with Claude Code's [auto memory](https://code.claude.com/docs/en/memory#enable-or-disable-auto-memory) on. `bare` and every other arm have it off, so the arms differ only in that. `setup_arm.py` records `"memory": "auto"` or `"off"` in `arm.json`, and `run_claude.py` passes it with `--settings`: `{"autoMemoryEnabled": false}` plus `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` for the off arms; `{"autoMemoryEnabled": true, "autoMemoryDirectory": "<run>/memory"}` with the variable removed for `bare-automemory`.
+- `bare-automemory` is `bare` with Claude Code's [auto memory](https://code.claude.com/docs/en/memory#enable-or-disable-auto-memory) on. `bare` and every other arm have it off, so the arms differ only in that. `setup_arm.py` records `"memory": "auto"` or `"off"` in `arm.json`, and `run_claude.py` passes it with `--settings`: `{"autoMemoryEnabled": false}` plus `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` for the off arms; `{"autoMemoryEnabled": true, "autoMemoryDirectory": "<run>/memory"}` with the variable removed for `bare-automemory`. The `bare-automemory` prompt also names `<run>/memory` as the one place besides the project the worker may write and read (`prompts.py`; every other arm's prompt is unchanged and `test_prompts.py` pins it byte for byte), and `arm.json` has `memoryPrompt` with the path. Before this fix the prompt allowed only the project, so the arm saved no memory (b3: 0 files in 120 sessions); those runs have no `memoryPrompt`. Smoke test on `sheet-carryover`, whose conventions are durable rather than recorded in the repository: `python3 bench/batch.py --batch m1 --tasks sheet-carryover --arms bare-automemory --reps 5 --jobs 5 --preset quality-2026-10 --spend-cap 2`, then count the files in each run's `session1/result.json` (`autoMemory.filesAfter`) and `memory/` directory.
 - Memory is private to a run. By default Claude Code keeps it in `~/.claude/projects/<project path with non-alphanumerics as '-'>/memory/`, shared by every session in that repository; a run's project path (`<runs>/runs/<run>/project`) is unique because `setup_arm.py` refuses an existing run name. The `autoMemoryDirectory` setting moves it to `<run>/memory`, so a run starts empty, the real `~/.claude` is not read for memory or written to for it, and no credentials are copied or any user setting loaded (`--setting-sources project,local` as before). If memory exists at the default location for the project's path, the session is refused; after each session `outsideFiles` lists any that appeared (it should be empty).
 - Modes stay paired on one first session: `session1/memory.tar` keeps the memory the first session wrote, each mode starts from it and the mode's memory is moved to `<mode>/memory`.
 - Every session's result (`session1/result.json`, `<mode>/intermediate.json`, `<mode>/result.json`) has an `autoMemory` record: `setting`, `enabled`, the `--settings` JSON, the `CLAUDE_CODE_DISABLE_AUTO_MEMORY` value, the memory `directory`, and the files in it before and after the session (`filesBefore`, `filesAfter`).
@@ -329,5 +329,50 @@ The powered carryover test compares three arms on `archive-carryover-raised`: `b
 - An intermediate session that ends in a CLI error (not a usage limit) or whose raised limit does not hold is run once more from the first session's snapshot, never twice. The failed attempt is kept as `<mode>/intermediate-attempt1.json`; `intermediate.json` has `reruns`, and the second `result.json` has `intermediateReruns`. A second failure makes the run invalid as before. `report.py --carry` counts reruns per arm. A failed attempt's cost stays in `claude-calls.jsonl`.
 - A VISP arm's second `result.json` has `recall`, read from the project's state, not the transcript: `ranFeature` (`visp feature` added a directory to `.visp/features`), `earlierBriefHoldsCap` (the earlier feature's recorded request names 10000 or 50000), `storeNotes` and `storeHoldsCap` (the notes in `.visp/state/request-history.json`, which recall fills when it runs, so `memory.recall: false` leaves it empty), and `recallReturned`, `recallMemories`, `recallMentionsCap` (the new feature's `project-memory.json`, written only when the gate returned memories). On develop the per-feature file is `.visp/features/<id>/project-memory.json`; there is no `.visp/state/project-memory.json`, which is read too if a build keeps one. A failed reviewer-model call returns no memories without a record, so no result tells a failed call from a judgement that nothing applied.
 - The wall time of a run includes the intermediate session. `chainswe.py` supports only `bare` and `visp:` arms.
+
+### Worker environment modes
+
+An arm can end in `+compact100k`: `bare+compact100k`, `bare-automemory+compact100k`, `visp:develop+compact100k`, `visp:cand+lean+compact100k` (not `visp-codex:`). It sets two variables in the Claude Code worker's environment (`presets.WORKER_ENV_MODES`, applied by `run_claude.worker_env`) and changes nothing in the project or the prompt: `CLAUDE_CODE_AUTO_COMPACT_WINDOW=100000`, the smallest window the [docs](https://code.claude.com/docs/en/env-vars) allow (100000 to 1000000), and `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=90`, the percentage of the window at which compaction triggers (it can only lower the threshold). Claude Code then compacts near 90k tokens, so no request passes the 100k price line; without them Haiku 5.5, a native 1M-window model, compacts at about 967K. The label replaces `+` with `-` (`bare-compact100k`). `arm.json` records `armSpec`, `workerModes` and `workerEnv`, each session's `result.json` records `workerEnv`, the dry run shows the variables, and `report.py` names the difference in the comparison heading and the arm table.
+
+```bash
+# smoke test, 2 runs: does the setting reach the worker and does it compact?
+python3 bench/batch.py --batch cmp0 --tasks spreadsheet-extend --preset quality-2026-10 --reps 1 --jobs 2 --spend-cap 3 \
+  --arms bare+compact100k,visp:develop+compact100k
+# the comparison, 16 runs (later)
+python3 bench/batch.py --batch cmp1 --tasks spreadsheet-extend --preset quality-2026-10 --reps 4 --jobs 4 --spend-cap 8 \
+  --arms bare,bare+compact100k,visp:develop,visp:develop+compact100k --dry-run
+```
+
+### Snapshot reruns (second session only)
+
+`snapshot_rerun.py` restores the session-1 snapshot of finished `archive-carryover` and `archive-carryover-raised` runs (batches `b3` and `b3-pilot`, arms `bare` and `bare-automemory`) into new runs and runs the second request once, with the source's worker, effort, preset and prompt. A source qualifies when its session-1 README states the item cap on no line but the create-item bullet and its code sets the cap through a `MAX_*QUANTITY` constant (`snapshots.py`; 71 of the 100 snapshots). Both tasks share session 1 and session 2, so a `-raised` snapshot (taken before its intermediate session) is scored with the plain task. Variants, all in one batch so they share the time and the Claude Code version:
+
+| Variant | Second session |
+| --- | --- |
+| `control` | the snapshot unchanged, the second request as the arm ran it |
+| `oracle` | the same snapshot, `prompt2-oracle.txt`: the second request followed by the convention in the user's words (the plain task's `conventions.md`). The ceiling |
+| `readme-natural` | one README bullet after the Errors line: ``- Limits: item quantity above 10000 (`MAX_QUANTITY`) is 422 `invalid_request`.`` The wording the 29 README sentences from session 1 used; it says nothing about which operations |
+| `claudemd-line` | the same line in a new `CLAUDE.md` block (Claude Code skips `AGENTS.md` when `CLAUDE.md` exists), README unchanged |
+
+Run names are `<batch>-archive-carryover-<arm>-<variant>-<n>`, `<n>` being the snapshot's place among the eligible ones of its arm, so a `--limit N --seed S` sample (N snapshots, every variant of each) keeps its names and the variants of a snapshot are paired. `control` and `oracle` are queued first. Running the command again with more variants and the same `--limit` and `--seed` adds those runs to the same batch (finished runs are skipped). The driver is `batch.drive`, so the queue, restart, invalid-run check and `--spend-cap` are `batch.py`'s; `spend_guard.py` recognizes it. `--dry-run` lists the runs. Score and report with `report.py --batch <name> --score`; the manifest's first arm, `bare-control`, is the base. An `oracle` run writes `<run>/oracle/`, the others `<run>/fresh/`.
+
+```bash
+python3 bench/snapshot_rerun.py --batch sr1 --variants control,oracle --limit 30 --seed 0 --dry-run
+python3 bench/snapshot_rerun.py --batch sr1 --variants control,oracle --limit 30 --seed 0 --jobs 4 --spend-cap 6
+python3 bench/snapshot_rerun.py --batch sr1 --variants control,oracle,readme-natural,claudemd-line --limit 30 --seed 0 --jobs 4 --spend-cap 10
+python3 bench/report.py --batch sr1 --score --runs
+```
+
+### The rule-line arm
+
+`bare-rule-line` is `bare` with a `CLAUDE.md` in the scaffold (`prompts.RULE_LINE`) that tells the worker to record the conventions and limits the user states in that file, one line in the user's words, and to read it at the start of every task. Claude Code loads `CLAUDE.md` by itself, so it needs no model and no VISP. The prompt is `bare`'s byte for byte. Run it as a two-session arm beside `bare`:
+
+```bash
+python3 bench/batch.py --batch rl1 --tasks archive-carryover --arms bare,bare-rule-line --reps 10 --jobs 4 --preset quality-2026-10 --spend-cap 3
+```
+
+### Claude Code version
+
+`setup_arm.py` records `claudeVersion` (`claude --version` on PATH) in `arm.json`, every worker session's `result.json` has it, a snapshot rerun records the current version and the source's as `sourceClaudeVersion`, and `batch.py` logs a warning when a restarted batch finds another version than it started with. `report.py` prints a warning (stderr, the Markdown and `report.json`) when the runs of a batch were made with different versions or some record none. Runs made before this have none, so a batch that mixes them with new ones warns.
 
 A desktop app or terminal that ends its child processes can stop a long batch; start batches in their own session (for example `systemd-run --user` on Linux). On Linux both runners start each worker in its own user and PID namespace (`unshare`), so a worker's `killall python3` or `pkill -f` reaches only its own processes, not the runner or parallel runs. The wrapper is tried once first; where `unshare` is missing or the host blocks unprivileged namespaces or mounting `/proc`, workers run unwrapped (still in their own session) and are not isolated from each other.

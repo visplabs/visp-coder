@@ -140,6 +140,12 @@ export function declaredRunner(
   };
 }
 
+/**
+ * unittest's own options that take a separate value. `-v`, `-q`, `-f`, `-c`, `-b`, `--locals`
+ * and their long forms are flags; `VALUED` lists `-v` and `-c` for Django and pytest, where they
+ * take one. `--durations` is Python 3.12 and later.
+ */
+const UNITTEST_VALUED = new Set(["-k", "--durations"]);
 /** Options of `unittest discover` that choose where to look, which a named module replaces. */
 const DISCOVER_VALUED = new Set([
   "-s",
@@ -165,7 +171,8 @@ function discoverPrefix(runner: readonly string[], rest: readonly string[]): str
     else if (!found && arg === "discover") found = true;
     else if (arg.startsWith("-")) {
       kept.push(arg);
-      if (VALUED.has(arg) && rest[index + 1] !== undefined) kept.push(rest[++index] as string);
+      if (UNITTEST_VALUED.has(arg) && rest[index + 1] !== undefined)
+        kept.push(rest[++index] as string);
     }
   }
   return [...runner.flatMap((arg) => (arg === "-I" ? ["-E", "-s"] : [arg])), ...kept];

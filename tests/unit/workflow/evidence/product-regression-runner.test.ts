@@ -233,6 +233,77 @@ describe("a declared unittest discover check", () => {
     ).toEqual(["python3", "-E", "-s", "-m", "unittest", "tests.test_api"]);
   });
 
+  it("keeps the flag that stands before the start directory, and the option after it", () => {
+    const kept = ["python3", "-m", "unittest", "-v", "tests.test_api"];
+    expect(narrowed(["python3", "-m", "unittest", "discover", "-v", "-s", "tests"])).toEqual(kept);
+    expect(
+      narrowed(["python3", "-m", "unittest", "discover", "-s", "tests", "-v", "-p", "test_*.py"]),
+    ).toEqual(kept);
+    expect(
+      narrowed(["python3", "-m", "unittest", "discover", "-v", "-t", ".", "-p", "test_*.py"]),
+    ).toEqual(kept);
+  });
+
+  it("keeps unittest's flags in whatever order, none of them taking the next argument", () => {
+    for (const declared of [
+      ["discover", "-c", "-b", "-s", "tests"],
+      ["discover", "-b", "-c", "-s", "tests"],
+      ["discover", "-c", "-s", "tests", "-b"],
+      ["discover", "-s", "tests", "-c", "-b"],
+    ])
+      expect(narrowed(["python3", "-m", "unittest", ...declared])).toEqual([
+        "python3",
+        "-m",
+        "unittest",
+        ...declared.filter((arg) => arg === "-c" || arg === "-b"),
+        "tests.test_api",
+      ]);
+    for (const flag of [
+      "-v",
+      "-q",
+      "-f",
+      "-c",
+      "-b",
+      "--verbose",
+      "--quiet",
+      "--failfast",
+      "--catch",
+      "--buffer",
+      "--locals",
+    ])
+      expect(narrowed(["python3", "-m", "unittest", "discover", flag, "-s", "tests"])).toEqual([
+        "python3",
+        "-m",
+        "unittest",
+        flag,
+        "tests.test_api",
+      ]);
+  });
+
+  it("keeps the value of the options that take one and drops where discovery looks", () => {
+    expect(
+      narrowed(["python3", "-m", "unittest", "discover", "-k", "double", "-v", "-s", "tests"]),
+    ).toEqual(["python3", "-m", "unittest", "-k", "double", "-v", "tests.test_api"]);
+    expect(
+      narrowed(["python3", "-m", "unittest", "discover", "--durations", "3", "-s", "tests"]),
+    ).toEqual(["python3", "-m", "unittest", "--durations", "3", "tests.test_api"]);
+    expect(
+      narrowed([
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-v",
+        "--start-directory",
+        "tests",
+        "--pattern",
+        "test_*.py",
+        "--top-level-directory",
+        ".",
+      ]),
+    ).toEqual(["python3", "-m", "unittest", "-v", "tests.test_api"]);
+  });
+
   it("narrows to classes by dotted name", () => {
     expect(
       narrowed(["python3", "-m", "unittest", "discover", "-s", "tests"], ["ApiTests"]),
