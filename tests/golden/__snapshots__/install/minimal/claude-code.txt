@@ -67,6 +67,10 @@ Run `visp next` and address its objective and evidence.
         ]
       }
     ]
+  },
+  "env": {
+    "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "100000",
+    "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "90"
   }
 }
 

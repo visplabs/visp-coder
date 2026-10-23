@@ -317,6 +317,10 @@ Run `visp pr` and report its evidence and unresolved limitations without embelli
         ]
       }
     ]
+  },
+  "env": {
+    "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "100000",
+    "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "90"
   }
 }
 

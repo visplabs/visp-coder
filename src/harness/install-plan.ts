@@ -37,6 +37,7 @@ import {
   type PlannedClaudeRegistration,
   planPreToolUseRegistration,
   planPreToolUseUnregistration,
+  withCompactionEnv,
 } from "./claude-settings.js";
 import { codexRegistrationAdvice, codexRegistrationProblem } from "./codex-mcp-registration.js";
 import { COMMAND_GUIDE_PATH, RETIRED_COMMAND_GUIDE_PATH } from "./command-guide.js";
@@ -129,7 +130,7 @@ export async function buildInstallPlan(
   if (!profilePrune.ok) return profilePrune;
   const activation = await planActivation(fs, options, planned);
   if (!activation.ok) return activation;
-  const hooks = await planHooks(fs, paths, options, manifest.value, planned);
+  const hooks = await planHooks(fs, paths, options, manifest.value, planned, autoCompact(settings));
   if (!hooks.ok) return hooks;
   const mcp = await planMcp(fs, options, planned);
   if (!mcp.ok) return mcp;
@@ -234,9 +235,18 @@ async function planHooks(
   options: InstallOptions,
   manifest: AssetManifest,
   planned: InstallPlan,
+  compact: boolean,
 ): Promise<Result<void>> {
   for (const hook of options.hooks ?? []) {
-    const installed = await planHook(fs, paths, hook, options.force === true, manifest, planned);
+    const installed = await planHook(
+      fs,
+      paths,
+      hook,
+      options.force === true,
+      manifest,
+      planned,
+      compact,
+    );
     if (!installed.ok) return installed;
   }
   return ok(undefined);
@@ -618,8 +628,9 @@ async function planHook(
   force: boolean,
   manifest: AssetManifest,
   plan: InstallPlan,
+  compact: boolean,
 ): Promise<Result<void>> {
-  if (hook === "claude") return planClaudeHook(fs, force, manifest, plan);
+  if (hook === "claude") return planClaudeHook(fs, force, manifest, plan, compact);
   if (hook === "ci") {
     return planAsset(
       fs,
@@ -633,11 +644,18 @@ async function planHook(
   return planGitHook(fs, paths, force, plan);
 }
 
+/** Whether install sets the lean worker's compaction variables (`workflow.autoCompact`). */
+function autoCompact(settings: VispConfig): boolean {
+  const { workflow } = settings;
+  return workflow.autoCompact ?? (workflow.profile === "lean" && workflow.worker !== "weak");
+}
+
 async function planClaudeHook(
   fs: ProjectFileSystem,
   force: boolean,
   manifest: AssetManifest,
   plan: InstallPlan,
+  compact: boolean,
 ): Promise<Result<void>> {
   const path = CLAUDE_PRE_TOOL_USE_HOOK;
   const content = renderPreToolUseHook();
@@ -670,12 +688,14 @@ async function planClaudeHook(
   }
   const backup = await planSettingsBackup(fs, registration.value, current.value, plan);
   if (!backup.ok) return backup;
-  if (registration.value.content !== undefined) {
-    recordCreated(plan, CLAUDE_SETTINGS_FILE, current.value, registration.value.content);
+  const registered = registration.value.content ?? current.value;
+  const settings = withCompactionEnv(registered, compact);
+  if (settings !== undefined && settings !== current.value) {
+    recordCreated(plan, CLAUDE_SETTINGS_FILE, current.value, settings);
     plan.mutations.push({
       kind: "write",
       path: CLAUDE_SETTINGS_FILE,
-      content: registration.value.content,
+      content: settings,
       expectedBefore: filePrecondition(current.value),
     });
   }
