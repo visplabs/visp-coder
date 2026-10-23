@@ -338,6 +338,84 @@ describe("suite-level verification", () => {
   });
 });
 
+describe("skipped tests and qualified names", () => {
+  it("never verifies a name any line marks skipped, todo or expected to fail", () => {
+    const outputs = [
+      "TAP version 13\nok 1 - test_x\nok 2 - test_x # SKIP not ready\n1..2",
+      "ok 1 - test_x\nnot ok 2 - test_x # TODO later\n1..2",
+      "ok 1 - test_x\nok 2 - test_x # skip\n1..2",
+      "test_x (a.A.test_x) ... ok\ntest_x (b.B.test_x) ... skipped 'todo'",
+      "test_x (a.A.test_x) ... ok\ntest_x (b.B.test_x) ... expected failure",
+      "tests/a.py::test_x PASSED\ntests/b.py::test_x SKIPPED (todo)",
+      "tests/a.py::test_x PASSED\ntests/b.py::test_x XFAIL",
+      "tests/a.py::test_x PASSED\ntests/b.py::test_x XPASS",
+      "--- PASS: test_x (0.00s)\n--- SKIP: test_x (0.00s)",
+      "  ✓ test_x (2 ms)\n  ○ skipped test_x",
+      "  ✓ test_x (2 ms)\n  ✎ todo test_x",
+      "✔ test_x (1ms)\n﹣ test_x (0.1ms) # SKIP",
+    ];
+    for (const output of outputs) {
+      const result = verifyAccounts([account("test_x")], [run(output)]);
+      expect(result.get("R001"), output).toMatchObject({
+        status: "claimed",
+        names: [{ reason: "skipped" }],
+      });
+    }
+    const tap = verifyAccounts(
+      [account("creates a bundle; rejects archived items")],
+      [
+        run(
+          "TAP version 13\nok 1 - creates a bundle\nok 2 - rejects archived items # SKIP not ready\n1..2\n# pass 1\n# skipped 1\n",
+        ),
+      ],
+    );
+    expect(tap.get("R001")?.summary).toBe(
+      "not confirmed from the check output: rejects archived items: skipped, todo or expected to fail in C001's latest run",
+    );
+  });
+
+  it("reads a qualified name against the module and class the line gives", () => {
+    const unittest = [
+      "test_create (tests.test_items.ItemTests.test_create) ... ok",
+      "test_create (tests.test_bundles.BundleTests.test_create) ... skipped 'todo'",
+      "",
+      "Ran 2 tests in 0.001s",
+      "",
+      "OK (skipped=1)",
+    ].join("\n");
+    const pytest = [
+      "tests/test_items.py::ItemTests::test_create PASSED [ 50%]",
+      "tests/test_bundles.py::BundleTests::test_create SKIPPED (todo) [100%]",
+    ].join("\n");
+    const legacy = [
+      "test_create (tests.test_items.ItemTests) ... ok",
+      "test_create (tests.test_bundles.BundleTests) ... skipped 'todo'",
+    ].join("\n");
+    for (const output of [unittest, pytest, legacy]) {
+      const result = verifyAccounts(
+        [
+          account("test_create", "R001"),
+          account("ItemTests.test_create", "R002"),
+          account("test_items.ItemTests.test_create", "R003"),
+          account("test_bundles.BundleTests.test_create", "R004"),
+          account("OtherTests.test_create", "R005"),
+        ],
+        [run(output)],
+      );
+      const reasons = [...result.values()].map((entry) =>
+        entry.names.map((name) => (name.verdict === "claimed" ? name.reason : name.verdict)),
+      );
+      expect(reasons, output).toEqual([
+        ["skipped"],
+        ["verified"],
+        ["verified"],
+        ["skipped"],
+        ["not-in-output"],
+      ]);
+    }
+  });
+});
+
 describe("custom runner lines", () => {
   it("reads 'ok <title>' lines as passed tests and 'not ok <title>' as failed", () => {
     const output = [
