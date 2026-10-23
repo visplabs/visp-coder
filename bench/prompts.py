@@ -30,3 +30,12 @@ def common(root, arm):
         "Do not delegate to other agents. Build it, run your tests, and finish with a short report "
         "of what you actually verified."
     )
+
+
+# bare-rule-line: the CLAUDE.md of the arm, a stock instruction that needs no model and no VISP.
+RULE_LINE = """# Project instructions
+
+When the user states a convention, a limit or a rule for how this project works, record it in this file
+before you finish, as one line that keeps the user's words. At the start of every task, read this file and
+keep to what it records.
+"""

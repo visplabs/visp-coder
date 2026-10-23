@@ -14,6 +14,7 @@ import unittest
 
 BENCH = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(BENCH))
+import common  # noqa: E402
 import prompts  # noqa: E402
 import run_claude  # noqa: E402
 
@@ -32,7 +33,7 @@ def frozen(root):
 
 class CommonParagraph(unittest.TestCase):
     def test_every_arm_but_bare_automemory_gets_the_frozen_text(self):
-        for arm in ("bare", "speckit", "bmad", "visp:visp-head", "visp:cand+lean+nocritic", "visp-codex:cand"):
+        for arm in ("bare", "bare-rule-line", "speckit", "bmad", "visp:visp-head", "visp:cand+lean+nocritic", "visp-codex:cand"):
             with self.subTest(arm=arm):
                 self.assertEqual(prompts.common("/runs/r1/project", arm), frozen("/runs/r1/project"))
 
@@ -87,6 +88,21 @@ class SetupArm(unittest.TestCase):
         stripped = (text.replace(f" and in Claude Code's own memory directory {memory}", "")
                     .replace(f" except {memory}", "").replace(str(auto / "project"), "@"))
         self.assertEqual(stripped, (bare / "prompt.txt").read_text().replace(str(bare / "project"), "@"))
+
+    def test_the_rule_line_arm_is_bare_plus_a_committed_claude_md(self):
+        bare, _ = self.setup("bare", "p-bare")
+        rule, arm = self.setup("bare-rule-line", "p-rule")
+        self.assertEqual((rule / "prompt.txt").read_text().replace(str(rule / "project"), "@"),
+                         (bare / "prompt.txt").read_text().replace(str(bare / "project"), "@"))
+        self.assertEqual((rule / "project" / "CLAUDE.md").read_text(), prompts.RULE_LINE)
+        self.assertFalse((bare / "project" / "CLAUDE.md").exists())
+        tracked = subprocess.run(["git", "ls-files"], cwd=rule / "project", capture_output=True, text=True).stdout
+        self.assertIn("CLAUDE.md", tracked.split())
+        self.assertEqual((arm["arm"], arm["memory"]), ("bare-rule-line", "off"))
+
+    def test_arm_json_records_the_claude_code_version(self):
+        _, arm = self.setup("bare", "p-version")
+        self.assertEqual(arm["claudeVersion"], common.claude_version())
 
 
 if __name__ == "__main__":

@@ -1,10 +1,13 @@
 """Prepare one benchmark project and write the actor prompt for it.
 
 Usage: setup_arm.py <task> <arm> <run_name> [--skill <id>]... [--preset default]
-arm: bare | bare-automemory | speckit | bmad | visp:<build> (Claude Code worker) | visp-codex:<build> (Codex worker)
+arm: bare | bare-automemory | bare-rule-line | speckit | bmad | visp:<build> (Claude Code worker) | visp-codex:<build> (Codex worker)
 A worker mode suffix (`bare+compact100k`, `visp:<build>+lean+compact100k`; presets.WORKER_ENV_MODES) sets
 environment variables for the Claude Code worker only; arm.json records armSpec, workerModes and workerEnv.
 bare-automemory is bare with Claude Code's auto memory on, in a directory of the run; every other arm has it off.
+bare-rule-line is bare with a CLAUDE.md that tells the worker to record the conventions the user states in it
+(prompts.RULE_LINE; no model, the form VISP could ship). arm.json records claudeVersion, the Claude Code version
+on PATH when the run was set up.
 The automemory prompt names that directory as writable and readable besides the project (prompts.py);
 arm.json "memoryPrompt" records the path, and runs made before that fix have none.
 <build> is a name given to build_visp.sh; `visp:<build>+lean+nocritic` adds modes from presets.py,
@@ -29,10 +32,10 @@ import shutil
 import subprocess
 
 from chains import step_files
-from common import RUNS
+from common import RUNS, claude_version
 from presets import (arm_record, config_yaml, critic_yaml, effective_settings, preset, split_worker_modes, visp_build,
                      worker_env)
-from prompts import common, memory_directory
+from prompts import RULE_LINE, common, memory_directory
 
 BENCH = pathlib.Path(__file__).resolve().parent
 parser = argparse.ArgumentParser()
@@ -83,8 +86,11 @@ if start.is_dir():
     shutil.copytree(start, root, dirs_exist_ok=True)
 
 COMMON = common(root, arm)
-if arm in ("bare", "bare-automemory"):
+if arm in ("bare", "bare-automemory", "bare-rule-line"):
     workflow = "Use ordinary coding: write the code and tests directly."
+    if arm == "bare-rule-line":
+        # Bare plus one stock instruction that Claude Code loads by itself, committed with the scaffold.
+        (root / "CLAUDE.md").write_text(RULE_LINE)
 elif arm == "speckit":
     sh(["specify", "init", "--here", "--force", "--non-interactive", "--integration", "claude"])
     workflow = (
@@ -151,7 +157,7 @@ for number, step in enumerate(steps, start=1):
     (root.parent / f"prompt-step{number}.txt").write_text(f"{workflow}\n\n{COMMON}\n\nTask:\n\n{step.read_text()}")
 # The headless runner puts the arm's VISP build on PATH so installed hooks find it.
 (root.parent / "arm.json").write_text(json.dumps({"task": task_name, "arm": arm, "shim": shim_dir, "skills": args.skill,
-                                                 "preset": args.preset, "settings": settings, **arm_config,
+                                                 "preset": args.preset, "settings": settings, **arm_config, "claudeVersion": claude_version(),
                                                  "memory": "auto" if arm == "bare-automemory" else "off",
                                                  **({"armSpec": args.arm, "workerModes": worker_modes,
                                                      "workerEnv": worker_env(worker_modes)} if worker_modes else {}),
