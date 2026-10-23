@@ -21,7 +21,7 @@ import pathlib
 import shutil
 import time
 
-from common import RUNS, isolate, run_worker
+from common import RUNS, claude_version, isolate, run_worker
 from runfacts import CLAUDE_PROJECTS, project_key
 
 MODEL = "claude-haiku-4-5-20251001"
@@ -159,6 +159,7 @@ def run_session(project, arm, prompt, model=None, timeout=2700, resume=None, eff
 
     return {
         "arm": arm["arm"], "preset": arm.get("preset"), "model": model, "effort": effort, "seconds": round(time.time() - started), "timedOut": timed_out,
+        "claudeVersion": claude_version(),
         "autoMemory": {
             "setting": memory_setting(arm), "enabled": settings["autoMemoryEnabled"], "settings": settings,
             "env": {key: env.get(key) for key in ("CLAUDE_CODE_DISABLE_AUTO_MEMORY",)},

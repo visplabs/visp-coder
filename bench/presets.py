@@ -71,7 +71,7 @@ VISP_MODES = {
 # `visp:cand+lean+compact100k`. Each sets variables in the worker's environment (run_claude.worker_env)
 # and nothing in the project, so the prompt and the project files of the arm stay as they are.
 # compact100k: Claude Code compacts the conversation when it reaches about 90k tokens, so no request
-# passes the 100k price line (research-oct23.md C1). From https://code.claude.com/docs/en/env-vars:
+# passes the 100k price line (the compaction item of research-oct23.md; not lean-cost.md's C1). From https://code.claude.com/docs/en/env-vars:
 # CLAUDE_CODE_AUTO_COMPACT_WINDOW is "how full the context gets before compaction", from 100000 to 1000000
 # tokens, and beats the setting and the flag; CLAUDE_AUTOCOMPACT_PCT_OVERRIDE (1-100) is the percentage of
 # that window at which compaction triggers, and can only lower the threshold. Without them a model with a

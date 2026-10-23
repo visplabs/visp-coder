@@ -414,11 +414,34 @@ def fmt(value, metric=None):
     return f"{value:g}" if isinstance(value, (int, float)) else str(value)
 
 
+def version_warnings(manifest):
+    """Warnings when the runs of a batch were made with different Claude Code versions.
+
+    The version is the one arm.json recorded at set-up and each worker session's result.json at run time
+    (a restored first session is not counted); a run from before they were recorded counts as "unrecorded".
+    """
+    by_label = {}
+    for entry in manifest.get("runs", []):
+        run = RUNS / "runs" / entry["name"]
+        arm = load(run / "arm.json")
+        if arm is None:
+            continue
+        ran = {result["claudeVersion"] for _, path in sessions(run) if (result := load(path))
+               and "restoredFrom" not in result and result.get("claudeVersion")}
+        by_label.setdefault(entry["label"], set()).update(ran or {arm.get("claudeVersion") or "unrecorded"})
+    if len(set().union(*by_label.values())) <= 1:
+        return []
+    detail = "; ".join(f"{label}: {', '.join(sorted(versions))}" for label, versions in by_label.items())
+    return [f"Claude Code versions differ between the runs of this batch ({detail}); a difference between arms may "
+            "be the CLI, not the arm."]
+
+
 def markdown(manifest, rows, groups, comparisons, excluded, unfinished, show_runs):
     out = [f"## Batch {manifest['batch']} (preset {manifest['preset']})", ""]
     worker = manifest["settings"]["worker"]
     out.append(f"Worker {worker['model']} ({worker['effort'] or 'default effort'}); "
                f"{len(rows)} valid runs; {len(excluded)} invalid runs excluded; {len(unfinished)} unfinished.")
+    out += [f"**Warning:** {warning}" for warning in version_warnings(manifest)]
     probed = any(g["probes"] is not None for g in groups.values())
     out += ["", "| Task | Arm | n | Hidden |" + (" Probes | Probes from findings |" if probed else "") +
             " Judge | Checklist | Code | Wall s | Idle s | Model s | VISP s | Own s "
@@ -722,6 +745,8 @@ def main():
         raise SystemExit("give --batch, or --compare BATCH:LABEL ...")
     directory = RUNS / "batches" / args.batch
     manifest, rows, excluded, unfinished = load_batch(args.batch, args.score, args.score_jobs, args.carry)
+    for warning in version_warnings(manifest):
+        print(f"warning: {warning}", file=sys.stderr)
     if args.carry:
         print(carry.markdown(manifest, rows))
         return
@@ -758,7 +783,7 @@ def main():
                   task: {**verdict, "checks": [dict(zip(fields, check)) for check in verdict["checks"]]}
                   for task, verdict in result["tasks"].items()}} for cand, result in comparisons.items()},
               "invalid": [{"run": name, "reason": reason} for name, reason in excluded],
-              "unfinished": unfinished}
+              "unfinished": unfinished, "warnings": version_warnings(manifest)}
     (args.json or directory / "report.json").write_text(json.dumps(report, indent=2))
 
 
