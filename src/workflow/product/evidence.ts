@@ -301,7 +301,7 @@ async function finishExecution(
     ...(close ? { closed: passed } : {}),
     executions,
     ...regression.reply,
-    ...(await profileReply(workspace, current, slice, close || accept)),
+    ...(await profileReply(workspace, current, slice, after.value, close || accept)),
     outcomes: outcomeStatuses(current, after.value, slice),
     gaps: [...new Set(gaps)],
     journeyFeedback: currentJourneyFeedback(
@@ -331,10 +331,11 @@ async function profileReply(
   workspace: WorkspaceState,
   record: ProductRecord,
   slice: ProductSlice | undefined,
+  subject: string,
   closing: boolean,
 ) {
   const profile = featureProfile(workspace, record);
-  const requirements = closing ? await requirementStatus(workspace, record, slice) : [];
+  const requirements = closing ? await requirementStatus(workspace, record, slice, subject) : [];
   return {
     ...(profile.name === "full" ? { profile } : {}),
     ...(requirements.length ? { requirements } : {}),

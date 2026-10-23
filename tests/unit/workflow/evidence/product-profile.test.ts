@@ -52,6 +52,23 @@ describe("featureProfile", () => {
     });
   });
 
+  it("does not count the wrapper or pasted logs as requirements when it decides", () => {
+    const items = Array.from({ length: 16 }, (_, index) => `- Field number ${index + 1} is shown.`);
+    const wrapper = [
+      "This project uses VISP. Read CLAUDE.md and the VISP instructions it references before starting, and follow them.",
+      "Run every shell command from that directory and create or edit files only inside it. Do not read other directories. Do not ask questions: make reasonable assumptions and continue. Do not delegate to other agents. Build it, run your tests, and finish with a short report of what you actually verified.",
+    ];
+    const pasted = Array.from(
+      { length: 8 },
+      (_, index) => `ValueError: step ${index + 1} should not be reached`,
+    );
+    const request = [...wrapper, "Task:", "", ...items, "", ...pasted].join("\n");
+    expect(featureProfile(workspace(), { brief: brief(request) })).toEqual({ name: "lean" });
+    // Real requirements past the limit still escalate.
+    const many = [...items, ...items.map((item) => `${item} Also in the export.`)].join("\n");
+    expect(featureProfile(workspace(), { brief: brief(`${request}\n${many}`) }).name).toBe("full");
+  });
+
   it("is full once a check has failed on two versions of the product, not on a rerun of one", () => {
     const rerun = state({ executions: [failed("C001", "a"), failed("C001", "a")] as never });
     expect(featureProfile(workspace(), { brief: brief(), state: rerun }).name).toBe("lean");

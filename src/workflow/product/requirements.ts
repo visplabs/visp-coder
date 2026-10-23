@@ -3,6 +3,8 @@ import { vispError } from "../../core/errors.js";
 import { type FileMutation, filePrecondition } from "../../core/file-transaction.js";
 import { err, ok, type Result } from "../../core/result.js";
 import type { WorkspaceState } from "../state.js";
+import type { AccountVerification } from "./account-verification.js";
+import { dumpLineIndexes, isPastedLine, isProcessInstruction } from "./requirement-noise.js";
 
 /**
  * The requirements a request states, listed by VISP at `feature` without a model, and the
@@ -28,7 +30,8 @@ export interface ListedRequirement {
 }
 
 const LIST_ITEM = /^(\s*)(?:[-*•+]|\d{1,2}[.)])\s+(.+)$/;
-const FENCE = /^\s*(?:```|~~~)/;
+/** A code fence (CommonMark): up to three spaces, three or more marks, then an info string. */
+const FENCE = /^ {0,3}(`{3,}|~{3,})\s*[\w+#.-]*\s*$/;
 const SENTENCE = /(?<=[.!?])\s+(?=[A-Z0-9`"(])/;
 /** Prose next to a list counts when it instructs or constrains, not when it describes. */
 const IMPERATIVE =
@@ -56,11 +59,15 @@ function statedRequest(request: string): string {
   return cut < 0 ? request : blocks.slice(0, cut).join("");
 }
 
-/** The requirements a request states, in request order: list items, else sentences. */
+/**
+ * The requirements a request states, in request order: list items, else sentences. Pasted code,
+ * logs and tracebacks and instructions about how to work are not requirements.
+ */
 export function requestRequirements(request: string): ListedRequirement[] {
   const parts = requestParts(statedRequest(request));
   const listed = parts.filter((part) => part.item).length >= 2;
   return parts
+    .filter((part) => !isProcessInstruction(part.text))
     .filter((part) => part.item || (listed ? instructs(part.text) : words(part.text) >= MIN_WORDS))
     .flatMap((part) => branches(part.text))
     .map((statement, index) => ({
@@ -77,18 +84,22 @@ interface RequestPart {
 /** List items with their continuation lines, and prose sentences outside the lists, in order. */
 function requestParts(request: string): RequestPart[] {
   const parts: RequestPart[] = [];
-  let fenced = false;
+  let fence: string | undefined;
   let item: { indent: number; text: string } | undefined;
   const flush = () => {
     if (item) parts.push({ text: item.text, item: true });
     item = undefined;
   };
-  for (const line of request.replace(/\r\n?/g, "\n").split("\n")) {
-    if (FENCE.test(line)) {
-      fenced = !fenced;
+  const lines = request.replace(/\r\n?/g, "\n").split("\n");
+  const dump = dumpLineIndexes(lines);
+  for (const [index, line] of lines.entries()) {
+    const mark = FENCE.exec(line)?.[1];
+    if (mark) {
+      if (!fence) fence = mark;
+      else if (mark[0] === fence[0] && mark.length >= fence.length) fence = undefined;
       continue;
     }
-    if (fenced) continue;
+    if (fence) continue;
     const listed = LIST_ITEM.exec(line);
     if (listed) {
       flush();
@@ -96,6 +107,7 @@ function requestParts(request: string): RequestPart[] {
     } else if (!line.trim()) flush();
     else if (item && /^\s/.test(line) && line.search(/\S/) > item.indent)
       item.text = `${item.text} ${line.trim()}`;
+    else if (dump.has(index) || isPastedLine(line)) flush();
     else {
       flush();
       for (const sentence of line.trim().split(SENTENCE))
@@ -259,11 +271,26 @@ export async function requirementAccountMutation(
   });
 }
 
+/** The command `done` runs as, and a check of the slice to cite in the example entries. */
+export interface AccountCommand {
+  readonly done: string;
+  readonly check: string;
+}
+
+/** The one command that accounts for what is open: workers read `--help` for its shape otherwise. */
+function accountCommandText(open: readonly string[], command: AccountCommand | undefined): string {
+  const entry = (id: string) => `"${id}=${command?.check ?? "<check id>"} <test name>"`;
+  const examples = open.slice(0, 2).map(entry).join(" ");
+  const more = open.length > 2 ? " …" : "";
+  return `${command?.done ?? "visp done"} --account ${examples}${more}, one entry per requirement; for one that is not done: "${open[0]}=not done: <reason>"`;
+}
+
 /** What still needs an account: none, or a check that has not passed on the current version. */
 export function requirementGaps(
   listed: readonly ListedRequirement[],
   accounts: readonly StoredAccount[],
   passedChecks: ReadonlySet<string>,
+  command?: AccountCommand,
 ): string[] {
   const byId = new Map(accounts.map((entry) => [entry.id, entry]));
   const gaps: string[] = [];
@@ -278,7 +305,7 @@ export function requirementGaps(
   }
   if (open.length)
     gaps.unshift(
-      `Requirements not accounted for: ${open.join(", ")}. At visp done, give each its passing check (--account ${open[0]}=<check id> [test name]) or say why it is not done (--account "${open[0]}=not done: <reason>")`,
+      `Requirements not accounted for: ${open.join(", ")}. At visp done, give each its passing check and a test it runs, or say why it is not done: ${accountCommandText(open, command)}`,
     );
   return gaps;
 }
@@ -287,13 +314,14 @@ export function requirementGaps(
 export function requirementSummary(
   listed: readonly ListedRequirement[],
   accounts: readonly StoredAccount[],
+  verified: ReadonlyMap<string, AccountVerification> = new Map(),
 ): string[] {
   const byId = new Map(accounts.map((entry) => [entry.id, entry]));
   return listed.map((requirement) => {
     const account = byId.get(requirement.id);
     if (!account) return `${requirement.id}: open`;
-    return account.status === "done"
-      ? `${requirement.id}: done, ${account.check}${account.note ? ` ${account.note}` : ""}`
-      : `${requirement.id}: not done, ${account.reason}`;
+    if (account.status !== "done") return `${requirement.id}: not done, ${account.reason}`;
+    const checked = verified.get(requirement.id);
+    return `${requirement.id}: done, ${account.check}${account.note ? ` ${account.note}` : ""}${checked ? ` (${checked.summary})` : ""}`;
   });
 }

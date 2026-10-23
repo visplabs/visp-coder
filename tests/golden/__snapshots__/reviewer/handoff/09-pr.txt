@@ -42,7 +42,7 @@ Unchecked (advise mode): 0 commands (0 linked to the change, 0 from earlier feat
 
 ## Next
 
-The independent review budget is spent. Run visp pr; the remaining findings go to a human reviewer
+The independent review budget is spent. Run visp pr (it prints the evidence record and changes and pushes nothing); the remaining findings go to a human reviewer
 
 `visp pr --feature 001-return-two-from-the-public`
 

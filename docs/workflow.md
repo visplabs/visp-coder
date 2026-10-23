@@ -5,11 +5,12 @@ A feature is one brief plus the records VISP generates while the agent works thr
 ## Starting a feature
 
 ```sh
-visp feature "<goal>" --source-brief - <<'REQUEST'
+visp feature "<goal>" --check "<test command>" --source-brief - <<'REQUEST'
 <original request, verbatim>
 REQUEST
-visp work --check "<test command>"
 ```
+
+`--check` makes `feature` also run `visp work --check "<test command>"` once the request is recorded, so one reply holds the feature's requirements and the slice's context and names the `visp done` to run next. Without it, `feature` stops after recording the request and the next step is `visp work --check "<test command>"`; both forms work the same way afterwards. A `--check` that cannot start the slice leaves the feature recorded and the reply says how to start it by hand.
 
 The quoted heredoc preserves backticks and other shell characters literally. Under Claude Code (with the installed prompt hook) and Codex, VISP takes the request from the user's recorded prompt; a `--source-brief` is kept only when it quotes that prompt verbatim, for example one request out of a longer message, so a paraphrase cannot replace it. On other hosts pass the complete request. `--risk low|medium|high|critical` records project risk and `--branch` creates a feature branch. The feature is created under `.visp/features/<id>/` with a `brief.yaml` that holds the preserved request and an empty plan. `feature` pins the current critic configuration into the feature; later changes to defaults do not affect it.
 
@@ -123,7 +124,7 @@ Authorizations record the Git commit at `work`. Incoming committed changes whose
 
 **Independent acceptance tests.** With `critic.launch: codex-exec` and `critic.harness: codex` (or `claude-exec` and `claude-code`), `visp feature` of a feature with the [full profile](#profiles) starts an independent tester on a new project that writes tests from the original request. VISP keeps them only if they fail against a private launch-time source copy and pins them whenever the tester finishes, even if the worker has since edited the product; `work` does not wait and reports them as `independentTests`. Ambiguous request rules are recorded separately from tests and arrive as default advice with the conventional reading: use it unless the request, a pinned test or an explicit user decision says otherwise, report such a conflict instead of overriding it, and record the choice in the implementation, tests or documentation. Reviewers receive the same readings as advice. See [the critic guide](critic.md#independent-acceptance-tests).
 
-**Light path.** `visp work --check "<test command>"` on a feature without slices creates one slice covering the whole request (scope `**`, the command as its check) and authorizes it; on a slice without checks it declares that check. Use a full brief only for several independently usable parts.
+**Light path.** `visp feature --check "<test command>"`, or `visp work --check "<test command>"` after `feature`, on a feature without slices creates one slice covering the whole request (scope `**`, the command as its check) and authorizes it; on a slice without checks it declares that check. Use a full brief only for several independently usable parts.
 
 **The check gate.** `work` refuses a slice whose functional outcome is not exercised by any declared check, and returns a patch that adds one:
 
@@ -190,6 +191,8 @@ The main failure left for strong workers is undershooting: of several parallel r
 - each sentence of a request with no list;
 - one requirement per parallel branch an item names: every HTTP endpoint (`GET /v1/items/<id>`), sync and async variants, and "both X and Y".
 
+What a request carries besides requirements is left out, so it does not fill the listing or move the feature to the full profile (more than 20 listed): sentences that tell the agent how to work or describe its host ("Run every shell command from that directory", "Do not ask questions", "Hidden tests will check the fix"), and, outside lists, pasted material: indented code, tracebacks and stack frames, log and prompt lines, test output, tables, separators, headings and form markup, a line wholly in a code span, and four or more `Label: value` lines in a row. Bullets are the user's own and are filtered only for the host phrases. On 214 ChainSWE issues in the benchmark wrapper the median listing fell from 18 to 6, and from 58 listings over 20 to 2.
+
 When there are two or more, the `feature` reply lists them as `R001`, `R002`, and so on, and the slice that completes the feature closes only once each is accounted for. `visp done` (and `visp accept`) takes the accounts:
 
 ```sh
@@ -199,7 +202,9 @@ visp done --account "R001=C001 test_bundle_conflict" "R002=not done: the request
 - `R001=<check id> [test name]`: done, shown by that check. The account holds only while the check's latest run passed.
 - `"R001=not done: <reason>"`: not done, and why.
 
-An unaccounted requirement, or one citing a check that has not passed, is an evidence gap that `done`, `next` and `accept` name. Accounts are kept in `.visp/features/<id>/requirements.json`; a later account of the same requirement replaces the earlier one. The `done` reply lists where each requirement stands. MCP `visp_done` and `visp_accept` take the same entries as `account`.
+An unaccounted requirement, or one citing a check that has not passed, is an evidence gap that `done`, `next` and `accept` name; the gap prints the whole `visp done --account …` command, so no `--help` is needed. Accounts are kept in `.visp/features/<id>/requirements.json`; a later account of the same requirement replaces the earlier one. The `done` reply lists where each requirement stands. MCP `visp_done` and `visp_accept` take the same entries as `account`.
+
+**The tests an account names are looked up.** The note after the check id is the worker's claim, and VISP used to take it on trust. It now reads the identifier-shaped names in it (`test_bundle_conflict`, `FormulaTest`, `testBundleHold`), and, for runners that name a test by its title (node:test, jest), a title the note quotes whole. Only the cited check's latest run on the current version counts: after an edit, an earlier pass does not. A name is *verified* when every line of that run's output that names it reports a pass (`... ok`, `PASSED`, `✔`, `ok 3 - name`, `--- PASS:`), none of them skipped, todo or expected to fail (`... skipped`, `SKIPPED`, `XFAIL`, `# SKIP`, `# TODO`, `--- SKIP`, `○`), and, where the old-code run lists it too, when it failed there. A qualified name (`test_api.ApiTest.test_x`) must match the module and class a unittest or pytest line gives, so another class's test of the same name does not count. A runner that prints only dots and a summary (`python -m unittest` without `-v`, `pytest -q`) lists no names. Then a name is *verified at suite level* when the summary is a clean pass with a count (`Ran N tests ... OK`, `N passed`, `Tests: N passed, N total`, `N passing`, `# pass N` with `# fail 0`, `N/N passed`), nothing was skipped, the test files the run covered define the name as a test, and the count equals the tests those files define. A text scan reads the tests as each runner collects them: `def test_x` at module level (pytest) or in a test class, a test class (a `TestCase` subclass, or for pytest a `Test…` class, with test methods; inherited methods count), `it("x")`, `test("x")`, `func TestX`. Helpers, fixtures and plain classes are not tests. The files a run covered are those pytest's progress lines list, those `python -m unittest discover` finds from its start directory and pattern, or the modules and paths the command names; when the command does not say (a script, `npm test`), every test file counts. The reply says which file defines the name. A summary with failures never verifies a name, nor does go's `ok pkg`, which gives no count, nor a run of parametrized or generated tests, which a scan cannot count. Anything else reads `not confirmed from the check output` in the `done` reply and in `visp pr`, with the reason: the output lists no test names and no passing summary, the name is not defined in the test files or only in files the run did not cover, the files define tests VISP cannot count, the run's count differs from the test files', the name is not in the output, it was skipped, todo or expected to fail, it failed, it says no outcome, or it also passes on the old code. The wording states what the output shows; it is not a finding against the worker. `ok <title>` lines of custom runners count as passed tests. An account that names no test reads `no test named; only that C001 passed`. Nothing blocks on this: `visp pr` lists one attention item for the claimed accounts and a table of each account beside what VISP checked. Name tests as the check prints them, or declare the check so it prints them (`-v`).
 
 ## Regression gate
 
@@ -247,11 +252,12 @@ An unaccounted requirement, or one citing a check that has not passed, is an evi
 1. **Not verified.** Everything a reviewer must not assume is proven, blocking items first: requirements without current executed evidence, failing, stale or unrun checks, regressions and unchecked (flaky) failures, open reviewer findings, open and upheld test disputes, tests the independent tester never observed (`NOT OBSERVED`), an unpinned independent suite, requirements that rest on a reviewer's judgment alone, checks that also pass with the change reverted, and files changed outside every slice's scope.
 2. **Asked.** The verbatim request (recognized credentials and local paths masked), the requirements (the brief's outcomes) and any later change to the protected intent.
 3. **Done.** Per requirement, each check with who wrote it (the worker or VISP's independent tester), its latest result and the command to rerun it. The independent tests cover the whole request and get a row of their own.
-4. **Changed.** The feature's diff, the same one the dashboard's Map tab draws: files with added and removed lines, the scope each slice declared and the files touched outside it. Edits the hooks refused are not recorded yet.
-5. **Regressions.** The regression gate's result on this version, when it ran.
-6. **Cost.** Time from `visp feature` to the last record, time spent running checks, and model calls VISP recorded: independent reviews, reviewer calls it launched, tester sessions. The worker's own calls are not measured.
-7. **Outside access**, when there was any: every reviewer web search, and how many commands the tester ran with network access.
-8. **Next.** The next step.
+4. **Worker's account of the listed requirements**, when the request listed two or more: each `R001…`, the account the worker gave at `visp done` and what VISP could check of it (see [requirement listing](#requirement-listing)). The account is the worker's claim; only the last column is VISP's.
+5. **Changed.** The feature's diff, the same one the dashboard's Map tab draws: files with added and removed lines, the scope each slice declared and the files touched outside it. Edits the hooks refused are not recorded yet.
+6. **Regressions.** The regression gate's result on this version, when it ran.
+7. **Cost.** Time from `visp feature` to the last record, time spent running checks, and model calls VISP recorded: independent reviews, reviewer calls it launched, tester sessions. The worker's own calls are not measured.
+8. **Outside access**, when there was any: every reviewer web search, and how many commands the tester ran with network access.
+9. **Next.** The next step.
 
 The record is honest by construction. A result reads `passed` only for a run VISP executed on the current version of the product; a run on an earlier version reads `stale`, and a check with no run reads `not run`. A reviewer's verdict is always shown as a model's judgment, never as a result.
 

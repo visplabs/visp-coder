@@ -255,7 +255,7 @@ describe("generated hooks", () => {
       return output ? JSON.parse(output) : {};
     };
     const refusal = (verb: string) =>
-      `Run \`visp ${verb}\` by itself in the foreground, not in a loop: repeat it without run_in_background and with timeout 600000. It prints its result and the next step; while a review runs, \`visp next\` waits for it. If the host moves the command to the background, wait for its completion notice, then run \`visp next\`; do not poll with pgrep, tail -f or sleep loops.`;
+      `Run \`visp ${verb}\` again with the same arguments, by itself in the foreground: no run_in_background, no loop, no redirect to a file, timeout 600000. It waits for VISP's reviewer (1-2 min) and prints its result and the next step; while a review runs, \`visp next\` waits for it. If the host moves the command to the background anyway, wait for its completion notice, then run \`visp next\`; do not poll with pgrep, tail -f or sleep loops.`;
     const loopRefusal = (verb: string) =>
       `Run \`visp ${verb}\` by itself, not in a loop, with the host's maximum shell timeout. It prints its result and the next step; while a review runs, \`visp next\` waits for it. Do not poll with pgrep, tail -f or sleep loops.`;
     for (const [command, verb] of <const>[

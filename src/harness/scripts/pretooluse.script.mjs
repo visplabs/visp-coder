@@ -235,9 +235,9 @@ if (input?.tool_name === "Bash") {
       JSON.stringify(
         deny(
           background
-            ? "Run `" + workflow.command + "` by itself in the foreground, not in a loop: repeat it without run_in_background and with timeout 600000. " +
-                "It prints its result and the next step; while a review runs, `__HOOK_PRODUCT_NAME__ next` waits for it. " +
-                "If the host moves the command to the background, wait for its completion notice, then run `__HOOK_PRODUCT_NAME__ next`; do not poll with pgrep, tail -f or sleep loops."
+            ? "Run `" + workflow.command + "` again with the same arguments, by itself in the foreground: no run_in_background, no loop, no redirect to a file, timeout 600000. " +
+                "It waits for VISP's reviewer (1-2 min) and prints its result and the next step; while a review runs, `__HOOK_PRODUCT_NAME__ next` waits for it. " +
+                "If the host moves the command to the background anyway, wait for its completion notice, then run `__HOOK_PRODUCT_NAME__ next`; do not poll with pgrep, tail -f or sleep loops."
             : "Run `" + workflow.command + "` by itself, not in a loop, with the host's maximum shell timeout. " +
                 "It prints its result and the next step; while a review runs, `__HOOK_PRODUCT_NAME__ next` waits for it. " +
                 "Do not poll with pgrep, tail -f or sleep loops.",
