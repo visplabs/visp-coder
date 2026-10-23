@@ -47,7 +47,7 @@ Preview reports invalid artifacts per feature with their paths and recovery hint
 | CLI `observe`, `save`, `checkpoint` | Declared checks and `visp capture` |
 | CLI `probe` | Browser-journey checks |
 | CLI `evidence compact`, `evidence archive`, `evidence restore` | None; existing files are left in place |
-| MCP `visp_pr`, `visp_handoff`, `visp_migrate`, `visp_control` | CLI `visp pr`, `visp handoff`, `visp migrate`, `visp control` |
+| MCP `visp_pr`, `visp_handoff`, `visp_migrate`, `visp_control` | CLI `visp pr`, `visp status`, `visp migrate`, `visp control` |
 | MCP resources for spec, plan, tasks and context | `visp://feature/{id}/brief` |
 | `visp critic --disable` (per task) | `visp critic --off` for the whole feature |
 

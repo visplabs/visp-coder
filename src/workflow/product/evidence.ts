@@ -350,16 +350,10 @@ async function verificationProgress(
   subject: string,
 ) {
   const next = await runProductNext(workspace, { feature: record.brief.feature, task: slice?.id });
-  const feedbackPlan = productFeedbackPlan(
-    record,
-    subject,
-    slice,
-    workspace.config.workflow.reviewMode,
-    {
-      reviewer: await reviewerPointer(workspace, record.brief.feature, subject, slice?.id),
-      requiredOnly: profileSettings(workspace, record).requestGaps === "required",
-    },
-  );
+  const feedbackPlan = productFeedbackPlan(record, subject, slice, {
+    reviewer: await reviewerPointer(workspace, record.brief.feature, subject, slice?.id),
+    requiredOnly: profileSettings(workspace, record).requestGaps === "required",
+  });
   return {
     feedbackPlan,
     ...(next.ok ? { next: next.value, nextCommand: next.value.command } : {}),

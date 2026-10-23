@@ -147,7 +147,8 @@ Measured on VISP's own benchmark (`bench/`) with Claude Haiku 5.5 as the coding 
 - Across sessions, VISP carried 62 of 62 earlier decisions into later work, against 58 of 62 for a bare agent (four tasks, two runs each).
 - The lean default halves the cost of the earlier default: $0.08 against $0.24 per run on one existing-code task and $0.33 against $0.66 on another (a bare agent: $0.02 and $0.15), with equal hidden-check results.
 - On real chains of issues (ChainSWE), bare agents broke no earlier tests; their failures were incomplete fixes. VISP's requirement listing targets that.
-- Outside evidence: stating the allowed scope took a coding agent's out-of-scope actions from 17.1% to 0.0% (OverEager-Bench, arXiv 2605.18583).
+- Outside evidence: in Claude Code, stating the allowed scope in the prompt cut out-of-scope actions from 15.8% to 3.9% with Sonnet 4.6 and from 17.1% to 0.0% with GLM-4.6 (OverEager-Bench, arXiv 2605.18583). That study changed prompt text only; VISP's own effect on scope has not been measured yet.
+- Scope enforcement today: hooks, the Git pre-commit hook and CI refuse edits outside a slice's declared scope, but the lean default's one-slice light path declares every file in scope (`**`), so there it refuses only blocked paths and VISP's own state.
 
 ## Documentation
 

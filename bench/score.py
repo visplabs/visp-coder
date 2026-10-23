@@ -5,12 +5,15 @@ Writes hidden.json (hidden-stage1.json with --stage 1) beside each project and p
 per run. A two-session run's modes are scored as <run>/<mode>; run_carryover.py scores the first
 session itself. A chain run is scored on its final project with every step's checks, grouped by
 step; run_chain.py scores each step itself. Runs marked invalid (invalid.json, a usage limit stopped them) are skipped.
+A run of archive-carryover or archive-carryover-raised (full score, not --stage) also gets carry.json
+beside hidden.json: its carry outcome (carry.py). hidden.json is unchanged.
 """
 import json
 import pathlib
 import subprocess
 import sys
 
+import carry
 from common import RUNS
 
 BENCH = pathlib.Path(__file__).resolve().parent
@@ -39,8 +42,11 @@ for name in names:
             prefix = "base" if r["step"] == 0 else f"s{r['step']}"
         groups.setdefault(prefix, []).append(r)
     failed = [r["name"] for r in result["results"] if not r["passed"]]
+    labelled = None if stage else carry.outcome(task, result["results"])
+    if labelled:
+        (project.parent / "carry.json").write_text(json.dumps(labelled, indent=2))
     score = " ".join(
         f"{'' if name == 'core' else name + ' '}{sum(r['passed'] for r in rows)}/{len(rows)}"
         for name, rows in groups.items()
     )
-    print(f"{name}: {score} failed={failed}")
+    print(f"{name}: {score}{' carry=' + labelled['carry'] if labelled else ''} failed={failed}")

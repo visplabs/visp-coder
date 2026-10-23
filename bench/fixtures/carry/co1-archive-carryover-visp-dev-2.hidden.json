@@ -1,0 +1,379 @@
+{
+  "passed": 34,
+  "total": 39,
+  "results": [
+    {
+      "name": "item create and read",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "duplicate item is 409 conflict",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "invalid item is 422",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "unknown item is 404",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "415 for non-JSON body",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "reserve, confirm and release",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "insufficient stock is 409",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "idempotency key replays without holding again",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "items default to archived false on create and read",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "archive returns the item, persists and is repeatable",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "archive unknown is 404",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "archived single reservation is refused without holding",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "archiving preserves existing holds, confirmation and release",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "create above 10000 is rejected without creating an item",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "create exactly 10000 succeeds",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "new:bundle success preserves request order and holds each line",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "new:unknown bundle line is 404 and holds nothing",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "new:insufficient bundle line is 409 and holds nothing",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "new:bundle both shapes or neither is 422",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "new:bundle empty, oversized or non-list lines is 422",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "new:bundle repeated SKU is 422",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "new:bundle invalid line is 422",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "new:bundle line with a malformed SKU is 422 and holds nothing",
+      "passed": false,
+      "detail": [
+        [
+          [
+            404,
+            {
+              "error": {
+                "code": "not_found",
+                "message": "not found"
+              }
+            }
+          ],
+          [
+            404,
+            {
+              "error": {
+                "code": "not_found",
+                "message": "not found"
+              }
+            }
+          ],
+          [
+            404,
+            {
+              "error": {
+                "code": "not_found",
+                "message": "not found"
+              }
+            }
+          ]
+        ],
+        [
+          200,
+          {
+            "sku": "N-A",
+            "quantity": 9,
+            "available": 6,
+            "archived": false
+          }
+        ],
+        [
+          200,
+          {
+            "sku": "N-A",
+            "quantity": 9,
+            "available": 6,
+            "archived": false
+          }
+        ]
+      ]
+    },
+    {
+      "name": "new:bundle invalid ttl is 422",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "new:20-line bundle succeeds",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "new:concurrent bundles on the same SKUs never hold more than is available",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "new:bundle idempotency replays and rejects changed body or shape",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "new:failed bundle does not consume idempotency key",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "new:restock returns and persists quantity with existing holds",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "new:restock unknown is 404",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "new:restock invalid or missing amount is 422 without changes",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "new:restock wrong method is 405",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "memory:one-line bundle refuses archived item and holds nothing",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "memory:archived first line rejects whole bundle with healthy line",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "memory:archived last line rejects whole bundle; healthy bundles still work",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "memory:restock above cap changes nothing; exactly 10000 succeeds",
+      "passed": false,
+      "detail": [
+        [
+          200,
+          {
+            "sku": "M-4",
+            "quantity": 10001,
+            "available": 10001,
+            "archived": false
+          }
+        ],
+        [
+          200,
+          {
+            "sku": "M-4",
+            "quantity": 9995,
+            "available": 9995,
+            "archived": false
+          }
+        ],
+        [
+          200,
+          {
+            "sku": "M-4",
+            "quantity": 10001,
+            "available": 10001,
+            "archived": false
+          }
+        ],
+        [
+          200,
+          {
+            "sku": "M-4",
+            "quantity": 10006,
+            "available": 10006,
+            "archived": false
+          }
+        ],
+        [
+          200,
+          {
+            "sku": "M-4",
+            "quantity": 10006,
+            "available": 10006,
+            "archived": false
+          }
+        ]
+      ]
+    },
+    {
+      "name": "memory:restock at cap rejects one extra unit without changes",
+      "passed": false,
+      "detail": [
+        [
+          200,
+          {
+            "sku": "M-5",
+            "quantity": 10001,
+            "available": 10001,
+            "archived": false
+          }
+        ],
+        [
+          200,
+          {
+            "sku": "M-5",
+            "quantity": 10000,
+            "available": 10000,
+            "archived": false
+          }
+        ],
+        [
+          200,
+          {
+            "sku": "M-5",
+            "quantity": 10001,
+            "available": 10001,
+            "archived": false
+          }
+        ]
+      ]
+    },
+    {
+      "name": "memory:restock cap uses quantity, not available stock",
+      "passed": false,
+      "detail": [
+        [
+          200,
+          {
+            "sku": "M-6",
+            "quantity": 10001,
+            "available": 9991,
+            "archived": false
+          }
+        ],
+        [
+          200,
+          {
+            "sku": "M-6",
+            "quantity": 9998,
+            "available": 9988,
+            "archived": false
+          }
+        ],
+        [
+          200,
+          {
+            "sku": "M-6",
+            "quantity": 10001,
+            "available": 9991,
+            "archived": false
+          }
+        ]
+      ]
+    },
+    {
+      "name": "memory:concurrent restocks one unit below the cap stop at exactly 10000",
+      "passed": false,
+      "detail": [
+        [
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200
+        ],
+        [
+          200,
+          {
+            "sku": "M-8",
+            "quantity": 10015,
+            "available": 10015,
+            "archived": false
+          }
+        ]
+      ]
+    }
+  ]
+}

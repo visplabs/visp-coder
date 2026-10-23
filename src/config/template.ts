@@ -43,8 +43,6 @@ ${criticHarnessSchema.safeParse(options.harness).success ? `critic:\n  harness: 
 profile: minimal
 
 workflow:
-  # Opt-in observed-state review; current remains default pending model evaluation.
-  # reviewMode: observation-preview
   # Default until a policy is recorded. For an existing policy, use
   # visp policy set-strictness <mode>: relaxed | standard | strict | locked.
   # locked is strict with overrides refused — no recorded exception waives a rule.

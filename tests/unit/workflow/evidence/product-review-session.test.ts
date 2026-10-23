@@ -279,7 +279,7 @@ it.each(["altered", "missing"])(
   },
 );
 
-it("rejects corrupt session metadata, mismatched selection and review-mode changes", async () => {
+it("rejects corrupt session metadata, mismatched selection and a removed review mode", async () => {
   const w = await ready();
   const prepared = await runProductReviewRequest(await w.state(), { prepare: true, task: "T001" });
   if (!prepared.ok) throw new Error(prepared.error.message);

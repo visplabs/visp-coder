@@ -1,6 +1,7 @@
 """Report a batch: facts per run and per task x arm, and the base-versus-candidate quality rule.
 
 Usage: report.py --batch <name> [--score] [--score-jobs 3] [--base LABEL] [--runs] [--md FILE] [--json FILE]
+       report.py --batch <name> --carry [--score]
        report.py --compare BATCH:LABEL BATCH:LABEL ... [--score] [--runs] [--md FILE] [--json FILE]
 
 Reads $VISP_BENCH_RUNS/batches/<name>/manifest.json (batch.py). Refuses a batch whose runs were
@@ -28,6 +29,10 @@ check evaluation, final hidden rate, code score, wall time and cost per chain; -
 row per step. Brownfield tasks with a reference (diffscope.py) get the diff scope: lines changed
 against the reference change, and edits to existing files the reference left unchanged.
 
+Reviewer probes (probe.py, tasks/<task>/probes) are reported as their own column where a run has
+probes.json: the pass rate over all probes, and over the probes written for a reviewer finding.
+They are never pooled into the hidden rate, are not a required score and do not enter the verdict.
+
 Paired comparison: the first arm in the manifest (or --base) against each other arm, per task.
 A task is incomplete (and fails) unless both arms have the same number of valid runs, at least
 one, and every required score for each. The candidate passes a complete task when each mean score
@@ -37,6 +42,12 @@ against none is not a failure). Idle is not compared when neither arm has a Clau
 transcript (Codex workers); when only one has, the task is incomplete. The candidate passes the
 batch only when it passes every task. Prints Markdown and writes JSON (default
 batches/<name>/report.json).
+
+--carry (with --score, hidden checks only: no judge or code judge call) prints only the carry report of a batch with archive-carryover or archive-carryover-raised runs
+(carry.py): per task and arm the share of runs that kept the restock cap at its current value, the
+labels (carried, lost; current, stale, forgot, partial), the intermediate reruns, and VISP against each
+bare arm with a one-sided Fisher exact p on the counts pooled over the tasks both ran. The labels come
+from hidden.json, so runs scored before carry.py have them too. Hidden scores are not touched.
 
 --compare is the one mode that crosses presets: it sets arms of different batches side by side
 (say bare Sonnet against VISP with a Haiku worker), each batch under its own preset guard, with
@@ -51,10 +62,13 @@ import statistics
 import subprocess
 import sys
 
+import carry
 from chains import is_chain, run_summary
 from common import RUNS
 from diffscope import run_scope
 from judge import CHECKLISTS, GAMES
+from presets import arm_title, mode_config, mode_difference, scalar, visp_build
+from probe import has_probes, summarize as probe_summary
 from runfacts import final_project, invalid, is_finished, mark_if_invalid, sessions, timing, transcripts
 
 BENCH = pathlib.Path(__file__).resolve().parent
@@ -100,6 +114,21 @@ def hidden_score(project):
         return 0.0, "no result", None
     passed = sum(bool(r["passed"]) for r in result["results"])
     return passed / len(result["results"]), f"{passed}/{len(result['results'])}", None
+
+
+def probe_score(task, project):
+    """(rate, text, findings rate, findings text) from probes.json, or Nones.
+
+    Reviewer probes (probe.py) are their own metric: they are not hidden checks, are never pooled
+    into the hidden rate, and are not part of the quality rule. A run whose probes are not scored
+    is not incomplete.
+    """
+    result = load(project.parent / "probes.json") if has_probes(task) else None
+    if not result or "error" in result:
+        return None, None, None, None
+    found = probe_summary(result)
+    share = found["findingsPassed"] / found["findingsTotal"] if found["findingsTotal"] else None
+    return found["rate"], found["text"], share, f"{found['findingsPassed']}/{found['findingsTotal']}"
 
 
 def judge_score(run):
@@ -155,17 +184,24 @@ def facts(entry):
     project = final_project(run)
     needed = required(entry["task"])
     row = {"run": entry["name"], "task": entry["task"], "arm": entry["label"], "rep": entry["rep"],
-           "hidden": None, "hiddenText": None, "kept": None, "judge": None, "checklist": None, "checklistText": None,
+           "hidden": None, "hiddenText": None, "probes": None, "probesText": None, "probeFindings": None,
+           "probeFindingsText": None, "kept": None, "judge": None, "checklist": None, "checklistText": None,
            "code": None, "codeCriteria": None, "problems": []}
     if "hidden" in needed:
         row["hidden"], row["hiddenText"], problem = hidden_score(project)
         row["problems"] += [problem] if problem else []
+    row["probes"], row["probesText"], row["probeFindings"], row["probeFindingsText"] = \
+        probe_score(entry["task"], project)
     if "judge" in needed:
         row["judge"], row["checklist"], row["checklistText"], problem = judge_score(run)
         row["problems"] += [problem] if problem else []
     if "code" in needed:
         row["code"], row["codeCriteria"], problem = code_score(project)
         row["problems"] += [problem] if problem else []
+    labelled = carry.for_hidden(entry["task"], project.parent / "hidden.json")
+    row["carry"] = labelled["carry"] if labelled else None
+    row["carryReruns"] = (load(project.parent / "intermediate.json") or {}).get("reruns") \
+        if entry["task"] in carry.CARRY_TASKS else None
     chain = run_summary(run) if is_chain(entry["task"]) else None
     if "kept" in needed:
         row["kept"] = chain["kept"] if chain else None
@@ -188,6 +224,23 @@ def facts(entry):
     }
 
 
+def arm_config_problems(entry, arm):
+    """Where a VISP run's recorded config disagrees with its arm's modes (runs set up before the
+    record existed have none and are not checked)."""
+    if "modeConfig" not in arm or not entry["arm"].startswith(("visp:", "visp-codex:")):
+        return []
+    wanted = mode_config(visp_build(entry["arm"])[1])
+    problems = []
+    if arm["modeConfig"] != wanted:
+        problems.append(f"{entry['name']}: arm.json modes set {arm['modeConfig']}, arm {entry['arm']} sets {wanted}")
+    effective = arm.get("effectiveSettings")
+    for key, value in wanted.items():
+        if effective is not None and scalar(effective.get(key)) != scalar(value):
+            problems.append(f"{entry['name']}: VISP reports {key} = {effective.get(key)!r}, arm {entry['arm']} "
+                            f"sets {value!r}")
+    return problems
+
+
 def check_presets(manifest, entries):
     """Refuse runs made with another preset, worker or judge than the batch's."""
     wrong = []
@@ -199,6 +252,7 @@ def check_presets(manifest, entries):
         arm = load(run / "arm.json") or {}
         if arm.get("preset") != manifest["preset"]:
             wrong.append(f"{entry['name']}: arm.json preset {arm.get('preset')!r}")
+        wrong += arm_config_problems(entry, arm)
         for label, path in sessions(run):
             result = load(path) or {}
             if result.get("preset") != manifest["preset"]:
@@ -212,11 +266,11 @@ def check_presets(manifest, entries):
                 wrong.append(f"{entry['name']}: {name} judge {judged.get('judge')!r}, preset {want!r}")
     if wrong:
         raise SystemExit(f"refusing to report batch {manifest['batch']}: runs are not all preset "
-                         f"{manifest['preset']}:\n" + "\n".join(wrong))
+                         f"{manifest['preset']}, or a VISP arm's config differs from its name:\n" + "\n".join(wrong))
 
 
-def score_missing(entries, jobs):
-    """Score what is missing, and judge again where a judge call failed."""
+def score_missing(entries, jobs, hidden_only=False):
+    """Score what is missing, and judge again where a judge call failed; hidden_only runs score.py alone."""
     def needs(path):
         data = load(path)
         return data is None or judge_failed(data)
@@ -229,9 +283,11 @@ def score_missing(entries, jobs):
         steps = []
         if "hidden" in needed and not (project.parent / "hidden.json").exists():
             steps.append(["score.py", entry["task"], name])
-        if "judge" in needed and needs(run / "judge.json"):
+        if not hidden_only and has_probes(entry["task"]) and not (project.parent / "probes.json").exists():
+            steps.append(["probe.py", entry["task"], name])
+        if not hidden_only and "judge" in needed and needs(run / "judge.json"):
             steps.append(["judge.py", entry["name"]])
-        if "code" in needed and needs(project.parent / "code_judge.json"):
+        if not hidden_only and "code" in needed and needs(project.parent / "code_judge.json"):
             steps.append(["code_judge.py", entry["name"]])
         for step in steps:
             done = subprocess.run([sys.executable, str(BENCH / step[0]), *step[1:]], capture_output=True, text=True)
@@ -283,6 +339,7 @@ def summarize(rows, needed):
         "n": len(rows), "required": needed,
         "missing": [f"{r['run']}: {problem}" for r in rows for problem in r["problems"]],
         "hidden": mean(r["hidden"] for r in rows), "judge": mean(r["judge"] for r in rows),
+        "probes": mean(r["probes"] for r in rows), "probeFindings": mean(r["probeFindings"] for r in rows),
         "checklist": mean(r["checklist"] for r in rows), "code": mean(r["code"] for r in rows),
         "wall": median(r["wall"] for r in rows),
         "idle": median(r["idle"] for r in rows) if all(r["idle"] is not None for r in rows) else None,
@@ -324,10 +381,31 @@ def compare(base, cand, base_label, cand_label):
     return {"status": "pass" if all(check[-1] for check in checks) else "fail", "reasons": [], "checks": checks}
 
 
+def arm_specs(manifest):
+    """{label: arm} of a batch, as batch.py wrote it."""
+    return {entry["label"]: entry["arm"] for entry in manifest["arms"]}
+
+
+def is_visp(spec):
+    return spec.startswith(("visp:", "visp-codex:"))
+
+
+def pair_note(base, cand):
+    """What sets two arms apart, for the heading of their comparison."""
+    if is_visp(base) and is_visp(cand) and visp_build(base)[0] == visp_build(cand)[0]:
+        diff = mode_difference(visp_build(base)[1], visp_build(cand)[1])
+        if not diff:
+            return "same build and same config keys"
+        keys = ", ".join(f"{key} {'unset' if before is None else before} -> {'unset' if after is None else after}"
+                         for key, (before, after) in diff.items())
+        return f"same build, config differs only in: {keys}"
+    return "different builds or workflows"
+
+
 def fmt(value, metric=None):
     if value is None:
         return "–"
-    if metric in SHARES:
+    if metric in SHARES or metric in ("probes", "probeFindings"):
         return f"{value * 100:.1f}%"
     return f"{value:g}" if isinstance(value, (int, float)) else str(value)
 
@@ -337,22 +415,40 @@ def markdown(manifest, rows, groups, comparisons, excluded, unfinished, show_run
     worker = manifest["settings"]["worker"]
     out.append(f"Worker {worker['model']} ({worker['effort'] or 'default effort'}); "
                f"{len(rows)} valid runs; {len(excluded)} invalid runs excluded; {len(unfinished)} unfinished.")
-    out += ["", "| Task | Arm | n | Hidden | Judge | Checklist | Code | Wall s | Idle s | Model s | VISP s | Own s "
+    probed = any(g["probes"] is not None for g in groups.values())
+    out += ["", "| Task | Arm | n | Hidden |" + (" Probes | Probes from findings |" if probed else "") +
+            " Judge | Checklist | Code | Wall s | Idle s | Model s | VISP s | Own s "
             "| Legacy idle s | Reviews run/unavailable | Pictures | Refusals | Timeouts | Cost $ (VISP's) |",
-            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+            "| --- | --- | --- | --- |" + " --- |" * (14 + (2 if probed else 0))]
     for (task, arm), s in groups.items():
-        out.append(f"| {task} | {arm} | {s['n']} | {fmt(s['hidden'], 'hidden')} | {fmt(s['judge'])} | "
+        extra = f" {fmt(s['probes'], 'probes')} | {fmt(s['probeFindings'], 'probes')} |" if probed else ""
+        out.append(f"| {task} | {arm} | {s['n']} | {fmt(s['hidden'], 'hidden')} |{extra} {fmt(s['judge'])} | "
                    f"{fmt(s['checklist'])} | {fmt(s['code'])} | {fmt(s['wall'])} | {fmt(s['idle'])} | "
                    f"{fmt(s['model'])} | {fmt(s['visp'])} | {fmt(s['own'])} | {fmt(s['legacyIdle'])} | "
                    f"{s['reviewed']}/{s['unavailable']} | {s['pictures']} | {s['refusals']} | {s['timeouts']} | "
                    f"{fmt(s['cost'])} ({fmt(s['criticCost'])}) |")
+    out.append("")
+    if probed:
+        out.append("Probes (probe.py) are checks of contract rules a reviewer's findings cover and the hidden checks "
+                   "leave out. They are a separate metric, never pooled into Hidden and not part of the quality rule; "
+                   "\"from findings\" counts only the probes written for a reviewer finding; – where not scored.")
+        out.append("")
+    specs = arm_specs(manifest)
+    out += ["| Label | Arm | Config keys its modes set |", "| --- | --- | --- |"]
+    for label, spec in specs.items():
+        keys = ", ".join(f"{key}: {value}" for key, value in mode_config(visp_build(spec)[1]).items()) \
+            if is_visp(spec) else ""
+        out.append(f"| {label} | {arm_title(spec)} | {keys or '–'} |")
     out.append("")
     out.append("Scores are means over valid runs (– where a run has no score yet); times are medians (wall: all "
                "sessions; idle, model, VISP and own from the worker transcript; legacy idle: gaps over 240 s). Cost is "
                "the mean list-price cost the claude CLI reported for every call the run made (claude_shim), with "
                "VISP's reviewer and tester calls in brackets; – where the run predates the shim.")
     for cand, result in comparisons.items():
-        out += ["", f"### {cand} against {result['base']}: {'PASS' if result['passed'] else 'FAIL'}", "",
+        base_spec, cand_spec = specs[result["base"]], specs[cand]
+        out += ["", f"### {arm_title(cand_spec)} against {arm_title(base_spec)}: "
+                    f"{'PASS' if result['passed'] else 'FAIL'}", "",
+                f"Arms {cand} and {result['base']}; {pair_note(base_spec, cand_spec)}.", "",
                 "| Task | Metric | Base | Candidate | Delta | Rule | Result |", "| --- | --- | --- | --- | --- | --- | --- |"]
         for task, verdict in result["tasks"].items():
             for reason in verdict["reasons"]:
@@ -370,11 +466,11 @@ def markdown(manifest, rows, groups, comparisons, excluded, unfinished, show_run
         out += ["", "Unfinished runs (no result), excluded:", ""]
         out += [f"- {name}" for name in unfinished]
     if show_runs:
-        out += ["", "| Run | Hidden | Stage 1 | Judge | Checklist | Code | Wall s | Idle s | Model s | VISP s | Own s "
+        out += ["", "| Run | Hidden | Probes | Stage 1 | Judge | Checklist | Code | Wall s | Idle s | Model s | VISP s | Own s "
                 "| Legacy idle s | Reviews | Pictures | Refusals | Timed out | Cost $ | Missing |",
-                "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+                "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
         for r in rows:
-            out.append(f"| {r['run']} | {r['hiddenText'] or '–'} | {r['stage1'] or '–'} | {fmt(r['judge'])} | "
+            out.append(f"| {r['run']} | {r['hiddenText'] or '–'} | {r['probesText'] or '–'} | {r['stage1'] or '–'} | {fmt(r['judge'])} | "
                        f"{r['checklistText'] or '–'} | {fmt(r['code'])} | {r['wall']} | {fmt(r['idle'])} | "
                        f"{fmt(r['model'])} | {fmt(r['visp'])} | {fmt(r['own'])} | {fmt(r['legacyIdle'])} | "
                        f"{r['reviewed']}/{r['unavailable']} | {r['pictures']} | {fmt(r['refusals'])} | "
@@ -439,7 +535,7 @@ def scope_markdown(rows, groups, show_runs):
     return out
 
 
-def load_batch(name, score=False, score_jobs=3):
+def load_batch(name, score=False, score_jobs=3, hidden_only=False):
     """A batch's manifest, valid rows, invalid and unfinished runs, under the preset guard."""
     directory = RUNS / "batches" / name
     manifest = load(directory / "manifest.json")
@@ -466,7 +562,7 @@ def load_batch(name, score=False, score_jobs=3):
             excluded.append((moved.name, f"moved to discarded/ by --rerun-invalid: {reason.get('reason')}, "
                                          f"{reason.get('source')}"))
     if score:
-        score_missing(valid, score_jobs)
+        score_missing(valid, score_jobs, hidden_only)
     check_presets(manifest, valid)
     return manifest, [facts(entry) for entry in valid], excluded, unfinished
 
@@ -592,6 +688,8 @@ def main():
     parser.add_argument("--score-jobs", type=int, default=3)
     parser.add_argument("--base", help="the base arm label (default: the first arm in the manifest)")
     parser.add_argument("--runs", action="store_true", help="also print one row per run")
+    parser.add_argument("--carry", action="store_true",
+                        help="print only the carry rate per arm and task and VISP against each bare arm (carry.py)")
     parser.add_argument("--pairwise", action="store_true",
                         help="also judge each picture task's base and candidate images side by side (pairwise.py)")
     parser.add_argument("--md", type=pathlib.Path)
@@ -617,7 +715,10 @@ def main():
     if not args.batch:
         raise SystemExit("give --batch, or --compare BATCH:LABEL ...")
     directory = RUNS / "batches" / args.batch
-    manifest, rows, excluded, unfinished = load_batch(args.batch, args.score, args.score_jobs)
+    manifest, rows, excluded, unfinished = load_batch(args.batch, args.score, args.score_jobs, args.carry)
+    if args.carry:
+        print(carry.markdown(manifest, rows))
+        return
     labels = [arm["label"] for arm in manifest["arms"]]
     groups = {}
     for task in manifest["tasks"]:
@@ -641,7 +742,11 @@ def main():
     if args.md:
         args.md.write_text(text)
     fields = ("metric", "base", "candidate", "delta", "rule", "passed")
-    report = {"batch": args.batch, "preset": manifest["preset"], "settings": manifest["settings"], "runs": rows,
+    report = {"batch": args.batch, "preset": manifest["preset"], "settings": manifest["settings"],
+              "arms": [{"label": label, "arm": spec, "title": arm_title(spec),
+                        "modeConfig": mode_config(visp_build(spec)[1]) if is_visp(spec) else {}}
+                       for label, spec in arm_specs(manifest).items()],
+              "runs": rows,
               "groups": [{"task": task, "arm": arm, **summary} for (task, arm), summary in groups.items()],
               "comparisons": {cand: {**result, "tasks": {
                   task: {**verdict, "checks": [dict(zip(fields, check)) for check in verdict["checks"]]}
