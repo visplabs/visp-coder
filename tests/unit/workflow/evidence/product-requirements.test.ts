@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { productEvidenceGaps } from "../../../../src/workflow/product/assessment.js";
 import { runProductDone } from "../../../../src/workflow/product/evidence.js";
 import { createProductFeature } from "../../../../src/workflow/product/index.js";
 import {
@@ -8,6 +9,7 @@ import {
   requestRequirements,
 } from "../../../../src/workflow/product/requirements.js";
 import { readProductRecord } from "../../../../src/workflow/product/store.js";
+import { productSourceDigest } from "../../../../src/workflow/product/subject.js";
 import { runProductWork } from "../../../../src/workflow/product/work.js";
 import { TestWorkspace } from "../../support/workspace.js";
 
@@ -327,6 +329,33 @@ describe("at visp done", () => {
         "R002: not done, the label stays as the request leaves it",
       ],
     });
+  });
+
+  it("raises the gap again when the cited check passed on a version an edit has since replaced", async () => {
+    await started("- Export value two.\n- Export label two.");
+    const closed = await runProductDone(await state(), {
+      account: ["R001=C001 two", "R002=C001 two"],
+    });
+    expect(closed.ok && closed.value.closed).toBe(true);
+    const gapsNow = async () => {
+      const workspace = await state();
+      const record = await readProductRecord(workspace);
+      if (!record.ok) throw new Error(record.error.message);
+      const subject = await productSourceDigest(workspace);
+      if (!subject.ok) throw new Error(subject.error.message);
+      return productEvidenceGaps(workspace, record.value, subject.value);
+    };
+    const gap = (id: string) =>
+      `${id} cites C001, which has not passed on the current version; name a passing check or rerun it`;
+    expect(await gapsNow()).not.toContain(gap("R001"));
+
+    await project?.write(
+      "src/value.mjs",
+      "export const value = 2;\nexport const label = 'two!';\n",
+    );
+    const gaps = await gapsNow();
+    expect(gaps).toContain(gap("R001"));
+    expect(gaps).toContain(gap("R002"));
   });
 
   it("marks a test the worker names but the check's output does not show as not confirmed from the check output", async () => {
