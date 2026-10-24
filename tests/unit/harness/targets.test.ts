@@ -30,7 +30,7 @@ describe("planFor", () => {
       (asset) => asset.path === "AGENTS.visp.md",
     )?.content;
     expect(guide).toContain("MCP tools when connected");
-    expect(guide).toContain("otherwise use CLI `visp next`");
+    expect(guide).toContain("otherwise the CLI");
   });
 
   it("uses each harness's own convention", () => {
@@ -121,21 +121,23 @@ describe("the minimal profile", () => {
   it("omits the critic agent and reviewer prose when the critic is disabled", () => {
     const plan = planFor("codex", "minimal", null);
     expect(plan.assets.map((asset) => asset.path)).not.toContain(".codex/agents/visp-critic.toml");
-    const guide = plan.assets.find((asset) => asset.path === "VISP.commands.md")?.content ?? "";
+    const guide =
+      plan.assets.find((asset) => asset.path === ".visp/VISP.commands.md")?.content ?? "";
     expect(guide).not.toContain("## Reviewer execution");
   });
 
   it("installs the same command guide whatever the critic setting", () => {
     const guide = (critic: Parameters<typeof planFor>[2]) =>
-      planFor("codex", "minimal", critic).assets.find((asset) => asset.path === "VISP.commands.md")
-        ?.content;
+      planFor("codex", "minimal", critic).assets.find(
+        (asset) => asset.path === ".visp/VISP.commands.md",
+      )?.content;
     expect(guide(null)).toBe(guide(undefined));
     expect(guide(null)).toContain("| `visp critic feedback");
   });
   it("installs only one short guide for a generic harness", () => {
     for (const harness of HARNESSES.filter((name) => name === "generic")) {
       const paths = planFor(harness, "minimal").assets.map((asset) => asset.path);
-      expect(paths, harness).toEqual(["AGENTS.visp.md", "VISP.commands.md"]);
+      expect(paths, harness).toEqual(["AGENTS.visp.md", ".visp/VISP.commands.md"]);
     }
   });
 
@@ -145,7 +147,7 @@ describe("the minimal profile", () => {
       expect(plan.assets.map((asset) => asset.path)).toEqual([
         "AGENTS.visp.md",
         ".agents/skills/visp/SKILL.md",
-        "VISP.commands.md",
+        ".visp/VISP.commands.md",
         ...(harness === "codex"
           ? [".codex/agents/visp-critic.toml", ".visp/hooks/codex-hooks.mjs", ".codex/hooks.json"]
           : []),
@@ -161,13 +163,13 @@ describe("the minimal profile", () => {
     expect(planFor("copilot", "minimal").assets.map((asset) => asset.path)).toEqual([
       "AGENTS.visp.md",
       ".github/instructions/visp.instructions.md",
-      "VISP.commands.md",
+      ".visp/VISP.commands.md",
       ".github/agents/visp-critic.agent.md",
     ]);
     expect(planFor("cursor", "minimal").assets.map((asset) => asset.path)).toEqual([
       "AGENTS.visp.md",
       ".cursor/rules/visp.mdc",
-      "VISP.commands.md",
+      ".visp/VISP.commands.md",
       ".cursor/agents/visp-critic.md",
     ]);
   });
@@ -177,7 +179,7 @@ describe("the minimal profile", () => {
     expect(paths).toEqual([
       "AGENTS.visp.md",
       ".claude/commands/visp-next.md",
-      "VISP.commands.md",
+      ".visp/VISP.commands.md",
       ".claude/agents/visp-critic.md",
     ]);
   });
@@ -203,14 +205,19 @@ describe("the minimal profile", () => {
     // 475 -> 525: done, verify, accept, next and pr run in the foreground, alone (16 of 18 lean
     // runs in batches leandef1 and leandef2 backgrounded done and were refused by the hook), and
     // the first command is `feature --check`.
-    expect(guide.length / 4).toBeLessThanOrEqual(525);
+    // 525 -> 545: the loop ends at a complete or handoff step in the done/accept reply the
+    // worker already has, not at one more `visp next` and `visp pr` (2–5 tail turns per lean
+    // run in batch leandef2).
+    // 545 -> 552: feature runs in the foreground unless visp.yml forces the full profile (a lean
+    // feature ended in 4–9 s; the background advice cost a `sleep 20` in 4 of 6 leandef2 runs).
+    // 552 -> 560: the command guide's new path, named for recovery only (6 of 6 leandef2 lean
+    // workers read its 3.2k tokens before starting when the guide said "see VISP.commands.md").
+    expect(guide.length / 4).toBeLessThanOrEqual(560);
     expect(guide).toContain("Edit only what the request needs");
     expect(guide).toContain("run visp work unless --check did");
+    expect(guide).toContain("If visp.yml sets profile full or worker weak, background feature");
     expect(guide).toContain(
-      "Only feature may be backgrounded (leave it running on blocking hosts)",
-    );
-    expect(guide).toContain(
-      "done/verify/accept/next/pr in the foreground, alone, with the host's maximum shell timeout",
+      "feature/done/verify/accept/next/pr in the foreground, alone, with the host's maximum shell timeout",
     );
     expect(guide).toContain("scope.allowed");
     expect(guide).toContain("runnable");
@@ -278,6 +285,7 @@ describe("generated workflow routing", () => {
     expect(guide).toContain("Only when `visp next` prints a review command");
     expect(guide).toContain("Only when `visp next` prints a critic command");
     expect(guide).not.toContain("--source-only");
+    expect(guide).toContain("On the lean profile (the default) it returns in seconds");
     expect(guide).toContain(
       "on a blocking shell (Claude Code Bash) start it with run_in_background:true and read its output for the result",
     );
@@ -291,7 +299,7 @@ describe("generated workflow routing", () => {
 
   it("keeps dispatch details on demand rather than repeating them in the resident guide", () => {
     const guide = planFor("generic", "standard").assets[0]?.content ?? "";
-    expect(guide).toContain("VISP.commands.md");
+    expect(guide).toContain(".visp/VISP.commands.md");
     expect(guide).not.toContain("An attached adapter");
     expect(commandGuide()).toContain("model/effort");
     expect(commandGuide()).toContain("attached adapter");
@@ -320,7 +328,7 @@ describe("generated workflow routing", () => {
       expect(guide).toContain("visp done");
       expect(guide).toContain("visp next");
       expect(guide).toContain("visp accept");
-      expect(guide).toContain("Run `visp accept` only when `visp next` directs it");
+      expect(guide).toContain("Run `visp accept` only when a next step directs it");
       expect(guide).toContain("Missing product evidence stays unresolved");
     },
   );

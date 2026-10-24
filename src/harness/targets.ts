@@ -1,7 +1,7 @@
 import { balancedCritic, type CriticConfig } from "../config/critic.js";
 import type { Harness, Profile } from "../core/constants.js";
 import { DEFAULT_PROFILE } from "../core/constants.js";
-import { commandGuide } from "./command-guide.js";
+import { COMMAND_GUIDE_PATH, commandGuide } from "./command-guide.js";
 import { criticAgentAssets } from "./critic-agent.js";
 import { CODEX_HOOK_SCRIPT, renderCodexHooks, renderPreToolUseHook } from "./hooks.js";
 import {
@@ -46,7 +46,7 @@ export function planFor(
     ...plan,
     assets: [
       ...plan.assets,
-      { path: "VISP.commands.md", content: commandGuide(false, true) },
+      { path: COMMAND_GUIDE_PATH, content: commandGuide(false, true) },
       ...criticAgentAssets(harness, critic),
       ...codexHookAssets(harness),
     ],
@@ -154,7 +154,9 @@ function claudeCode(): HarnessPlan {
       // Compatibility pointer only; core operation uses CLAUDE.md and the regular guides.
       {
         path: ".claude/skills/visp/SKILL.md",
-        content: skillFile("Follow AGENTS.visp.md and VISP.commands.md. Run visp next."),
+        content: skillFile(
+          `Follow AGENTS.visp.md; ${COMMAND_GUIDE_PATH} has command examples and recovery.`,
+        ),
       },
       ...SUBAGENTS.map((agent) => ({
         path: `.claude/agents/${agent.name}.md`,

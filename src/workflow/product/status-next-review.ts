@@ -27,11 +27,7 @@ export function repairRoute(
 ) {
   if (reviewer.runs && !reviewer.capacity.available) {
     const handoff = reviewerHandoff(record.brief.feature, reviewer.capacity, "findings");
-    return {
-      objective: handoff.objective,
-      command: handoff.command,
-      completion: handoff.completion,
-    };
+    return { objective: handoff.objective, completion: handoff.completion };
   }
   return {
     objective: repairObjective(record, slice, missingReproduction, reviewer.runs),

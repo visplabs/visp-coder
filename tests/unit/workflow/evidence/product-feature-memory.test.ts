@@ -29,11 +29,16 @@ afterEach(() => {
   workspace = undefined;
 });
 
-async function project(memory: Record<string, unknown>, critic?: Record<string, unknown>) {
+async function project(
+  memory: Record<string, unknown>,
+  critic?: Record<string, unknown>,
+  profile?: "lean" | "full",
+) {
   workspace = await TestWorkspace.create(
     { "src/items.ts": "export const items = 1;\n" },
     {
       critic: Boolean(critic),
+      ...(profile ? { profile } : {}),
     },
   );
   await workspace.installFoundation();
@@ -111,6 +116,49 @@ describe("recall of earlier requests", () => {
     await expect(
       readFile(join(workspace?.root ?? "", ".visp/state/request-history.json"), "utf8"),
     ).resolves.toContain("001-");
+  });
+
+  // D13 turns a lean feature's reviewer off by default; recall shares the reviewer's launch and
+  // model, and must keep carrying earlier decisions.
+  it("recalls on a lean feature whose reviewer is off by default", async () => {
+    await project(
+      {},
+      { harness: "claude-code", launch: "claude-exec", model: "claude-sonnet-5-5" },
+      "lean",
+    );
+    gate.mockResolvedValue(["1. An archived item cannot be reserved: 409 item_archived."]);
+    await feature("Archive items", ARCHIVING);
+    const second = await feature("Restock", "Add restocking.");
+    expect(gateModel).toHaveBeenLastCalledWith({
+      launch: "claude-exec",
+      model: "claude-sonnet-5-5",
+    });
+    expect(second.projectMemory).toEqual([
+      "1. An archived item cannot be reserved: 409 item_archived.",
+    ]);
+    const state = JSON.parse(
+      await readFile(
+        join(workspace?.root ?? "", ".visp/features", second.brief.feature, "product-state.json"),
+        "utf8",
+      ),
+    );
+    expect(state).toMatchObject({ criticEnabled: false, criticLeanOff: true });
+  });
+
+  // D13 was measured with Claude Code only (B2); a Codex project keeps its pinned reviewer.
+  it("keeps the reviewer of a lean feature under a Codex reviewer", async () => {
+    await project({}, { harness: "codex", launch: "codex-exec" }, "lean");
+    gate.mockResolvedValue([]);
+    const created = await feature("Archive items", ARCHIVING);
+    const state = JSON.parse(
+      await readFile(
+        join(workspace?.root ?? "", ".visp/features", created.brief.feature, "product-state.json"),
+        "utf8",
+      ),
+    );
+    expect(state.criticEnabled).toBe(true);
+    expect(state.criticLeanOff).toBeUndefined();
+    expect(state.criticDefault).toMatchObject({ harness: "codex" });
   });
 
   // VISP calls a model only when the project lets it launch the reviewer.

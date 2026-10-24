@@ -257,7 +257,8 @@ Respond only with JSON that matches the provided output schema.
                   "evidence"
                 ],
                 "additionalProperties": false
-              }
+              },
+              "maxItems": 0
             }
           },
           "required": [

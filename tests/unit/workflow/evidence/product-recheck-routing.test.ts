@@ -819,7 +819,6 @@ it("hands a successful recheck to the human reviewer when VISP's reviewer has no
     value: {
       action: "fix",
       completion: "handoff",
-      command: expect.stringContaining("visp pr"),
       objective: expect.stringContaining("review budget is spent"),
     },
   });
