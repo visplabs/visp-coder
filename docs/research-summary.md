@@ -264,15 +264,15 @@ Both batches used the bench preset `quality-2026-10`: a Claude Haiku 5.5 worker 
 | --- | --- |
 | Bare | 22 of 40 (55%) |
 | Bare with Claude Code auto memory | 14 of 40 (35%) |
-| VISP lean with recall | 16 of 17 (94%) |
-| VISP lean with recall off | 7 of 17 (41%) |
+| VISP lean with recall | 19 of 20 (95%) |
+| VISP lean with recall off | 9 of 19 (47%) |
 
-Per task, VISP with recall kept the convention in 9 of 9 runs on `archive` (bare 9 of 20) and 7 of 8 on `raised` (bare 13 of 20). The counts come from `report.py --batch b3 --carry`.
+Per task, VISP with recall kept the convention in 10 of 10 runs over two sessions (`archive`; bare 9 of 20) and 9 of 10 over three sessions with the cap raised (`raised`; bare 13 of 20). With recall off it kept it in 4 of 10 and 5 of 9. One run of the recall-off arm (`b3-archive-carryover-raised-candidate-norecall-10`) is still marked invalid and is not counted. The counts come from `report.py --batch b3 --carry`.
 
-- **Recall is the cause.** VISP with recall beat bare by 39 points (one-sided exact test stratified by task, p = 0.003). With recall off it was no better than bare (41% against 55%).
+- **Recall is the cause.** VISP with recall beat bare by 40 points (one-sided exact test stratified by task, p = 0.001) and bare with auto memory by 60 points. With recall off it was no better than bare (47% against 55%).
 - **Why bare misses it.** The cap is visible in the code in every run. Bare workers read it as applying only to item creation; the wider scope lives only in the earlier request.
 - **The auto-memory arm saved no memory files.** The bench prompt confined edits to the project, which kept its memory folder out of reach. #90 fixes this for later runs.
-- **Limits.** This is one task family and one worker model. Four VISP runs were cut by a usage limit and are pending a rerun, so each VISP arm has 17 scored runs, not the planned 20.
+- **Limits.** This is one task family and one worker model. The VISP arms ran with the `critic.launch: claude-exec` configuration.
 
 ## What made the difference
 
