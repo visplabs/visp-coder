@@ -1,10 +1,17 @@
 # visp
 
-VISP makes an AI coding agent's work verifiable. It ties the user's verbatim request to a declared file scope and runnable checks, enforces that scope with host hooks, a Git pre-commit hook and CI, and ends each feature with an evidence record (`visp pr`): what was asked, what ran and passed, what changed, and what was not verified. Project rules and earlier decisions carry across sessions. The default lean profile costs 1.5 to 4 times a bare agent run (about 2 times on average across the benchmark tasks). The full loop, with an independent tester and reviewer, is an escalation for weak or local models, failing checks and large requests.
+VISP makes an AI coding agent's work verifiable. It ties the user's verbatim request to a declared file scope and runnable checks, enforces that scope with host hooks, a Git pre-commit hook and CI, and ends each feature with an evidence record (`visp pr`): what was asked, what ran and passed, what changed, and what was not verified. Where the measurements stand:
+
+- **Carryover works, with recall on.** Earlier decisions reach later sessions when VISP launches the reviewer (`critic.launch: claude-exec` or `codex-exec`). With the default Claude Code setup (`launch: host`) nothing is recalled.
+- **Cost is not yet near a bare agent.** In batch B2 the lean profile cost about 1.7 times a bare run on an existing-code task, and on a small task it added $0.036 and 82 s.
+- **Scope enforcement is unmeasured.** The hooks and the Git hook exist and are tested, but their effect on agent behavior has not been measured.
+- **Evidence labels are checked.** VISP compares the tests a worker names with the check output, and `visp pr` marks what it cannot confirm.
+
+The full loop, with an independent tester and reviewer, is an escalation for weak or local models, failing checks and large requests.
 
 VISP works as a CLI (`visp`) and as an MCP server (`visp serve --mcp`). Both use the same workflow services.
 
-What VISP records as evidence is what it executed itself: check commands, browser journeys and their screenshots, and the reviewer's attributed judgments. The agent's own claims are never evidence.
+What VISP records as evidence is what it executed itself: check commands, browser journeys and their screenshots, and the reviewer's attributed judgments. The agent's own claims are never evidence. A worker's account of a requirement ("R002: C001 test_bundle_hold") is labelled `verified` only when the check's latest output on the current version shows that test passed (by name, or by a clean suite summary that covers the test files); otherwise `visp done` and `visp pr` say "not confirmed from the check output".
 
 ## Install
 
@@ -137,17 +144,17 @@ Library callers should obtain a `LoadedWorkspaceState` with `loadWorkspace()` be
 
 ## Independent review
 
-The critic is a separate model session that receives the original request, current source, check results and screenshots, but not the actor's verdicts or history. It returns an assessment of each outcome and up to three findings. With `critic.launch: codex-exec` (written by `visp init --harness codex`), VISP launches a read-only `codex exec` reviewer itself; the independent tester also runs when `critic.harness: codex`. This needs the Codex CLI signed in, whichever host does the coding. With `critic.launch: claude-exec` and `critic.harness: claude-code`, VISP launches a read-only `claude -p` reviewer instead, and the tester runs as a `claude -p` session too (new projects only). With `launch: host` (the default), the coding host delegates the review to its own subagent using the packet VISP prepares. See [the critic guide](docs/critic.md).
+The critic is a separate model session that receives the original request, current source, check results and screenshots, but not the actor's verdicts or history. It returns an assessment of each outcome and up to three findings. With `critic.launch: codex-exec` (written by `visp init --harness codex`), VISP launches a read-only `codex exec` reviewer itself; the independent tester also runs when `critic.harness: codex`. This needs the Codex CLI signed in, whichever host does the coding. With `critic.launch: claude-exec` and `critic.harness: claude-code`, VISP launches a read-only `claude -p` reviewer instead, and the tester runs as a `claude -p` session too (new projects only). With `launch: host` (the default for Claude Code), the coding host delegates the review to its own subagent using the packet VISP prepares; VISP then has no model of its own to call, so project rules are matched by phrase and earlier decisions are not recalled (`memory.recall` needs a launched reviewer). See [the critic guide](docs/critic.md).
 
 ## Results
 
 Measured on VISP's own benchmark (`bench/`) with Claude Haiku 5.5 as the coding agent; every number and its limits are in [the research summary](docs/research-summary.md).
 
 - A bare agent already passes the benchmark's hidden checks. VISP adds little measurable code quality for this model, and with Claude Haiku 4.5 it raised hidden-check scores more (35–37 of 38 against 26–35 on a spreadsheet engine).
-- Across sessions, VISP carried 62 of 62 earlier decisions into later work, against 58 of 62 for a bare agent (four tasks, two runs each).
-- The lean default halves the cost of the earlier default: $0.08 against $0.24 per run on one existing-code task and $0.33 against $0.66 on another (a bare agent: $0.02 and $0.15), with equal hidden-check results.
+- Across sessions (batch B3, a convention from the first session that later sessions must keep), VISP with recall kept it in 16 of 17 runs, a bare agent in 22 of 40 and a bare agent with Claude Code auto memory in 14 of 40. With recall off VISP kept it in 7 of 17. This needs `critic.launch: claude-exec` (or `codex-exec`). One task family, one worker model; four VISP runs await a rerun.
+- Cost (batch B2, lean against bare, hidden checks equal at 100% on bundles and extend): $0.059 against $0.023 per run on a small task (+82 s median) and $0.283 against $0.168 on an existing-code task. That misses the target of near-bare cost.
 - On real chains of issues (ChainSWE), bare agents broke no earlier tests; their failures were incomplete fixes. VISP's requirement listing targets that.
-- Outside evidence: in Claude Code, stating the allowed scope in the prompt cut out-of-scope actions from 15.8% to 3.9% with Sonnet 4.6 and from 17.1% to 0.0% with GLM-4.6 (OverEager-Bench, arXiv 2605.18583). That study changed prompt text only; VISP's own effect on scope has not been measured yet.
+- Outside evidence: in Claude Code, stating the allowed scope in the prompt cut out-of-scope actions from 15.8% to 3.9% with Sonnet 4.6 and from 17.1% to 0.0% with GLM-4.6 (OverEager-Bench, arXiv 2605.18583). That study changed prompt text only; VISP's own effect on scope has not been measured.
 - Scope enforcement today: hooks, the Git pre-commit hook and CI refuse edits outside a slice's declared scope, but the lean default's one-slice light path declares every file in scope (`**`), so there it refuses only blocked paths and VISP's own state.
 
 ## Documentation

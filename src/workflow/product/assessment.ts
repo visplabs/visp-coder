@@ -230,7 +230,7 @@ export async function productEvidenceGaps(
       gaps.push(`Pinned expectation changed or is unavailable: ${file.path}`);
   }
   gaps.push(...currentJourneyFailures(record, subject, slice?.id));
-  gaps.push(...(await requirementEvidenceGaps(workspace, record, slice)));
+  gaps.push(...(await requirementEvidenceGaps(workspace, record, subject, slice)));
   gaps.push(...(await currentAssessmentEvidenceGaps(workspace, record, subject, slice)));
   gaps.push(...(await productImageEvidenceGaps(workspace, record, subject, slice)));
   return [...new Set(gaps)];
@@ -250,10 +250,10 @@ async function requirementAccounts(
   return { listed, accounts: stored.ok ? stored.value.accounts : [] };
 }
 
-/** A cited check counts when its latest run passed; acceptance reruns every check. */
-function passedChecks(record: ProductRecord): Set<string> {
+/** A cited check counts when its latest run on this version passed; acceptance reruns every check. */
+function passedChecks(record: ProductRecord, subject: string, slice?: ProductSlice): Set<string> {
   return new Set(
-    latestExecutionsByOwner(record.state.executions)
+    latestExecutionsByOwner(applicableExecutions(record, subject, slice))
       .filter((execution) => execution.status === "passed")
       .map((execution) => execution.check),
   );
@@ -262,6 +262,7 @@ function passedChecks(record: ProductRecord): Set<string> {
 async function requirementEvidenceGaps(
   workspace: WorkspaceState,
   record: ProductRecord,
+  subject: string,
   slice: ProductSlice | undefined,
 ): Promise<string[]> {
   const accounted = await requirementAccounts(workspace, record, slice);
@@ -269,7 +270,7 @@ async function requirementEvidenceGaps(
     ? requirementGaps(
         accounted.listed,
         accounted.accounts,
-        passedChecks(record),
+        passedChecks(record, subject, slice),
         accountCommand(record, slice),
       )
     : [];
