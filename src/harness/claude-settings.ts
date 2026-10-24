@@ -37,6 +37,41 @@ interface ClaudeSettings {
   [key: string]: unknown;
 }
 
+/**
+ * The lean worker's compaction (`workflow.autoCompact`): compact at 90% of a 100k-token window,
+ * so the session stays under the 100k prompt size where every Haiku 5.5 price is 5 times higher.
+ * In batch leandef2 the lean worker spent 15 to 23 turns above it on the larger task, and that
+ * premium was 65% of its cost. Names and ranges: code.claude.com/docs/en/env-vars.
+ */
+export const COMPACTION_ENV = {
+  CLAUDE_CODE_AUTO_COMPACT_WINDOW: "100000",
+  CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: "90",
+} as const;
+
+/**
+ * `current` with the compaction variables set (`on`) or VISP's values removed. A value the
+ * project set differently is its own and stays, as does unparseable text (returned unchanged).
+ */
+export function withCompactionEnv(current: string | undefined, on: boolean): string | undefined {
+  const parsed = parseSettings(current);
+  if (parsed === "malformed") return current;
+  const env = parsed.env;
+  if (env !== undefined && (typeof env !== "object" || env === null || Array.isArray(env)))
+    return current;
+  const values = (env ?? {}) as Record<string, unknown>;
+  const start = current?.trim() ? current : "{}\n";
+  let text = start;
+  for (const [name, value] of Object.entries(COMPACTION_ENV)) {
+    if (on && values[name] === undefined) text = setJsoncMember(text, ["env", name], value) ?? text;
+    if (!on && values[name] === value) text = removeJsoncMember(text, ["env", name], true) ?? text;
+  }
+  const next = parseSettings(text);
+  // An env object only VISP's values filled goes with them.
+  if (!on && text !== start && next !== "malformed" && isDeepStrictEqual(next.env, {}))
+    text = removeJsoncMember(text, ["env"], true) ?? text;
+  return text === start ? current : text;
+}
+
 /** Authorization marker directories under `.visp/state`, as the pre-commit fallback reads them. */
 const PRODUCT_AUTHORIZATIONS = "product-authorizations";
 const IMPLEMENT_MARKERS = "implement-allowed";

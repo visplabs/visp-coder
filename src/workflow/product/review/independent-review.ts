@@ -71,7 +71,9 @@ export async function independentReviewJsonSchema(
   evidenceIds?: readonly string[],
   outcomeIds?: readonly string[],
   disputedTests: readonly string[] = [],
+  expectationIds?: readonly string[],
 ): Promise<Record<string, unknown>> {
+  const references = { evidenceIds, outcomeIds, disputedTests, expectationIds };
   const { toJsonSchemaCompat } = await import(
     "@modelcontextprotocol/sdk/server/zod-json-schema-compat.js"
   );
@@ -90,7 +92,7 @@ export async function independentReviewJsonSchema(
     const expandedObject = Object.fromEntries(
       Object.entries(object).map(([key, entry]) => {
         const expanded = expand(entry, ancestors);
-        return [key, referenceField(key, expanded, evidenceIds, outcomeIds, disputedTests)];
+        return [key, referenceField(key, expanded, references)];
       }),
     );
     // Structured-output providers require all properties. New responses make the
@@ -104,18 +106,48 @@ export async function independentReviewJsonSchema(
 function referenceField(
   key: string,
   field: unknown,
-  evidenceIds?: readonly string[],
-  outcomeIds?: readonly string[],
-  disputedTests: readonly string[] = [],
+  references: {
+    readonly evidenceIds?: readonly string[];
+    readonly outcomeIds?: readonly string[];
+    readonly disputedTests: readonly string[];
+    readonly expectationIds?: readonly string[];
+  },
 ) {
+  const { evidenceIds, outcomeIds, disputedTests, expectationIds } = references;
   if (key === "disputes") return disputeArray(field, disputedTests);
   if (key === "evidence") return referenceArray(field, evidenceIds);
   if (key === "outcomes") return referenceArray(field, outcomeIds);
+  if (key === "expectations") return expectationArray(field, expectationIds);
   if (!outcomeIds || !field || typeof field !== "object") return field;
   if (key === "outcome" && outcomeIds.length) return { ...field, enum: [...new Set(outcomeIds)] };
   if (key === "assessments" && !outcomeIds.length) return { ...field, maxItems: 0 };
   return field;
 }
+/**
+ * Expectation assessments name only the packet's expectations. Validation rejects an unknown
+ * id, and in batch leandef2 that threw away 2 of 7 reviews (77 s, $0.027) whose verdicts were
+ * otherwise valid: one named `stated-rules-1-to-8` for an outcome with no expectations.
+ */
+function expectationArray(field: unknown, expectationIds?: readonly string[]) {
+  if (!expectationIds || !field || typeof field !== "object") return field;
+  if (!expectationIds.length) return { ...field, maxItems: 0 };
+  const items = (field as { items?: { properties?: Record<string, unknown> } }).items;
+  return {
+    ...field,
+    items: {
+      ...items,
+      properties: {
+        ...items?.properties,
+        id: { ...object(items?.properties?.id), enum: [...new Set(expectationIds)] },
+      },
+    },
+  };
+}
+
+function object(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+
 /** Rulings exist only for the supplied disputes, one per test. */
 function disputeArray(field: unknown, tests: readonly string[]) {
   if (!field || typeof field !== "object") return field;

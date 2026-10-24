@@ -138,6 +138,17 @@ describe("visp uninstall", () => {
     await expect(stat(join(workspace.root, "AGENTS.visp.md"))).rejects.toThrow();
   });
 
+  it("removes a command guide an earlier build left at the project root", async () => {
+    await install("claude-code");
+    const guide = await readFile(join(workspace.root, ".visp/VISP.commands.md"), "utf8");
+    await workspace.write("VISP.commands.md", guide);
+
+    const removed = await uninstall("claude-code");
+    expect(removed.ok).toBe(true);
+    await expect(stat(join(workspace.root, "VISP.commands.md"))).rejects.toThrow();
+    await expect(stat(join(workspace.root, ".visp/VISP.commands.md"))).rejects.toThrow();
+  });
+
   it("keeps an edited CI workflow and a customized MCP entry", async () => {
     await install("cursor");
     await workspace.write(".github/workflows/visp.yml", "name: mine\n");

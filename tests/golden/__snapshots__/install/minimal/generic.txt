@@ -2,7 +2,7 @@ $ visp install --harness generic --profile minimal
 --- stdout
 Installed visp assets for generic:
   wrote    AGENTS.visp.md
-  wrote    VISP.commands.md
+  wrote    .visp/VISP.commands.md
   wrote    .git/hooks/pre-commit
 
 - Point your coding agent at AGENTS.visp.md, or paste it into its system prompt.
@@ -178,35 +178,7 @@ case "$verdict" in
     ;;
 esac
 
-=== .visp/status.json
-{
-  "kind": "status",
-  "createdAt": "<TIME>",
-  "updatedAt": "<TIME>"
-}
-
-=== AGENTS.visp.md
-# visp
-
-First: `visp feature "<goal>" --check "<test command>" --source-brief - <<'REQUEST'` (request, then REQUEST): records the request and works it as one slice. `visp brief --template` for many slices.
-Loop: `visp work` → implement → `visp done` → `visp next`. Run `visp accept` only when `visp next` directs it.
-
-- Keep request with --source-brief; preserve outcomes, expectations and scope.allowed.
-- Edit only what the request needs; never push, install packages or delete unrelated files.
-- Before editing run visp work; build runnable behavior. Functional outcomes need tests or kind:"browser-journey" with real input. Browser journeys must not mutate VISP state. Source strings and screenshots alone do not prove behavior.
-- Stateful: act, settle, repeat; test failure/restart.
-- If the request has a UI, show status, counts, errors as word-labeled text (`Score: 1500`, `Stone: 2`), not only canvas/icons.
-- Image-file result (render, chart, SVG): give its brief check `images: [out.png]` (a PNG or SVG it writes; keep the requested format too) and an experience outcome naming what the picture must show.
-- UI previews (aim line, predicted path): use the real action's function and start point; check with real input. Do not delete or shrink requested content to pass a check.
-- If visp done runs VISP's reviewer, run or delegate no review; visp next waits. Fix findings, rerun done. Run visp critic/review only when visp next prints it.
-- Run done/verify/accept/next/pr in the foreground, alone, with the host's maximum shell timeout: no run_in_background, loop or file redirect. done waits for VISP's reviewer and prints the result. Only feature may be backgrounded (leave it running on blocking hosts). When it prints, run visp work unless --check did; never rerun feature; after kill/error recover by id.
-- Sandbox denied? Rerun with escalation.
-- Missing product evidence stays unresolved. Report reviewer.context honestly. Do not force extra review rounds.
-- Before the final answer, run `visp next`; respect execution refusals.
-
-VISP generates records; see VISP.commands.md.
-
-=== VISP.commands.md
+=== .visp/VISP.commands.md
 # VISP command guide
 
 The executable is `visp`; the package is `visp-coder`. Commands accept `--help`.
@@ -215,8 +187,8 @@ The executable is `visp`; the package is `visp-coder`. Commands accept `--help`.
 
 | When | Command | Next |
 |---|---|---|
-| Start or resume | `visp next` | Read-only routing: follow the returned action; unresolved is not complete. |
-| New request | `visp feature "<goal>" --check "<test command>" --source-brief -` | Pass the request with a quoted heredoc and the host's maximum timeout. --check also works all of it as one slice (the visp work --check step). It keeps running while VISP writes acceptance tests: on Codex keep its session open and poll it; on a blocking shell (Claude Code Bash) start it with run_in_background:true and read its output for the result; if the host can do neither, wait for it. Once it prints, you have the slice (without --check, run visp work --feature <id> --check "<test command>" for one). Never start feature again: a repeat can create a second feature. After a kill or error, run visp work --feature <id>; add --retry-tests only when work reports the acceptance tests failed or stopped. Use brief --template for several usable slices. |
+| New request | `visp feature "<goal>" --check "<test command>" --source-brief -` | Pass the request with a quoted heredoc and the host's maximum timeout. --check also works all of it as one slice (the visp work --check step). On the lean profile (the default) it returns in seconds: run it in the foreground. Only when visp.yml sets workflow.profile: full or worker: weak does it keep running while VISP writes acceptance tests: on Codex keep its session open and poll it; on a blocking shell (Claude Code Bash) start it with run_in_background:true and read its output for the result. Once it prints, you have the slice (without --check, run visp work --feature <id> --check "<test command>" for one). Never start feature again: a repeat can create a second feature. After a kill or error, run visp work --feature <id>; add --retry-tests only when work reports the acceptance tests failed or stopped. Use brief --template for several usable slices. |
+| Resume a feature in progress | `visp next` | Read-only routing: follow the returned action; unresolved is not complete. |
 | Plan or revise a decision | `visp brief --template` | Prefer --patch - for changed fields; keep the first slice to one usable behavior. |
 | Implement a slice | `visp work --check "<test command>"` | Read relevant outcomes/code, then edit only the authorized scope. --inspect reads without authorizing. |
 | An ownership/caller/test question | `visp query search "<symbol or behavior>"` | Use callers, testsFor or impact with the returned entity; inspect source. |
@@ -224,7 +196,7 @@ The executable is `visp`; the package is `visp-coder`. Commands accept `--help`.
 | Only when `visp next` prints a critic command | `visp critic --preflight` | Host-delegated review only (with VISP's own reviewer `visp done` runs it). Setup-needed: inspect capabilities; ready: prepare, delegate, submit, or dispatch through an attached adapter. |
 | Only when `visp next` shows a manual-feedback request | `visp critic feedback --ask "What should I improve in this version?"` | Ask the user with the host's question tool only if it exists and questions are allowed; otherwise `--id <request-id> --defer`. Continue unrelated work. |
 | Only when `visp next` prints a review command | `visp review --task <id> --prepare` | Pause edits until it returns. Read packetPath and images; submit with --session <id> --from -. |
-| The slice is usable | `visp done --task <id>` | Run it in the foreground, never with run_in_background or a redirect: it waits for VISP's reviewer (about 1-2 min) and prints the result, so there is nothing to poll. A feature that lists requirements takes one --account "R001=<check id> <test name>" per requirement (work prints the full command). Then follow its returned action and `visp next`. |
+| The slice is usable | `visp done --task <id>` | Run it in the foreground, never with run_in_background or a redirect: it waits for VISP's reviewer (about 1-2 min) and prints the result, so there is nothing to poll. A feature that lists requirements takes one --account "R001=<check id> <test name>" per requirement (work prints the full command). Then follow the next step it prints; a handoff or complete ends your loop. |
 | Next directs final acceptance | `visp accept --feature <id>` | Run the final product checks and report accepted status or remaining gaps. |
 | Only when `visp next` prints it | `visp pr --feature <id>` | Prints the evidence record and what is still open for the human reviewer. It reads recorded state; it changes and pushes nothing. |
 
@@ -313,4 +285,32 @@ actions:
 
 Waits use `durationMs` (1–10000). Follow settling waits with `wait-for` or `compare` to establish the expected state. Use real controls. `project:/index.html` serves a static page (HTML/JS/CSS, no backend) from the project on a port VISP chooses, so start nothing; for an app with a backend or build step, start your server on a free port you choose (not a fixed common one such as 3000, which another process may hold) and use its URL. A drag ends at viewport-pixel `to` or, as fractions of the element's box, `by`; it starts at `from` (pixels) or `position` (fractions). `captureDuring: true` captures the held state at full pull before release and `captureAfterMs: [300, 900]` captures again that many ms after release; `position`/`by` refuse rotated, skewed, flipped or offset-path elements, so use pixels there. Each journey allows six total captures, including the automatic initial capture, the final capture when the last action does not request one, `capture: true`, drag `captureDuring: true` and each `captureAfterMs` offset. Operation records are generated. Capture and verify return matching before/after observations; investigate possible regressions and execution gaps, and inspect actual images. Work and review handoffs attach a recheck to findings linked to recorded execution: use its command to revisit the original path, then inspect the result and one nearby behavior affected by the edit. A matching rerun is observed-unassessed, not a resolved finding. These comparisons are advisory, not quality approval. Legacy runs without a saved journey still need --from. A different input that succeeds does not resolve an earlier failed input.
 
+
+=== .visp/status.json
+{
+  "kind": "status",
+  "createdAt": "<TIME>",
+  "updatedAt": "<TIME>"
+}
+
+=== AGENTS.visp.md
+# visp
+
+First: `visp feature "<goal>" --check "<test command>" --source-brief - <<'REQUEST'` (request, then REQUEST): records the request and works it as one slice. `visp brief --template` for many slices.
+Loop: `visp work` → implement → `visp done` → its next step. Run `visp accept` only when a next step directs it.
+
+- Keep request with --source-brief; preserve outcomes, expectations and scope.allowed.
+- Edit only what the request needs; never push, install packages or delete unrelated files.
+- Before editing run visp work; build runnable behavior. Functional outcomes need tests or kind:"browser-journey" with real input. Browser journeys must not mutate VISP state. Source strings and screenshots alone do not prove behavior.
+- Stateful: act, settle, repeat; test failure/restart.
+- If the request has a UI, show status, counts, errors as word-labeled text (`Score: 1500`, `Stone: 2`), not only canvas/icons.
+- Image-file result (render, chart, SVG): give its brief check `images: [out.png]` (a PNG or SVG it writes; keep the requested format too) and an experience outcome naming what the picture must show.
+- UI previews (aim line, predicted path): use the real action's function and start point; check with real input. Do not delete or shrink requested content to pass a check.
+- If visp done runs VISP's reviewer, run or delegate no review; visp next waits. Fix findings, rerun done. Run visp critic/review only when visp next prints it.
+- Run feature/done/verify/accept/next/pr in the foreground, alone, with the host's maximum shell timeout: no run_in_background, loop or file redirect. done waits for VISP's reviewer and prints the result. If visp.yml sets profile full or worker weak, background feature on blocking hosts. When feature prints, run visp work unless --check did; never rerun feature; after kill/error recover by id.
+- Sandbox denied? Rerun with escalation.
+- Missing product evidence stays unresolved. Report reviewer.context honestly. Do not force extra review rounds.
+- Before the final answer, reach next action complete or a handoff in a done/accept/next reply (report what it lists as open); respect execution refusals.
+
+VISP generates records. Only if a command fails: .visp/VISP.commands.md.
 

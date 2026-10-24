@@ -66,6 +66,7 @@ export async function readFeatureCriticBudget(
   if (read.value === undefined && entries.value.some((entry) => entry.name.endsWith(".json")))
     budget.maxCalls = Number.MAX_SAFE_INTEGER;
   const historyGuards: FileMutation[] = [];
+  const unreviewed: string[] = [];
   for (const entry of entries.value) {
     if (!entry.name.endsWith(".json")) continue;
     const loaded = await readCriticBudgetHistory(workspace, join(directory, entry.name));
@@ -74,14 +75,28 @@ export async function readFeatureCriticBudget(
     if (!merged.ok) return merged;
     budget = merged.value;
     historyGuards.push(loaded.value.guard);
+    unreviewed.push(...unreviewedAttempts(entry.name, loaded.value.state));
   }
   return ok({
     path,
     text: read.value,
     budget,
+    unreviewed: new Set(unreviewed),
     historyCount: historyGuards.length,
     historyGuards,
   });
+}
+
+/** Attempts that recorded no review: no answer, or an answer VISP rejected. */
+function unreviewedAttempts(scope: string, state: CriticState): string[] {
+  return state.attempts
+    .filter((attempt) => attempt.status === "unavailable")
+    .map((attempt) => attemptKey(scope, attempt.id));
+}
+
+/** One budget entry per critic attempt: the history file it is recorded in and its id. */
+function attemptKey(scope: string, id: string): string {
+  return hashValue({ scope, id });
 }
 
 function parseBudget(content: string | undefined, feature: string, root: string, maxCalls: number) {
@@ -122,7 +137,7 @@ function mergeHistory(budget: Budget, scope: string, state: CriticState, adoptLi
     return err(vispError("ARTIFACT_INVALID", "Duplicate critic attempts; spending is ambiguous"));
   const entries = new Map(budget.entries.map((entry) => [entry.key, entry]));
   for (const attempt of state.attempts) {
-    const key = hashValue({ scope, id: attempt.id });
+    const key = attemptKey(scope, attempt.id);
     const previous = entries.get(key);
     entries.set(key, {
       key,

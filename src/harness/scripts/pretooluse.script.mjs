@@ -112,6 +112,9 @@ if (input?.hook_event_name === "Stop") {
     const now = Date.now();
     const kind =
       next.completion === "handoff" ? "handoff" : next.completion === "unresolved-environment" ? "environment" : "work";
+    // A handoff with nothing to run was printed, with what is open, by the done or next the
+    // worker read; blocking it only cost a second final answer.
+    if (kind === "handoff" && !next.command) process.exit(0);
     const limit = kind === "work" ? 2 : 1;
     // Ids and values change from call to call; the command's verb and flags name the step.
     const words = String(next.command ?? "").split(/\s+/).filter(Boolean);
@@ -163,9 +166,7 @@ if (input?.hook_event_name === "Stop") {
     const reason = !next.feature
       ? command ? `${objective}. Run: ${command}` : `${objective}.`
       : kind === "handoff"
-      ? command
-        ? `${objective}. Run: ${command} once, then say in your final message what is still open and that ${feature} needs the human reviewer.`
-        : `${objective}. Say in your final message what is still open and that ${feature} needs the human reviewer.`
+      ? `${objective}. Run: ${command} once, then say in your final message what is still open and that ${feature} needs the human reviewer.`
       : kind === "environment"
       ? `VISP cannot verify ${feature} until its execution environment works: ${objective}.${command ? ` Run: ${command} once.` : ""} If it is still unavailable, say in your final message which capability is missing and that ${feature} is not verified; do not retry it repeatedly.`
       : `VISP's next step for ${feature}: ${objective}.${command ? ` Run: ${command}.` : ""} If your own \`__HOOK_PRODUCT_NAME__ next\` shows a different step, follow that one. If you cannot finish, say in your final message what is left and why.`;

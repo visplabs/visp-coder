@@ -1,4 +1,5 @@
-import { resolveCriticPolicy } from "../../config/critic-defaults.js";
+import { type CriticConfig, launchesReviewer } from "../../config/critic.js";
+import { resolveCriticPolicyDetails } from "../../config/critic-defaults.js";
 import { vispError } from "../../core/errors.js";
 import {
   applyFileTransaction,
@@ -41,7 +42,7 @@ import {
   type ProductState,
   parseProductBrief,
 } from "./model.js";
-import { featureProfile, leanCriticConfig } from "./profile.js";
+import { type FeatureProfile, featureProfile, leanCriticConfig } from "./profile.js";
 import {
   mergeProjectRules,
   type ProjectRule,
@@ -192,13 +193,13 @@ async function createProductFeatureLocked(
   });
   if (!parsed.ok) return parsed;
   const brief = parsed.value;
-  const resolved = await resolveCriticPolicy(workspace.config.harness, workspace.config.critic);
+  const resolved = await resolveCriticPolicyDetails(
+    workspace.config.harness,
+    workspace.config.critic,
+  );
   if (!resolved.ok) return resolved;
   const profile = featureProfile(workspace, { brief });
-  const critic =
-    profile.name === "lean" && resolved.value.config
-      ? { ...resolved.value, config: leanCriticConfig(workspace, resolved.value.config) }
-      : resolved.value;
+  const critic = featureCritic(profile, resolved.value, workspace);
   const featureMetadata = await createFeatureMetadata(workspace, brief, options, timestamp);
   const { intent, branchCreated, branchWarning } = featureMetadata;
   const local = await localStateMutations(workspace, feature, inherited);
@@ -291,13 +292,53 @@ async function featureProjectRules(
   });
 }
 
+interface FeatureCriticPolicy {
+  readonly enabled: boolean;
+  readonly manual?: boolean;
+  readonly config?: CriticConfig;
+}
+
+/**
+ * The reviewer a new feature pins. A lean feature reviews with the lean model; under a Claude
+ * Code reviewer it runs none at all unless a critic mode was set (D13): in batch B2 (Claude Code,
+ * Haiku 5.5 worker) lean with and without VISP's
+ * reviewer scored the same hidden checks and probes, and the reviewer cost more. It keeps the
+ * full reviewer's configuration, which an escalation to the full profile turns on.
+ */
+function featureCritic(
+  profile: FeatureProfile,
+  resolved: { policy: FeatureCriticPolicy; sources: { mode: { source: string } } },
+  workspace: WorkspaceState,
+): FeatureCriticPolicy & { leanOff?: true; acceptOnChecks?: true } {
+  const { policy } = resolved;
+  if (profile.name !== "lean") return policy;
+  // `critic.mode: off` with a reviewer VISP would launch: none will come, so the checks decide
+  // acceptance. In B2's reviewer-off arm accept kept asking for VISP's assessment and workers
+  // looped on it. Without a launched reviewer, next still hands the review to the host.
+  if (!policy.enabled && !policy.manual && launchesReviewer(workspace.config.critic))
+    return { ...policy, acceptOnChecks: true };
+  if (!policy.config) return policy;
+  // B2 measured Claude Code with a Haiku worker only; other hosts keep their pinned reviewer.
+  if (
+    resolved.sources.mode.source === "built-in" &&
+    policy.enabled &&
+    policy.config.harness === "claude-code"
+  )
+    return { ...policy, enabled: false, leanOff: true, acceptOnChecks: true };
+  return { ...policy, config: leanCriticConfig(workspace, policy.config) };
+}
+
 function criticStateFields(critic: {
   enabled: boolean;
   manual?: boolean;
   config?: ProductState["criticDefault"];
+  leanOff?: true;
+  acceptOnChecks?: true;
 }) {
   return {
     criticEnabled: critic.enabled,
+    ...(critic.leanOff ? { criticLeanOff: true } : {}),
+    ...(critic.acceptOnChecks ? { criticAcceptOnChecks: true } : {}),
     ...(critic.manual ? { criticManual: true } : {}),
     ...(critic.config ? { criticDefault: critic.config } : {}),
   };

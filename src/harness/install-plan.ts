@@ -37,8 +37,10 @@ import {
   type PlannedClaudeRegistration,
   planPreToolUseRegistration,
   planPreToolUseUnregistration,
+  withCompactionEnv,
 } from "./claude-settings.js";
 import { codexRegistrationAdvice, codexRegistrationProblem } from "./codex-mcp-registration.js";
+import { COMMAND_GUIDE_PATH, RETIRED_COMMAND_GUIDE_PATH } from "./command-guide.js";
 import { preCommitHookPath } from "./git-hook.js";
 import {
   HOOK_MARKER,
@@ -128,7 +130,7 @@ export async function buildInstallPlan(
   if (!profilePrune.ok) return profilePrune;
   const activation = await planActivation(fs, options, planned);
   if (!activation.ok) return activation;
-  const hooks = await planHooks(fs, paths, options, manifest.value, planned);
+  const hooks = await planHooks(fs, paths, options, manifest.value, planned, autoCompact(settings));
   if (!hooks.ok) return hooks;
   const mcp = await planMcp(fs, options, planned);
   if (!mcp.ok) return mcp;
@@ -233,9 +235,18 @@ async function planHooks(
   options: InstallOptions,
   manifest: AssetManifest,
   planned: InstallPlan,
+  compact: boolean,
 ): Promise<Result<void>> {
   for (const hook of options.hooks ?? []) {
-    const installed = await planHook(fs, paths, hook, options.force === true, manifest, planned);
+    const installed = await planHook(
+      fs,
+      paths,
+      hook,
+      options.force === true,
+      manifest,
+      planned,
+      compact,
+    );
     if (!installed.ok) return installed;
   }
   return ok(undefined);
@@ -617,8 +628,9 @@ async function planHook(
   force: boolean,
   manifest: AssetManifest,
   plan: InstallPlan,
+  compact: boolean,
 ): Promise<Result<void>> {
-  if (hook === "claude") return planClaudeHook(fs, force, manifest, plan);
+  if (hook === "claude") return planClaudeHook(fs, force, manifest, plan, compact);
   if (hook === "ci") {
     return planAsset(
       fs,
@@ -632,11 +644,18 @@ async function planHook(
   return planGitHook(fs, paths, force, plan);
 }
 
+/** Whether install sets the lean worker's compaction variables (`workflow.autoCompact`). */
+function autoCompact(settings: VispConfig): boolean {
+  const { workflow } = settings;
+  return workflow.autoCompact ?? (workflow.profile === "lean" && workflow.worker !== "weak");
+}
+
 async function planClaudeHook(
   fs: ProjectFileSystem,
   force: boolean,
   manifest: AssetManifest,
   plan: InstallPlan,
+  compact: boolean,
 ): Promise<Result<void>> {
   const path = CLAUDE_PRE_TOOL_USE_HOOK;
   const content = renderPreToolUseHook();
@@ -669,12 +688,14 @@ async function planClaudeHook(
   }
   const backup = await planSettingsBackup(fs, registration.value, current.value, plan);
   if (!backup.ok) return backup;
-  if (registration.value.content !== undefined) {
-    recordCreated(plan, CLAUDE_SETTINGS_FILE, current.value, registration.value.content);
+  const registered = registration.value.content ?? current.value;
+  const settings = withCompactionEnv(registered, compact);
+  if (settings !== undefined && settings !== current.value) {
+    recordCreated(plan, CLAUDE_SETTINGS_FILE, current.value, settings);
     plan.mutations.push({
       kind: "write",
       path: CLAUDE_SETTINGS_FILE,
-      content: registration.value.content,
+      content: settings,
       expectedBefore: filePrecondition(current.value),
     });
   }
@@ -975,20 +996,28 @@ async function planOtherProfilePrune(
   const other = PROFILES.find((candidate) => candidate !== profile);
   if (!other) return ok(undefined);
   const keep = new Set(planFor(harness, profile).assets.map((asset) => asset.path));
-  const stale = planFor(harness, other).assets.filter((asset) => !keep.has(asset.path));
-  for (const asset of stale) {
-    const current = await fs.readTextIfExists(asset.path);
+  const stale = planFor(harness, other)
+    .assets.map((asset) => asset.path)
+    .filter((path) => !keep.has(path));
+  // The guide's old path is pruned only when an earlier install recorded it there.
+  const retired = manifest[RETIRED_COMMAND_GUIDE_PATH] ? [RETIRED_COMMAND_GUIDE_PATH] : [];
+  for (const path of [...stale, ...retired]) {
+    const current = await fs.readTextIfExists(path);
     if (!current.ok) return current;
     if (current.value === undefined) continue;
-    if (manifest[asset.path] === assetFingerprint(current.value)) {
-      planRemoval(asset.path, plan, current.value);
+    if (manifest[path] === assetFingerprint(current.value)) {
+      planRemoval(path, plan, current.value);
     } else {
-      plan.manualSteps.push(
-        `${asset.path} belongs to the ${other} profile but has been edited; remove it yourself if it is no longer wanted.`,
-      );
+      plan.manualSteps.push(staleAssetStep(path, other));
     }
   }
   return ok(undefined);
+}
+
+function staleAssetStep(path: string, other: Profile): string {
+  return path === RETIRED_COMMAND_GUIDE_PATH
+    ? `${path} is an edited copy of the command guide, which now lives at ${COMMAND_GUIDE_PATH}; remove it yourself if it is no longer wanted.`
+    : `${path} belongs to the ${other} profile but has been edited; remove it yourself if it is no longer wanted.`;
 }
 
 function planRemoval(path: string, plan: InstallPlan, current: string | undefined): void {

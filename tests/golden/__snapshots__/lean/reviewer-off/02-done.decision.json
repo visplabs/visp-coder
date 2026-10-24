@@ -1,0 +1,23 @@
+{
+  "exitCode": 0,
+  "next": {
+    "action": "accept",
+    "command": "visp accept --feature 001-return-two-from-the-public",
+    "mayEdit": false,
+    "evidence": 0
+  },
+  "product": {
+    "status": "active",
+    "slices": {
+      "T001": "closed"
+    },
+    "executions": [
+      "C001/T001: passed"
+    ],
+    "reviews": 0,
+    "openFindings": {
+      "required": 0,
+      "advisory": 0
+    }
+  }
+}

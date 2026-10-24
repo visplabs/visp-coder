@@ -5,7 +5,7 @@ $ visp pr --json
   "ok": true,
   "data": {
     "feature": "001-return-two-from-the-public",
-    "markdown": "# Evidence record: Return two from the public value module\n\n`001-return-two-from-the-public` (active) · 1 of 1 requirement shown by checks VISP ran on this version · 1 item not verified.\n\n## Not verified (1)\n\n- **Blocking:** Required reviewer finding (functional): The module has no default export Consequence: Callers that import the module's default value receive undefined, not two (`FB-<HEX-1>`)\n\n## Asked\n\n> Make the public value module return two instead of one.\n\n- **O001** (must) The public value is two\n\n## Done\n\n| Requirement | Evidence | Result | Rerun |\n| --- | --- | --- | --- |\n| O001 | C001 (worker's check) | passed (exit 0, <TIME>) | `node checks/value.check.mjs` |\n\nResults are commands VISP ran. `stale` runs were on an earlier version and show nothing about this one. Reviewer verdicts are a model's judgment, not a run.\n\n## Changed\n\n1 file, +2 −1, from `HEAD` (the current commit) to the working tree.\n\n- modified `src/value.mjs` +2 −1 (T001)\n\nScope declared: T001 may edit `src/value.mjs`, `checks/value.check.mjs`. Touched outside it: nothing. Edits the hooks refused are not recorded.\n\n## Regressions\n\nUnchecked (advise mode): 0 commands (0 linked to the change, 0 from earlier features, 0 unlinked).\n- 2 candidate commands left out\n\n## Cost\n\n- Time: <DURATION> from `visp feature` to the last record; checks ran <DURATION> over 2 runs; regression gate <DURATION>.\n- Model calls: 1 independent review recorded, 1 reviewer call launched by VISP, 0 tester sessions; worker calls not measured. Models: gpt-5.6-sol.\n\n## Next\n\nThe independent review budget is spent. Run visp pr (it prints the evidence record and changes and pushes nothing); the remaining findings go to a human reviewer\n\n`visp pr --feature 001-return-two-from-the-public`\n\nDetail: `visp pr --full --feature 001-return-two-from-the-public` adds the full handoff document; `--json` gives this record as data; `visp ui` shows it under Evidence; raw records are in `.visp/features/001-return-two-from-the-public/`.\n",
+    "markdown": "# Evidence record: Return two from the public value module\n\n`001-return-two-from-the-public` (active) · 1 of 1 requirement shown by checks VISP ran on this version · 1 item not verified.\n\n## Not verified (1)\n\n- **Blocking:** Required reviewer finding (functional): The module has no default export Consequence: Callers that import the module's default value receive undefined, not two (`FB-<HEX-1>`)\n\n## Asked\n\n> Make the public value module return two instead of one.\n\n- **O001** (must) The public value is two\n\n## Done\n\n| Requirement | Evidence | Result | Rerun |\n| --- | --- | --- | --- |\n| O001 | C001 (worker's check) | passed (exit 0, <TIME>) | `node checks/value.check.mjs` |\n\nResults are commands VISP ran. `stale` runs were on an earlier version and show nothing about this one. Reviewer verdicts are a model's judgment, not a run.\n\n## Changed\n\n1 file, +2 −1, from `HEAD` (the current commit) to the working tree.\n\n- modified `src/value.mjs` +2 −1 (T001)\n\nScope declared: T001 may edit `src/value.mjs`, `checks/value.check.mjs`. Touched outside it: nothing. Edits the hooks refused are not recorded.\n\n## Regressions\n\nUnchecked (advise mode): 0 commands (0 linked to the change, 0 from earlier features, 0 unlinked).\n- 2 candidate commands left out\n\n## Cost\n\n- Time: <DURATION> from `visp feature` to the last record; checks ran <DURATION> over 2 runs; regression gate <DURATION>.\n- Model calls: 1 independent review recorded, 1 reviewer call launched by VISP, 0 tester sessions; worker calls not measured. Models: gpt-5.6-sol.\n\n## Next\n\nThe independent review budget is spent. Run nothing more for it: in your final answer, list the remaining findings shown here and say that 001-return-two-from-the-public needs a human reviewer\n\nDetail: `visp pr --full --feature 001-return-two-from-the-public` adds the full handoff document; `--json` gives this record as data; `visp ui` shows it under Evidence; raw records are in `.visp/features/001-return-two-from-the-public/`.\n",
     "record": {
       "version": 1,
       "feature": "001-return-two-from-the-public",
@@ -148,8 +148,7 @@ $ visp pr --json
         "testerNetworkCommands": 0
       },
       "next": {
-        "objective": "The independent review budget is spent. Run visp pr (it prints the evidence record and changes and pushes nothing); the remaining findings go to a human reviewer",
-        "command": "visp pr --feature 001-return-two-from-the-public"
+        "objective": "The independent review budget is spent. Run nothing more for it: in your final answer, list the remaining findings shown here and say that 001-return-two-from-the-public needs a human reviewer"
       },
       "readAt": "<TIME>"
     },
@@ -162,11 +161,10 @@ $ visp pr --json
       "mayEdit": true,
       "action": "fix",
       "completion": "handoff",
-      "command": "visp pr --feature 001-return-two-from-the-public",
-      "objective": "The independent review budget is spent. Run visp pr (it prints the evidence record and changes and pushes nothing); the remaining findings go to a human reviewer",
+      "objective": "The independent review budget is spent. Run nothing more for it: in your final answer, list the remaining findings shown here and say that 001-return-two-from-the-public needs a human reviewer",
       "criticAdvice": {
         "status": "unavailable",
-        "guidance": "Use the recorded findings to choose the next correction; delegate nothing and run no review command. VISP's reviewer cannot review a new version now: Feature critic call budget exhausted; unresolved. Follow `visp next`: it says when to run visp done again and when to hand off with visp pr.",
+        "guidance": "Use the recorded findings to choose the next correction; delegate nothing and run no review command. VISP's reviewer cannot review a new version now: Feature critic call budget exhausted; unresolved. Follow `visp next`: it says when to run visp done again and when the rest goes to a human reviewer.",
         "findings": [
           {
             "dimension": "functional",
@@ -185,8 +183,7 @@ $ visp pr --json
         "comparisons": []
       }
     }
-  },
-  "nextCommand": "visp pr --feature 001-return-two-from-the-public"
+  }
 }
 
 --- stderr

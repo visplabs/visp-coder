@@ -1,9 +1,13 @@
 import { PRODUCT_NAME } from "../core/constants.js";
 import { SOURCE_DELIVERY_GUIDANCE } from "../workflow/delivery-guidance.js";
-import { commandMap } from "./command-guide.js";
+import { COMMAND_GUIDE_PATH, commandMap } from "./command-guide.js";
 
+/**
+ * A new request starts with `feature`. Sending every worker to `next` first cost a turn that
+ * always answered "run visp feature" (leandef2: 4 of 6 lean runs).
+ */
 export const TOOL_ACCESS_GUIDANCE =
-  "Use VISP MCP tools when connected: `visp_next({})`, then `visp_<command>` schemas; otherwise use CLI `visp next`.";
+  "Use VISP MCP tools when connected (`visp_<command>` schemas), otherwise the CLI. A new request starts with `visp feature`; `visp next` resumes one in progress.";
 
 const COMPACT_RULES = `- Keep request with --source-brief; preserve outcomes, expectations and scope.allowed.
 - Edit only what the request needs; never push, install packages or delete unrelated files.
@@ -13,10 +17,10 @@ const COMPACT_RULES = `- Keep request with --source-brief; preserve outcomes, ex
 - Image-file result (render, chart, SVG): give its brief check \`images: [out.png]\` (a PNG or SVG it writes; keep the requested format too) and an experience outcome naming what the picture must show.
 - UI previews (aim line, predicted path): use the real action's function and start point; check with real input. Do not delete or shrink requested content to pass a check.
 - If visp done runs VISP's reviewer, run or delegate no review; visp next waits. Fix findings, rerun done. Run visp critic/review only when visp next prints it.
-- Run done/verify/accept/next/pr in the foreground, alone, with the host's maximum shell timeout: no run_in_background, loop or file redirect. done waits for VISP's reviewer and prints the result. Only feature may be backgrounded (leave it running on blocking hosts). When it prints, run visp work unless --check did; never rerun feature; after kill/error recover by id.
+- Run feature/done/verify/accept/next/pr in the foreground, alone, with the host's maximum shell timeout: no run_in_background, loop or file redirect. done waits for VISP's reviewer and prints the result. If visp.yml sets profile full or worker weak, background feature on blocking hosts. When feature prints, run visp work unless --check did; never rerun feature; after kill/error recover by id.
 - Sandbox denied? Rerun with escalation.
 - Missing product evidence stays unresolved. Report reviewer.context honestly. Do not force extra review rounds.
-- Before the final answer, run \`visp next\`; respect execution refusals.`;
+- Before the final answer, reach next action complete or a handoff in a done/accept/next reply (report what it lists as open); respect execution refusals.`;
 
 const RULES_FOR_AGENTS = `- The original request and independent acceptance expectations cannot be weakened by a method revision.
   An explicit intent change records the reason and provenance; it is not proof of human authorization.
@@ -47,7 +51,7 @@ ${TOOL_ACCESS_GUIDANCE}
 
 ## The loop
 
-Loop: \`visp work\` → implement → \`visp done\` → \`visp next\`, one slice at a time. Run \`visp accept\` only when \`visp next\` directs it.
+Loop: \`visp work\` → implement → \`visp done\` → its next step, one slice at a time. Run \`visp accept\` only when a next step directs it.
 Start: \`visp feature "<goal>" --check "<test command>" --source-brief -\` with a quoted heredoc for the request. It records the request and works all of it as one slice; without \`--check\`, run \`visp work --check "<test command>"\` next. Plan several slices with \`visp brief --template\` only for independently usable parts.
 
 ## Rules
@@ -59,17 +63,17 @@ ${RULES_FOR_AGENTS}
 
 The authored working brief is \`.visp/features/<id>/brief.yaml\`. Use brief to update it.
 VISP generates other workflow records and reviewer summaries. Historical artifacts remain readable.
-Command examples, dispatch and recovery: VISP.commands.md.
-Read \`visp.yml\` for project settings; obtain authorization before changing project policy.
+Command examples, dispatch and recovery, when you need them: ${COMMAND_GUIDE_PATH}.
+\`visp.yml\` holds project policy; obtain authorization before changing it.
 `;
 }
 
 export function renderPointerGuide(fullGuide: string): string {
-  return `This project uses \`visp\`. Run \`${PRODUCT_NAME} next\`; use \`${PRODUCT_NAME} work\` before editing.
+  return `This project uses \`visp\`. Start a new request with \`${PRODUCT_NAME} feature\`, resume one with \`${PRODUCT_NAME} next\`; use \`${PRODUCT_NAME} work\` before editing.
 
 ${commandMap(false)}
 
-Command examples and recovery: VISP.commands.md. Full guide: ${fullGuide}
+Command examples and recovery: ${COMMAND_GUIDE_PATH}. Full guide: ${fullGuide}
 `;
 }
 
@@ -77,11 +81,11 @@ export function renderMinimalGuide(): string {
   return `# visp
 
 First: \`visp feature "<goal>" --check "<test command>" --source-brief - <<'REQUEST'\` (request, then REQUEST): records the request and works it as one slice. \`visp brief --template\` for many slices.
-Loop: \`visp work\` → implement → \`visp done\` → \`visp next\`. Run \`visp accept\` only when \`visp next\` directs it.
+Loop: \`visp work\` → implement → \`visp done\` → its next step. Run \`visp accept\` only when a next step directs it.
 
 ${COMPACT_RULES}
 
-VISP generates records; see VISP.commands.md.
+VISP generates records. Only if a command fails: ${COMMAND_GUIDE_PATH}.
 `;
 }
 

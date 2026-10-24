@@ -273,6 +273,7 @@ function compactVerificationText(
     .map((outcome) => `${outcome.id}: behavior ${outcome.behavior}; review ${outcome.review}`);
   // The hint is an instruction, not data: JSON escapes its quotes and bounding cuts it.
   const { hint, ...pinned } = object(data.pinnedTests) as { hint?: unknown };
+  const findings = shownFindings(plan.findings, object(data.critic).findings);
   const summary = {
     feature: data.feature,
     task: data.task,
@@ -293,26 +294,71 @@ function compactVerificationText(
     requirements: data.requirements,
     flipExtraMs: data.flipDurationMs,
     unresolved,
-    gaps: closureGaps(data.gaps, unresolved),
-    findings:
-      Array.isArray(plan.findings) && plan.findings.length ? bounded(plan.findings) : undefined,
+    gaps: closureGaps(data.gaps, unresolved, findings.ids),
+    findings: findings.own.length ? bounded(findings.own) : undefined,
     acceptanceTests: data.acceptanceTests ? bounded(data.acceptanceTests) : undefined,
     pinnedTests: Object.keys(pinned).length ? bounded(pinned) : undefined,
     critic: data.critic ? bounded(data.critic) : undefined,
     nextProbe: plan.nextProbe ? bounded(object(plan.nextProbe).question) : undefined,
-    next: data.next
-      ? { action: next.action, objective: next.objective, command: next.command }
-      : undefined,
+    next: data.next ? nextSummary(next, findings.lines) : undefined,
   };
   const hintLine = typeof hint === "string" && hint ? `\n${hint}` : "";
   return `${name}: ${JSON.stringify(summary)}${hintLine}\n${WORDING[channel].detail} Tool success does not imply product acceptance.`;
 }
 
+/**
+ * The next step. A handoff is the end of the worker's loop, so it carries what is still open:
+ * the worker reports it from this reply instead of running `visp next` and `visp pr` for it.
+ */
+function nextSummary(next: Record<string, unknown>, shown: ReadonlySet<string>) {
+  const step = { action: next.action, objective: next.objective, command: next.command };
+  if (next.completion !== "handoff") return step;
+  const evidence = Array.isArray(next.evidence)
+    ? [...new Set(next.evidence)].filter((entry) => !shown.has(String(entry)))
+    : [];
+  return {
+    ...step,
+    completion: next.completion,
+    ...(evidence.length ? { open: boundedRows(evidence) } : {}),
+  };
+}
+
+/**
+ * Each finding once. A `done` reply printed every finding three times: as a closure gap, as an
+ * open finding with its recheck, and as the reviewer's finding (four with a handoff). The
+ * reviewer's `{problem, nextCheck, required}` stays; an open finding the review did not return
+ * (an earlier review's) stays whole; gaps and handoff lines that repeat a shown finding go.
+ */
+function shownFindings(open: unknown, reviewed: unknown) {
+  const reviewedProblems = new Set(rows(reviewed).map((finding) => finding.problem));
+  const findings = rows(open);
+  const own = findings.filter((finding) => !reviewedProblems.has(finding.problem));
+  const shown = [
+    ...findings.filter((finding) => reviewedProblems.has(finding.problem)),
+    ...own.slice(0, 5),
+  ];
+  return {
+    own,
+    ids: new Set(shown.map((finding) => String(finding.id))),
+    lines: new Set(
+      [...shown, ...rows(reviewed)].map(
+        (finding) => `${finding.problem}. Next check: ${finding.nextCheck}`,
+      ),
+    ),
+  };
+}
+
 /** Gaps repeat outcome statuses first; the actionable environment or scope reason comes last. */
-function closureGaps(gaps: unknown, unresolved: readonly string[]): unknown {
+function closureGaps(
+  gaps: unknown,
+  unresolved: readonly string[],
+  findingIds: ReadonlySet<string> = new Set(),
+): unknown {
   if (!Array.isArray(gaps)) return undefined;
   const shown = new Set(unresolved);
-  const distinct = [...new Set(gaps)].filter((gap) => !shown.has(gap as string));
+  const distinct = [...new Set(gaps)].filter(
+    (gap) => !shown.has(gap as string) && !findingIds.has(String(gap).split(":")[0] ?? ""),
+  );
   if (!distinct.length) return undefined;
   return {
     entries: distinct.slice(0, 12).map(bounded),
