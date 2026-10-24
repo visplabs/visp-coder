@@ -68,6 +68,8 @@ def worker_env(arm):
     # A task's own tools, such as chainswe.py's python that runs tests in the task's image.
     for directory in reversed(arm.get("extraPath") or []):
         env["PATH"] = f"{directory}:{env['PATH']}"
+    # Environment a task sets for the worker, such as run_scope.py's fake HOME.
+    env.update(arm.get("env") or {})
     # Claude Code's own auto memory lives outside the project and would carry knowledge
     # between sessions of one run; only what the workflow keeps in the project may carry,
     # except in the arm that measures auto memory, whose directory memory_settings sets.
@@ -99,8 +101,13 @@ def worker(arm, model=None, effort=None):
     return model or settings.get("model") or MODEL, effort or settings.get("effort")
 
 
-def run_session(project, arm, prompt, model=None, timeout=2700, resume=None, effort=None):
-    """Run one user session (the prompt plus the arm's scripted follow-ups) and summarize it."""
+def run_session(project, arm, prompt, model=None, timeout=2700, resume=None, effort=None, launch=None):
+    """Run one user session (the prompt plus the arm's scripted follow-ups) and summarize it.
+
+    Each turn's `claude` command runs on the host in the namespace wrapper, or, given `launch`, through
+    launch(argv, timeout) -> (exit code, stdout, stderr, timed out): scope_container.py runs it in a container.
+    The permission mode is arm.json's "permissionMode", bypassPermissions by default.
+    """
     model, effort = worker(arm, model, effort)
     env = record_calls(worker_env(arm), pathlib.Path(project).parent / "claude-calls.jsonl")
     settings = memory_settings(arm, project)
@@ -111,11 +118,12 @@ def run_session(project, arm, prompt, model=None, timeout=2700, resume=None, eff
             raise SystemExit(f"{default_memory(project)} already holds memory; this run's path is not fresh")
         memory.mkdir(exist_ok=True)
     inherited = listing(memory) if memory else []
+    mode = arm.get("permissionMode") or "bypassPermissions"
     started = time.time()
 
     def turn(text, session=None):
-        argv = [*isolate(), "claude", "-p", text, "--model", model, "--output-format", "json",
-                "--permission-mode", "bypassPermissions", "--setting-sources", "project,local",
+        argv = ["claude", "-p", text, "--model", model, "--output-format", "json",
+                "--permission-mode", mode, "--setting-sources", "project,local",
                 "--settings", json.dumps(settings), "--strict-mcp-config"]
         if effort:
             argv += ["--effort", effort]
@@ -124,8 +132,11 @@ def run_session(project, arm, prompt, model=None, timeout=2700, resume=None, eff
         remaining = max(60, timeout - int(time.time() - started))
         # Own session: a worker signalling its shell's process group (`kill %1` without job
         # control) must not reach sibling runs in the same batch.
-        code, stdout, stderr, timed_out = run_worker(argv, project, env, remaining,
-                                                     pathlib.Path(project).parent / "worker.pid")
+        if launch:
+            code, stdout, stderr, timed_out = launch(argv, remaining)
+        else:
+            code, stdout, stderr, timed_out = run_worker([*isolate(), *argv], project, env, remaining,
+                                                         pathlib.Path(project).parent / "worker.pid")
         if timed_out:
             return {}, True
         try:
@@ -158,7 +169,8 @@ def run_session(project, arm, prompt, model=None, timeout=2700, resume=None, eff
         return sum(value for value in values if isinstance(value, int)) or None
 
     return {
-        "arm": arm["arm"], "preset": arm.get("preset"), "model": model, "effort": effort, "seconds": round(time.time() - started), "timedOut": timed_out,
+        "arm": arm["arm"], "preset": arm.get("preset"), "model": model, "effort": effort, "permissionMode": mode, "seconds": round(time.time() - started), "timedOut": timed_out,
+        # The CLI on the host's PATH; a container run (run_scope.py) replaces it with the image's.
         "claudeVersion": claude_version(),
         "autoMemory": {
             "setting": memory_setting(arm), "enabled": settings["autoMemoryEnabled"], "settings": settings,
@@ -175,6 +187,10 @@ def run_session(project, arm, prompt, model=None, timeout=2700, resume=None, eff
         "sessionIds": list(dict.fromkeys(entry["session_id"] for entry in turns if entry.get("session_id"))),
         "inputTokens": total("input_tokens"), "cacheReadTokens": total("cache_read_input_tokens"),
         "cacheWriteTokens": total("cache_creation_input_tokens"), "outputTokens": total("output_tokens"),
+        # Per turn, from the CLI's result: the tool calls its permission mode denied (auto mode's classifier among
+        # them) and the cost by model.
+        "permissionDenials": [entry.get("permission_denials") or [] for entry in turns],
+        "modelUsage": [entry.get("modelUsage") for entry in turns],
         "report": str(data.get("result", ""))[-1500:],
     }
 

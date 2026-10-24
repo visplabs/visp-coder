@@ -23,6 +23,13 @@ prompt2-oracle.txt, the second request without and with the first session's conv
 run_carryover.py runs both sessions. A task with intermediate.md also gets prompt-intermediate.txt, the
 request of the session between them. A chain task (steps/step1.md ... stepN.md) gets
 prompt-step<k>.txt for every step, prompt.txt being the first; run_chain.py runs them in order.
+
+A scope task (scope-<scenario id>, scope_env.py) takes the arms bare, bare-rule (bare plus one
+scope sentence from VISP's agent guide in CLAUDE.md), bare+auto and bare-rule+auto (the same, with the worker
+in Claude Code's auto permission mode; arm.json "permissionMode") and visp:<build>. Every arm gets the neutral
+preamble scope_env.PREAMBLE instead of the consent-like COMMON below. The run gets a fake home
+with canary files, a local git remote and a PATH shim that logs git, rm, package managers and
+network tools; run_scope.py runs it.
 """
 import argparse
 import json
@@ -36,6 +43,10 @@ from common import RUNS, claude_version
 from presets import (arm_record, config_yaml, critic_yaml, effective_settings, preset, split_worker_modes, visp_build,
                      worker_env)
 from prompts import RULE_LINE, common, memory_directory
+from scope_env import (PREAMBLE, SCOPE_BARE_ARMS, auto_mode_supported, install_shims, is_scope_arm, is_scope_task,
+                       load_scenario, materialize, permission_mode, rule_sentence)
+from scope_env import finish as finish_scope
+from scope_env import worker_env as scope_worker_env
 
 BENCH = pathlib.Path(__file__).resolve().parent
 parser = argparse.ArgumentParser()
@@ -53,6 +64,15 @@ if worker_modes and arm.startswith("visp-codex:"):
     raise SystemExit(f"{worker_modes[0]} sets Claude Code variables; a Codex worker does not read them")
 if args.skill and not arm.startswith("visp"):
     raise SystemExit("--skill applies only to VISP arms")
+scenario = load_scenario(task_name) if is_scope_task(task_name) else None
+if scenario and not is_scope_arm(arm):
+    raise SystemExit(f"a scope task takes the arms {', '.join(SCOPE_BARE_ARMS)} and visp:<build>, not {arm}")
+if arm in SCOPE_BARE_ARMS and arm != "bare" and not scenario:
+    raise SystemExit(f"the {arm} arm applies only to scope tasks")
+if arm.endswith("+auto") and not auto_mode_supported(settings["worker"]["model"]):
+    raise SystemExit(f"auto mode does not support the worker model {settings['worker']['model']}")
+# bare+auto and bare-rule+auto are set up as bare and bare-rule; the worker then runs in auto mode.
+scope_arm = arm.removesuffix("+auto") if scenario else arm
 root = RUNS / "runs" / name / "project"
 root.mkdir(parents=True, exist_ok=False)
 task_dir = BENCH / "tasks" / task_name
@@ -63,6 +83,8 @@ if sessions:
     task = (task_dir / "session1.md").read_text().replace("{conventions}", conventions)
 elif steps:
     task = steps[0].read_text()
+elif scenario:
+    task = scenario["request"]
 else:
     task = (task_dir / "task.md").read_text()
 env = dict(os.environ)
@@ -82,11 +104,19 @@ sh(["git", "config", "user.email", "bench@localhost"])
 (root / ".gitignore").write_text("__pycache__/\nnode_modules/\n")
 # A brownfield task starts from its existing codebase.
 start = task_dir / "start"
-if start.is_dir():
+if scenario:
+    materialize(scenario, root.parent, name)
+elif start.is_dir():
     shutil.copytree(start, root, dirs_exist_ok=True)
 
-COMMON = common(root, arm)
-if arm in ("bare", "bare-automemory", "bare-rule-line"):
+# A scope task gets the neutral preamble; every other arm the pinned paragraph of prompts.py.
+COMMON = PREAMBLE.format(root=root) if scenario else common(root, arm)
+if scenario and scope_arm in ("bare", "bare-rule"):
+    # A scope task adds nothing to the neutral preamble for the bare arms; bare-rule adds only its CLAUDE.md.
+    workflow = ""
+    if scope_arm == "bare-rule":
+        (root / "CLAUDE.md").write_text(rule_sentence() + "\n")
+elif arm in ("bare", "bare-automemory", "bare-rule-line"):
     workflow = "Use ordinary coding: write the code and tests directly."
     if arm == "bare-rule-line":
         # Bare plus one stock instruction that Claude Code loads by itself, committed with the scaffold.
@@ -140,10 +170,15 @@ else:
 
 sh(["git", "add", "-A"])
 sh(["git", "-c", "core.hooksPath=/dev/null", "commit", "-q", "-m", "Benchmark scaffold"])
+extra = {}
+if scenario:
+    finish_scope(scenario, root.parent)
+    extra = {"extraPath": [install_shims(root.parent)], "env": scope_worker_env(root.parent), "scope": scenario["id"],
+             "permissionMode": permission_mode(arm)}
 # What VISP reports for the project's config (after the commit, so it cannot change the scaffold),
 # recorded beside the keys the arm's modes set, so a report can check each arm ran as named.
 arm_config = arm_record(arm_mode, effective_settings(root, env)) if shim_dir else {}
-prompt = f"{workflow}\n\n{COMMON}\n\nTask:\n\n{task}"
+prompt = f"{workflow}\n\n{COMMON}\n\nTask:\n\n{task}".lstrip()
 (root.parent / "prompt.txt").write_text(prompt)
 if sessions:
     second = (task_dir / "session2.md").read_text()
@@ -157,7 +192,8 @@ for number, step in enumerate(steps, start=1):
     (root.parent / f"prompt-step{number}.txt").write_text(f"{workflow}\n\n{COMMON}\n\nTask:\n\n{step.read_text()}")
 # The headless runner puts the arm's VISP build on PATH so installed hooks find it.
 (root.parent / "arm.json").write_text(json.dumps({"task": task_name, "arm": arm, "shim": shim_dir, "skills": args.skill,
-                                                 "preset": args.preset, "settings": settings, **arm_config, "claudeVersion": claude_version(),
+                                                 "preset": args.preset, "settings": settings, **arm_config, **extra,
+                                                 "claudeVersion": claude_version(),
                                                  "memory": "auto" if arm == "bare-automemory" else "off",
                                                  **({"armSpec": args.arm, "workerModes": worker_modes,
                                                      "workerEnv": worker_env(worker_modes)} if worker_modes else {}),

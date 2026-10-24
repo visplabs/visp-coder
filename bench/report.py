@@ -65,11 +65,13 @@ import sys
 import carry
 from chains import is_chain, run_summary
 from common import RUNS
+import scope_report
 from diffscope import run_scope
 from judge import CHECKLISTS, GAMES
 from presets import arm_title, mode_config, mode_difference, scalar, split_worker_modes, visp_build, worker_env
 from probe import has_probes, summarize as probe_summary
 from runfacts import final_project, invalid, is_finished, mark_if_invalid, sessions, timing, transcripts
+from scope_env import is_scope_task
 
 BENCH = pathlib.Path(__file__).resolve().parent
 SLOWER = 0.15
@@ -87,6 +89,8 @@ def load(path):
 
 def required(task):
     """The scores a task kind must have for every valid run."""
+    if is_scope_task(task):
+        return []  # judged by scope_report.py, not by hidden checks or judges
     needed = []
     if (BENCH / "tasks" / task / "hidden_test.py").exists():
         needed.append("hidden")
@@ -179,6 +183,8 @@ def call_costs(run):
 
 
 def facts(entry):
+    if is_scope_task(entry["task"]):
+        return scope_report.facts(entry)
     run = RUNS / "runs" / entry["name"]
     results = [load(path) or {} for _, path in sessions(run)]
     project = final_project(run)
@@ -511,6 +517,20 @@ def markdown(manifest, rows, groups, comparisons, excluded, unfinished, show_run
     return "\n".join(out) + "\n"
 
 
+def scope_header(manifest, scope_rows, excluded, unfinished):
+    """The heading of a batch made only of scope runs, with its invalid and unfinished runs."""
+    worker = manifest["settings"]["worker"]
+    out = [f"## Batch {manifest['batch']} (preset {manifest['preset']})", "",
+           f"Worker {worker['model']} ({worker['effort'] or 'default effort'}); {len(scope_rows)} scope runs with a "
+           f"verdict; {len(excluded)} invalid runs excluded; {len(unfinished)} unfinished."]
+    out += [f"**Warning:** {warning}" for warning in version_warnings(manifest)]
+    if excluded:
+        out += ["", "Invalid runs, excluded:", ""] + [f"- {name}: {reason}" for name, reason in excluded]
+    if unfinished:
+        out += ["", "Unfinished runs (no result), excluded:", ""] + [f"- {name}" for name in unfinished]
+    return "\n".join(out) + "\n"
+
+
 def refusal_split(row):
     """Hook refusals of one run as edit/done/other; – for a run without transcripts."""
     if row["refusals"] is None:
@@ -655,10 +675,10 @@ def cross(specs, score=False, score_jobs=3):
                          + "; ".join(f"{name}: {j}" for name, j in judges.items()))
     tasks = []
     for name, _ in arms:
-        tasks += [t for t in batches[name][0]["tasks"] if t not in tasks]
+        tasks += [t for t in batches[name][0]["tasks"] if t not in tasks and not is_scope_task(t)]
     groups, totals = {}, {}
     for name, arm in arms:
-        rows = [r for r in batches[name][1] if r["arm"] == arm]
+        rows = [r for r in batches[name][1] if r["arm"] == arm and not r.get("scope")]
         totals[f"{name}:{arm}"] = cross_summary(rows)
         for task in tasks:
             if task in batches[name][0]["tasks"]:
@@ -762,20 +782,29 @@ def main():
         print(carry.markdown(manifest, rows))
         return
     labels = [arm["label"] for arm in manifest["arms"]]
+    scope_rows = [r for r in rows if r.get("scope")]
+    rows = [r for r in rows if not r.get("scope")]
+    task_names = [task for task in manifest["tasks"] if not is_scope_task(task)]
     groups = {}
-    for task in manifest["tasks"]:
+    for task in task_names:
         for label in labels:
             groups[(task, label)] = summarize([r for r in rows if r["task"] == task and r["arm"] == label],
                                               required(task))
     base = args.base or labels[0]
     comparisons = {}
     for cand in labels:
-        if cand == base:
+        if cand == base or not task_names:
             continue
-        tasks = {task: compare(groups[(task, base)], groups[(task, cand)], base, cand) for task in manifest["tasks"]}
+        tasks = {task: compare(groups[(task, base)], groups[(task, cand)], base, cand) for task in task_names}
         comparisons[cand] = {"base": base, "passed": all(t["status"] == "pass" for t in tasks.values()),
                              "tasks": tasks}
-    text = markdown(manifest, rows, groups, comparisons, excluded, unfinished, args.runs)
+    if task_names:
+        text = markdown(manifest, rows, groups, comparisons, excluded, unfinished, args.runs)
+    else:
+        text = scope_header(manifest, scope_rows, excluded, unfinished)
+    scope_summary = scope_report.report(scope_rows, labels, base) if scope_rows else None
+    if scope_summary:
+        text += "\n".join(scope_report.markdown(scope_summary, labels, scope_rows if args.runs else None)) + "\n"
     if args.pairwise:
         import pairwise  # imported here: it reads the judge's images, which --score writes first
 
@@ -788,13 +817,13 @@ def main():
               "arms": [{"label": label, "arm": spec, "title": arm_title(spec),
                         "modeConfig": mode_config(visp_build(spec)[1]) if is_visp(spec) else {}}
                        for label, spec in arm_specs(manifest).items()],
-              "runs": rows,
+              "runs": rows + scope_rows,
               "groups": [{"task": task, "arm": arm, **summary} for (task, arm), summary in groups.items()],
               "comparisons": {cand: {**result, "tasks": {
                   task: {**verdict, "checks": [dict(zip(fields, check)) for check in verdict["checks"]]}
                   for task, verdict in result["tasks"].items()}} for cand, result in comparisons.items()},
               "invalid": [{"run": name, "reason": reason} for name, reason in excluded],
-              "unfinished": unfinished, "warnings": version_warnings(manifest)}
+              "unfinished": unfinished, "scope": scope_summary, "warnings": version_warnings(manifest)}
     (args.json or directory / "report.json").write_text(json.dumps(report, indent=2))
 
 
