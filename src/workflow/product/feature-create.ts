@@ -1,4 +1,4 @@
-import type { CriticConfig } from "../../config/critic.js";
+import { type CriticConfig, launchesReviewer } from "../../config/critic.js";
 import { resolveCriticPolicyDetails } from "../../config/critic-defaults.js";
 import { vispError } from "../../core/errors.js";
 import {
@@ -309,16 +309,22 @@ function featureCritic(
   profile: FeatureProfile,
   resolved: { policy: FeatureCriticPolicy; sources: { mode: { source: string } } },
   workspace: WorkspaceState,
-): FeatureCriticPolicy & { leanOff?: true } {
+): FeatureCriticPolicy & { leanOff?: true; acceptOnChecks?: true } {
   const { policy } = resolved;
-  if (profile.name !== "lean" || !policy.config) return policy;
+  if (profile.name !== "lean") return policy;
+  // `critic.mode: off` with a reviewer VISP would launch: none will come, so the checks decide
+  // acceptance. In B2's reviewer-off arm accept kept asking for VISP's assessment and workers
+  // looped on it. Without a launched reviewer, next still hands the review to the host.
+  if (!policy.enabled && !policy.manual && launchesReviewer(workspace.config.critic))
+    return { ...policy, acceptOnChecks: true };
+  if (!policy.config) return policy;
   // B2 measured Claude Code with a Haiku worker only; other hosts keep their pinned reviewer.
   if (
     resolved.sources.mode.source === "built-in" &&
     policy.enabled &&
     policy.config.harness === "claude-code"
   )
-    return { ...policy, enabled: false, leanOff: true };
+    return { ...policy, enabled: false, leanOff: true, acceptOnChecks: true };
   return { ...policy, config: leanCriticConfig(workspace, policy.config) };
 }
 
@@ -327,10 +333,12 @@ function criticStateFields(critic: {
   manual?: boolean;
   config?: ProductState["criticDefault"];
   leanOff?: true;
+  acceptOnChecks?: true;
 }) {
   return {
     criticEnabled: critic.enabled,
     ...(critic.leanOff ? { criticLeanOff: true } : {}),
+    ...(critic.acceptOnChecks ? { criticAcceptOnChecks: true } : {}),
     ...(critic.manual ? { criticManual: true } : {}),
     ...(critic.config ? { criticDefault: critic.config } : {}),
   };

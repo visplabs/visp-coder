@@ -110,9 +110,11 @@ export function changeEscalation(
 export function escalatedReviewer(
   workspace: WorkspaceState,
   record: ProfileSubject & { readonly state: Pick<ProductState, "criticLeanOff"> },
-): Pick<ProductState, "criticEnabled" | "criticLeanOff"> | Record<string, never> {
+):
+  | Pick<ProductState, "criticEnabled" | "criticLeanOff" | "criticAcceptOnChecks">
+  | Record<string, never> {
   if (!record.state.criticLeanOff || featureProfile(workspace, record).name !== "full") return {};
-  return { criticEnabled: true, criticLeanOff: undefined };
+  return { criticEnabled: true, criticLeanOff: undefined, criticAcceptOnChecks: undefined };
 }
 
 /**

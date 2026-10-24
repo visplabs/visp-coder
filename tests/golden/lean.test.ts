@@ -192,6 +192,32 @@ it("runs no reviewer on a lean feature when no critic mode is set", async () => 
   expect(await reviews()).toEqual([]);
 });
 
+// B2's reviewer-off arm set `critic.mode: off` and accept still asked for a reviewer
+// assessment: workers spent 11.8 turns after the last done, against 4.5 with the reviewer.
+it("accepts a lean feature on its checks when critic.mode is explicitly off", async () => {
+  project = await GoldenProject.create({
+    harness: "claude-code",
+    critic: { harness: "claude-code", launch: "claude-exec", mode: "off" },
+  });
+  await models.plan({ reviews: ["satisfied"] });
+  const run = new Recorder(project, "lean/reviewer-off-explicit");
+  await run.cli("01-feature-check", [
+    "feature",
+    GOAL,
+    "--check",
+    "node checks/value.check.mjs",
+    "--source-brief",
+    REQUEST,
+  ]);
+  await models.clear();
+  await project.setValue(2);
+  await run.cli("02-done", ["done"]);
+  const accepted = await run.cli("03-accept", ["accept"]);
+  expect(accepted.exitCode).toBe(0);
+  expect(accepted.stdout).toContain('"status":"accepted"');
+  expect(await reviews()).toEqual([]);
+});
+
 // A feature that leaves lean (here a check failed on two versions) gets the full loop's reviewer.
 it("turns the reviewer on when a lean feature escalates to the full profile", async () => {
   project = await GoldenProject.create({ harness: "claude-code", ...LAUNCH_ONLY });
