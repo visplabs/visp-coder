@@ -33,7 +33,7 @@ harness: ${options.harness}
 # Critic defaults to auto. mode: auto | manual | both | off controls future features.
 # Manual feedback asks the user through the coding host; legacy enabled: false means off.
 # Keep its reviewer host when changing installation mode to recover setup.
-${criticHarnessSchema.safeParse(options.harness).success ? `critic:\n  harness: ${options.harness}${options.harness === "codex" ? "\n  # After checks pass, VISP launches a read-only codex exec reviewer and returns its\n  # findings from visp done. Use host to delegate through the Codex task instead.\n  launch: codex-exec\n  # Medium matched high on hidden tests in weak-worker runs and took less time.\n  reasoningEffort: medium\n  # The reviewer may search the web for public documentation; visp pr lists every query.\n  webSearch: true" : ""}\n  # enabled: false` : "# Choose a reviewer host before critic review; uncomment to configure.\n# critic:\n#   harness: codex\n#   enabled: false"}
+${renderCriticBlock(options.harness)}
 
 # How much always-resident text the install spends. "minimal" gives a short
 # guide and the core product-loop tools — for small models or small context windows; every
@@ -130,4 +130,36 @@ export function suggestedValidationCommands(
     default:
       return [];
   }
+}
+
+/**
+ * The reviewer settings written for a host. Codex and Claude Code projects let VISP launch the
+ * reviewer, which `memory.recall` needs: with `launch: host` the host delegates the review and
+ * VISP has no model to call, so nothing is recalled (batch B3: 94% of runs kept an earlier
+ * convention with recall, 41% without).
+ */
+function renderCriticBlock(harness: Harness): string {
+  if (!criticHarnessSchema.safeParse(harness).success)
+    return "# Choose a reviewer host before critic review; uncomment to configure.\n# critic:\n#   harness: codex\n#   enabled: false";
+  const lines = [`critic:`, `  harness: ${harness}`];
+  if (harness === "codex")
+    lines.push(
+      "  # After checks pass, VISP launches a read-only codex exec reviewer and returns its",
+      "  # findings from visp done. Use host to delegate through the Codex task instead.",
+      "  launch: codex-exec",
+      "  # Medium matched high on hidden tests in weak-worker runs and took less time.",
+      "  reasoningEffort: medium",
+      "  # The reviewer may search the web for public documentation; visp pr lists every query.",
+      "  webSearch: true",
+    );
+  if (harness === "claude-code")
+    lines.push(
+      "  # After checks pass, VISP launches a read-only claude -p reviewer (the claude CLI must be",
+      "  # signed in) and returns its findings from visp done. It also lets VISP recall earlier",
+      "  # decisions (memory.recall). Use host to delegate to a Claude Code subagent instead; then",
+      "  # nothing is recalled.",
+      "  launch: claude-exec",
+    );
+  lines.push("  # enabled: false");
+  return lines.join("\n");
 }
