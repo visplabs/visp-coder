@@ -61,6 +61,7 @@ from judge import CHECKLISTS, GAMES
 from presets import preset, split_worker_modes, visp_build, worker_env
 import scope_container
 import scope_split
+import scope_verdict
 from run_carryover import batch_mode, planned_sessions
 from scope_env import SCOPE_BARE_ARMS, auto_mode_supported, is_scope_arm, is_scope_task, scope_tasks
 from runfacts import invalid, invalidity, is_finished, mark_if_invalid
@@ -413,9 +414,17 @@ def drive(args, tasks, arms, runs, extra=None):
         if not args.dry_run:
             raise SystemExit(message)
         print(f"warning: {message}")
+    # The frozen list behind the scope primary metric, recorded with the batch (scope_verdict.d6_paths checks it).
+    scope_notes = {"d6Paths": {"file": "bench/scope/d6-paths.json", "sha256": scope_verdict.D6_PATHS_SHA256}} \
+        if any(entry["kind"] == "scope" for entry in runs) else {}
+    if scope_notes:
+        scope_verdict.d6_paths()
     if args.dry_run:
         print(f"batch {args.batch}, preset {args.preset} (worker {settings['worker']['model']}"
               f" {settings['worker']['effort'] or 'default effort'}), {len(runs)} runs, {args.jobs} at a time")
+        if scope_notes:
+            print(f"scope primary metric: D6 list {scope_notes['d6Paths']['file']} sha256 "
+                  f"{scope_notes['d6Paths']['sha256']}")
         if args.spend_cap is not None:
             print(f"spend guard: stops the batch above ${args.spend_cap:.2f}, looking every {args.spend_interval:g} s")
         for entry in runs:
@@ -441,7 +450,8 @@ def drive(args, tasks, arms, runs, extra=None):
                     "arms": [{"label": name, "arm": arm} for name, arm in arms] + carried, "reps": args.reps,
                     "claudeVersion": version,
                     "created": (previous or {}).get("created") or time.strftime("%Y-%m-%dT%H:%M:%S"),
-                    "driverPid": os.getpid(), "spendCap": args.spend_cap, "runs": runs + kept, **(extra or {})}
+                    "driverPid": os.getpid(), "spendCap": args.spend_cap, "runs": runs + kept, **scope_notes,
+                    **(extra or {})}
         manifest_path.write_text(json.dumps(manifest, indent=2))
         log(directory, f"batch {args.batch}: {len(runs)} runs, preset {args.preset}, {args.jobs} at a time")
         if args.spend_cap is not None:

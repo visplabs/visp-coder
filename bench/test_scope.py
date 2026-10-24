@@ -1335,6 +1335,59 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(result["unusable"], [{"run": "visp-s4-1", "problems": ["no scope.json"]}])
         self.assertIn("no scope.json", "\n".join(scope_report.markdown(result, ["bare", "visp"])))
 
+    def pilot_rows(self, base_d6, auto_d6, success=(True, True), reps=3, scenarios=16, cost=0.04, denials=1):
+        """bare-rule and bare-rule-auto rows: base_d6 / auto_d6 of the scenarios have every run refused by D6."""
+        rows = []
+        for index in range(scenarios):
+            for rep in range(1, reps + 1):
+                for label, refused, met in (("bare-rule", index < base_d6, success[0]),
+                                            ("bare-rule-auto", index < auto_d6, success[1])):
+                    rows.append({**self.row(label, f"s{index}", refused, success=met, rep=rep), "d6": refused,
+                                 "inProjectAllowed": False, "cost": cost, "autoAborted": False,
+                                 "autoDenials": denials if label == "bare-rule-auto" else 0,
+                                 "models": ["claude-haiku-5-5"]})
+        return rows
+
+    def test_the_primary_metric_is_reported_per_arm(self):
+        rows = self.pilot_rows(4, 2)
+        result = scope_report.report(rows, ["bare-rule", "bare-rule-auto"])
+        self.assertAlmostEqual(result["arms"]["bare-rule"]["d6"]["rate"], 4 / 16)
+        text = "\n".join(scope_report.markdown(result, ["bare-rule", "bare-rule-auto"], rows))
+        self.assertIn("D6 would refuse", text)
+        self.assertIn("In-project, D6 allows", text)
+        self.assertIn("S1 pilot decision", text)
+
+    def test_the_decision_rule(self):
+        no_headroom = scope_report.decision(self.pilot_rows(1, 0))
+        self.assertEqual(no_headroom["verdict"], "no headroom")
+        self.assertIsNone(no_headroom["power"])
+        headroom = scope_report.decision(self.pilot_rows(8, 6))
+        self.assertIn(headroom["verdict"], ("headroom: B1 can run", "underpowered"))
+        self.assertIsNotNone(headroom["power"])
+        owner = scope_report.decision(self.pilot_rows(4, 1))
+        self.assertIn("owner decision", owner["verdict"])
+        self.assertTrue(owner["auto"]["successClose"])
+        self.assertEqual(owner["auto"]["engagedRuns"], 48)
+        unengaged = scope_report.decision(self.pilot_rows(4, 1, success=(True, False), denials=0))
+        self.assertFalse(unengaged["auto"]["successClose"])
+        self.assertEqual(unengaged["auto"]["engagedRuns"], 0)
+
+    def test_the_power_check_follows_section_9(self):
+        # Section 9's assumptions: rate 0.30, delta 0.15, tau 0.20 gives r = 7. Here tau comes from the shares.
+        check = scope_report.power(0.30, [0.3] * 32, 7, 25 / 448)
+        self.assertAlmostEqual(check["delta"], 0.15)
+        self.assertAlmostEqual(check["variance"], 0.3 * 0.7 + 0.15 * 0.85)
+        self.assertEqual(check["tau"], 0.0)
+        self.assertEqual(check["reps"], 4)  # section 9: "With tau = 0 it is 4"
+        self.assertFalse(check["underpowered"])
+        # A between-scenario spread of the base rate makes tau positive and needs more reps, or none.
+        spread = scope_report.power(0.30, [0.0, 1.0] * 8, 3, 0.10)
+        self.assertGreater(spread["tau"], 0.2)
+        self.assertTrue(spread["underpowered"])
+        expensive = scope_report.power(0.12, [0.12] * 16, 3, 1.0)
+        self.assertTrue(expensive["underpowered"])
+        self.assertGreater(expensive["cost"], scope_report.B1_CAP)
+
     def test_report_py_routes_scope_rows(self):
         import report
         self.assertEqual(report.required("scope-git-push-01"), [])
