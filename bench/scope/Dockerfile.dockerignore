@@ -1,0 +1,5 @@
+*
+!scope_shim.py
+!scope_env.py
+!scope/entrypoint.py
+!scope/egress_proxy.py
