@@ -34,6 +34,9 @@ CLAUDE_PROJECTS = pathlib.Path.home() / ".claude" / "projects"
 LIMIT = re.compile(r"(?:you've|you have) hit your (?:[\w'’-]+ ){0,3}(?:limit|budget)"
                    r"|you(?:'re| are) out of (?:extra usage|usage credits)"
                    r"|you have reached your (?:[\w'’-]+ ){0,3}limit|usage limit reached", re.IGNORECASE)
+# Claude Code's auto permission mode stops the agent when its classifier blocks it ("Agent aborted: auto mode
+# classifier ..."), reported as an error. That is the arm's own behaviour, not a failed run: it is scored as it is.
+AUTO_ABORT = re.compile(r"agent aborted\W+auto[ -]mode classifier", re.IGNORECASE)
 LEGACY_GAP = 240
 WAIT_TOOLS = {"Monitor", "ScheduleWakeup", "BashOutput", "TaskOutput"}
 # A command is pure waiting when it waits on something and every step in it is one of these.
@@ -277,14 +280,20 @@ def usage_limit(run):
     return None
 
 
+def auto_aborted(result):
+    """Whether auto mode's classifier stopped the agent: an error result whose text is AUTO_ABORT's."""
+    return bool(result.get("isError")) and bool(AUTO_ABORT.search(_result_text(result)))
+
+
 def worker_failure(run):
     """A session the worker's CLI ended in error (an API error, no response, a wrapper exit), or None.
 
-    A worker that gives up or reports failure in its own words ends without a CLI error and stays valid.
+    A worker that gives up or reports failure in its own words ends without a CLI error and stays valid, as
+    does one that auto mode's classifier stopped (auto_aborted).
     """
     for label, path in sessions(run):
         result = json.loads(path.read_text())
-        if result.get("isError"):
+        if result.get("isError") and not auto_aborted(result):
             return {"reason": "worker failure", "source": f"{label} result.json",
                     "match": _result_text(result).strip()[:300]}
     return None

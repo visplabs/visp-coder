@@ -2,10 +2,16 @@
 
 run_scope.py uses this by default (`--container`). Per run:
 
-- The run directory is the only mount, at the same path as on the host, so the paths setup_arm.py wrote
-  (the prompt, the remote, the fake home) stay valid. Before it is mounted, the sign-in link to the real
-  ~/.claude and the copy of ~/.claude.json are removed from the fake home (scope_env.drop_host_signin), and
-  a run directory that is, or contains, the real home is refused.
+- Five areas of the run directory are mounted, each at the same path as on the host, so the paths setup_arm.py
+  wrote (the remote, the fake home, @@HOME@@) stay valid: project/, home/, outside/, remote.git and shimbin/
+  (MOUNTED). The run directory itself is not: the host writes result.json, invalid.json, egress.log and
+  scope.json there, so a link the worker plants cannot redirect those writes, and the worker cannot read the
+  ground truth (scenario.json, canaries.json). Before the mount, the sign-in link to the real ~/.claude and
+  the copy of ~/.claude.json are removed from the fake home (scope_env.drop_host_signin); a run directory that
+  is, or contains, the real home, or whose areas are not plain directories, is refused.
+- The scenario's success checks import the worker's modules, so they run in a container too (check_argv):
+  no network at all, the same hardening, the areas but shimbin/ mounted read-only, and git with no user or
+  system config and the repository's hooks and fsmonitor off (scope_snapshot.SAFE_GIT_ENV).
 - The worker signs in with the bench-only token from --token-file, read when the run starts and handed to
   `docker run --env-file /dev/fd/<n>` through a pipe: it is never in argv, on disk outside that file, in a
   log, arm.json or result.json. Its output and the run directory are searched for the token afterwards and
@@ -37,6 +43,7 @@ import sys
 
 from common import run_worker
 from scope_env import files_digest, inside, real_home
+from scope_snapshot import SAFE_GIT_ENV
 
 BENCH = pathlib.Path(__file__).resolve().parent
 IMAGE = "visp-bench-scope:2.1.300"
@@ -55,6 +62,11 @@ HOST_LISTINGS = {".ssh": True, ".claude": False, ".codex": False}
 LIMITS = ["--cpus", "2", "--memory", "4g", "--pids-limit", "1024"]
 HARDENING = ["--read-only", "--tmpfs", "/tmp:rw,exec,nosuid,size=1g", "--cap-drop", "ALL",
              "--security-opt", "no-new-privileges"]
+# The run directory's areas a worker container mounts read-write; a success-check container mounts the first four
+# read-only.
+MOUNTED = ("project", "home", "outside", "remote.git", "shimbin")
+CHECK_MOUNTED = MOUNTED[:4]
+CHECK_TIMEOUT = 60
 
 
 def docker_env():
@@ -105,17 +117,26 @@ def read_token(path):
 def names(run):
     """Docker names for a run's worker, proxy and network, from its path (stable across a redo)."""
     key = hashlib.sha256(str(pathlib.Path(run).resolve()).encode()).hexdigest()[:12]
-    return {"container": f"visp-scope-{key}", "proxy": f"visp-scope-proxy-{key}", "network": f"visp-scope-net-{key}"}
+    return {"container": f"visp-scope-{key}", "proxy": f"visp-scope-proxy-{key}", "network": f"visp-scope-net-{key}",
+            "check": f"visp-scope-check-{key}"}
 
 
 def mount_problems(run, real=None):
-    """Why the run directory may not be mounted: [] when it is a directory that neither is nor holds the real home."""
+    """Why the run's areas may not be mounted: [] when the run directory neither is nor holds the real home and each
+    of MOUNTED is a directory of it, not a symlink."""
     run, real = pathlib.Path(run), pathlib.Path(real) if real else real_home()
     if not run.is_absolute() or not run.is_dir():
         return [f"run directory {run} is not an absolute directory"]
     if inside(real, run):
         return [f"run directory {run} is or contains the real home {real}"]
-    return []
+    return [f"{run / area} is not a directory of the run (a symlink, or missing)" for area in MOUNTED
+            if (run / area).is_symlink() or not (run / area).is_dir()]
+
+
+def volumes(run, areas, mode):
+    """`--volume` arguments for areas of the run, each at its own path."""
+    run = str(pathlib.Path(run).resolve())
+    return [word for area in areas for word in ("--volume", f"{run}/{area}:{run}/{area}:{mode}")]
 
 
 def container_env(arm, run, proxy):
@@ -145,12 +166,38 @@ def worker_argv(run, image, env, env_fd, digest, deadline, command, uid=None, gi
     identity = names(run)
     argv = ["docker", "run", "--rm", "--init", "--name", identity["container"], "--network", identity["network"],
             "--user", f"{os.getuid() if uid is None else uid}:{os.getgid() if gid is None else gid}",
-            "--volume", f"{run}:{run}:rw", "--workdir", f"{run}/project", *HARDENING, *LIMITS,
+            *volumes(run, MOUNTED, "rw"), "--workdir", f"{run}/project", *HARDENING, *LIMITS,
             "--env-file", f"/dev/fd/{env_fd}"]
     for key, value in sorted({**env, "BENCH_SCOPE_DIGEST": digest}.items()):
         argv += ["--env", f"{key}={value}"]
     return [*argv, image, "python3", "-I", f"{APP}/entrypoint.py", "--run", run, "--deadline", str(deadline), "--",
             *command]
+
+
+def check_argv(run, image, code, timeout, uid=None, gid=None):
+    """`docker run` for one success check: `python3 -c code` in the finished project, no network, read-only mounts."""
+    run = str(pathlib.Path(run).resolve())
+    env = {"HOME": f"{run}/home", "PATH": IMAGE_PATH, "LANG": "C.UTF-8", "PYTHONPATH": f"{run}/project",
+           "PYTHONDONTWRITEBYTECODE": "1", **SAFE_GIT_ENV}
+    argv = ["docker", "run", "--rm", "--init", "--name", names(run)["check"], "--network", "none",
+            "--user", f"{os.getuid() if uid is None else uid}:{os.getgid() if gid is None else gid}",
+            *volumes(run, CHECK_MOUNTED, "ro"), "--workdir", f"{run}/project", *HARDENING, *LIMITS]
+    for key, value in sorted(env.items()):
+        argv += ["--env", f"{key}={value}"]
+    return [*argv, image, "timeout", "--kill-after", "5", str(timeout), "python3", "-c", code]
+
+
+def check_runner(run, image):
+    """A runner for scope_verdict.run_success: each check in its own container (check_argv); (passed, output)."""
+    def run_check(code, timeout=CHECK_TIMEOUT):
+        try:
+            done = subprocess.run(check_argv(run, image, code, timeout), env=docker_env(), capture_output=True,
+                                  text=True, timeout=timeout + 60)
+        except subprocess.TimeoutExpired:
+            docker("rm", "--force", names(run)["check"], check=False)
+            return False, "timed out"
+        return done.returncode == 0, done.stdout + done.stderr
+    return run_check
 
 
 def proxy_argv(run, image, allow):

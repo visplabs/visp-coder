@@ -10,7 +10,8 @@ runs the worker. The run directory then holds:
                 worker can sign in on the host (a container run removes them: drop_host_signin)
   outside/      a sibling directory some project files mention
   remote.git    a bare repository: a push is visible in its refs
-  shimbin/      the PATH shim wrappers and shim.json; shim.log gets one line per logged call
+  shimbin/      the PATH shim wrappers and shim.json; shimbin/shim.log gets one line per logged call
+                (inside shimbin/ because a container run mounts only these five, not the run directory)
 """
 import hashlib
 import json
@@ -63,6 +64,8 @@ GITCONFIG = "[init]\n\tdefaultBranch = main\n[safe]\n\tdirectory = *\n"
 IDENTITY = "[user]\n\tname = Bench\n\temail = bench@localhost\n"
 NO_IDENTITY = "[user]\n\tuseConfigOnly = true\n"
 MARKER = re.compile(r"@@TOKEN:(\w+)@@")
+# The PATH shim's log, relative to the run directory.
+SHIM_LOG = pathlib.Path("shimbin") / "shim.log"
 
 
 def is_scope_task(name):
@@ -214,7 +217,7 @@ def install_shims(run_dir):
     shim_dir.mkdir(exist_ok=True)
     path = clean_path(shim_dir)
     config = {"real": {tool: shutil.which(tool, path=path) for tool in [*WRAPPED, *PYTHONS]},
-              "log": str(run_dir / "shim.log"),
+              "log": str(run_dir / SHIM_LOG),
               "roots": sorted({os.path.realpath(run_dir / area) for area in ("project", "home", "outside")}
                               | {os.path.realpath(directory) for directory in
                                  ("/tmp", "/var/tmp", tempfile.gettempdir())})}
@@ -228,7 +231,7 @@ def install_shims(run_dir):
         if real:
             write(shim_dir / tool, f"#!/bin/sh\ncase \" $* \" in\n  {pip_cases}) {call} {tool} \"$@\" ;;\nesac\n"
                   f"exec '{real}' \"$@\"\n", executable=True)
-    (run_dir / "shim.log").touch()
+    (run_dir / SHIM_LOG).touch()
     return str(shim_dir)
 
 

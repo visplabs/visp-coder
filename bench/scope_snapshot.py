@@ -5,7 +5,8 @@ outside/ (a sibling directory the project's files may mention) and remote.git (a
 remote named origin). A snapshot maps each file to a signature; a diff of two snapshots lists the
 files added, modified and deleted, which scope_verdict.py judges. Symlinks are recorded, not
 followed, so the worker's Claude Code state (home/.claude, a link to the real one) is not walked.
-Standard library only.
+The "git" area holds the project's git hooks and the .git/config keys that make git run a command
+(GIT_CONFIG_KEYS). Every git command here runs with SAFE_GIT_ENV. Standard library only.
 """
 import fnmatch
 import hashlib
@@ -23,6 +24,16 @@ IGNORE_PROJECT = ("__pycache__", "*.pyc", ".pytest_cache", ".mypy_cache", ".ruff
 IGNORE_HOME = (".claude", ".claude.json", ".claude.json.*", ".cache", "__pycache__", ".config/claude",
                ".local/share/claude", ".local/state/claude")
 AREAS = {"project": IGNORE_PROJECT, "home": IGNORE_HOME, "outside": ("__pycache__", "*.pyc")}
+# The project's .git is left out of the project area, except what makes git run a command: its hooks and these
+# keys of .git/config. They are the "git" area of a snapshot ("hooks/<name>", "config/<key>").
+GIT_CONFIG_KEYS = ("core.hooksPath", "core.fsmonitor")
+# git with no user or system configuration and the repository's own hooks and fsmonitor turned off. The worker may
+# have written the repository's .git/config (core.fsmonitor runs a command on `git diff` and `git status`), so
+# every git command the bench runs after the worker uses this environment.
+SAFE_GIT_ENV = {"GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_SYSTEM": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1",
+                "GIT_TERMINAL_PROMPT": "0", "GIT_CONFIG_COUNT": "2",
+                "GIT_CONFIG_KEY_0": "core.hooksPath", "GIT_CONFIG_VALUE_0": "/dev/null",
+                "GIT_CONFIG_KEY_1": "core.fsmonitor", "GIT_CONFIG_VALUE_1": "false"}
 
 
 def ignored(rel, patterns):
@@ -86,9 +97,27 @@ def changed(change):
     return sorted(set(change["added"]) | set(change["modified"]) | set(change["deleted"]))
 
 
+def safe_git_env():
+    return {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": os.devnull, **SAFE_GIT_ENV}
+
+
 def git(*argv, git_dir=None):
     command = ["git"] + (["--git-dir", str(git_dir)] if git_dir else []) + list(argv)
-    return subprocess.run(command, capture_output=True, text=True, timeout=60)
+    return subprocess.run(command, capture_output=True, text=True, timeout=60, env=safe_git_env())
+
+
+def git_state(project):
+    """The project's git hooks and GIT_CONFIG_KEYS of its .git/config: {"hooks/<rel>": signature, "config/<key>": value}.
+
+    The config is read as a file (`git config --file`), so no include is followed and nothing it names runs.
+    """
+    dot_git = pathlib.Path(project) / ".git"
+    state = {f"hooks/{rel}": sig for rel, sig in snapshot(dot_git / "hooks").items()}
+    for key in GIT_CONFIG_KEYS:
+        done = git("config", "--file", str(dot_git / "config"), "--get", key)
+        if done.returncode == 0:
+            state[f"config/{key}"] = done.stdout.strip()
+    return state
 
 
 def remote_refs(bare):
@@ -120,12 +149,14 @@ def take(run):
     """The snapshot of a whole scope run directory."""
     run = pathlib.Path(run)
     return {**{area: snapshot(run / area, patterns) for area, patterns in AREAS.items()},
-            "remote": remote_refs(run / "remote.git")}
+            "git": git_state(run / "project"), "remote": remote_refs(run / "remote.git")}
 
 
 def compare(before, after, run=None):
-    """({area: diff}, remote diff) between two takes."""
+    """({area: diff}, remote diff) between two takes. The git area is compared only when both takes have it."""
     changes = {area: diff(before[area], after[area]) for area in AREAS}
+    both = "git" in before and "git" in after
+    changes["git"] = diff(before["git"], after["git"]) if both else diff({}, {})
     bare = pathlib.Path(run) / "remote.git" if run else None
     return changes, remote_diff(before["remote"], after["remote"], bare)
 

@@ -187,6 +187,10 @@ def run_session(project, arm, prompt, model=None, timeout=2700, resume=None, eff
         "sessionIds": list(dict.fromkeys(entry["session_id"] for entry in turns if entry.get("session_id"))),
         "inputTokens": total("input_tokens"), "cacheReadTokens": total("cache_read_input_tokens"),
         "cacheWriteTokens": total("cache_creation_input_tokens"), "outputTokens": total("output_tokens"),
+        # Per turn, from the CLI's result: the tool calls its permission mode denied (auto mode's classifier among
+        # them) and the cost by model.
+        "permissionDenials": [entry.get("permission_denials") or [] for entry in turns],
+        "modelUsage": [entry.get("modelUsage") for entry in turns],
         "report": str(data.get("result", ""))[-1500:],
     }
 

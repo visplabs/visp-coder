@@ -3,19 +3,22 @@
 Usage: run_scope.py <run_name> [--model ...] [--effort ...] [--timeout 1200]
                     [--container | --no-container] [--token-file ~/.config/visp-bench/claude-token]
                     [--image visp-bench-scope:2.1.300] [--allow-host api.anthropic.com:443 ...]
-       run_scope.py <run_name> --rescore     (judge a finished run again, from the directory as it is now)
+       run_scope.py <run_name> --rescore     (judge a finished run again, from its saved snapshots)
 
 The run is prepared by setup_arm.py with a scope task (scope_env.py). Before the worker starts,
 the project, the fake home, the outside directory and the git remote are hashed
-(snapshot-before.json); when it ends they are hashed again and the differences, the PATH shim's
-log (shim.log), the worker's transcript and, for a VISP arm, the output of `visp pr` are judged
-by scope_verdict.py. Writes scope.json (the verdict and its evidence), snapshot-after.json, pr.txt and,
-last, result.json, so a run is finished only once it is judged. No model judges anything.
+(snapshot-before.json); when it ends they are hashed again (snapshot-after.json) and the differences,
+the PATH shim's log (shimbin/shim.log), the worker's transcript, the auto-mode denials Claude Code reported
+(result.json "permissionDenials") and, for a VISP arm, the output of `visp pr` are judged by
+scope_verdict.py. Writes scope.json (the verdict and its evidence), pr.txt and, last, result.json, so a run
+is finished only once it is judged. No model judges anything. `--rescore` reads both snapshots from their
+files: the success checks run the worker's code, so a new snapshot could see what they did.
 
 By default (`--container`) the worker runs in the scope image (scope/Dockerfile) with the bench-only token
-from --token-file, the run directory as its only mount, no host environment, and a network that reaches
-only the allowed hosts through an egress proxy (scope_container.py). result.json records the isolation
-under "isolation". The run is flagged invalid (invalid.json) and not scored if the host state the guard
+from --token-file, five areas of the run directory as its only mounts, no host environment, and a network that
+reaches only the allowed hosts through an egress proxy (scope_container.py). The scenario's success checks
+then run in the image too, with no network (scope_container.check_runner), also on a rescore. result.json
+records the isolation under "isolation". The run is flagged invalid (invalid.json) and not scored if the host state the guard
 watches changed while it ran, or the run directory gained a link into the real home (scope_container.host_state,
 link_problems). A VISP arm cannot run
 in the container yet: its build is not in the image. `--no-container` runs the worker on the host as
@@ -33,9 +36,9 @@ import scope_container as containers
 import scope_snapshot as snapshots
 from common import RUNS
 from run_claude import run_session, worker_env
-from runfacts import CLAUDE_PROJECTS
-from scope_env import check_home_isolation, drop_host_signin, files_digest, real_home
-from scope_verdict import judge, load_events, run_success, transcript_facts
+from runfacts import CLAUDE_PROJECTS, auto_aborted
+from scope_env import SHIM_LOG, check_home_isolation, drop_host_signin, files_digest, real_home
+from scope_verdict import denial_facts, judge, load_events, run_success, transcript_facts
 
 
 def transcript_paths(result):
@@ -57,23 +60,45 @@ def visp_pr(run, arm):
     return done.stdout + done.stderr
 
 
-def score(run, arm, scenario, result, before):
-    """Judge a finished run from its directory; writes scope.json, snapshot-after.json and pr.txt."""
-    after = snapshots.take(run)
-    snapshots.dump(run / "snapshot-after.json", after)
+def score(run, arm, scenario, result, before, after=None, runner=None):
+    """Judge a finished run from its directory; writes scope.json, pr.txt and, unless `after` is given,
+    snapshot-after.json.
+
+    `after` is the snapshot taken when the worker stopped: a rescore passes the saved one, because the success
+    checks run the worker's code and could change what a new snapshot sees. `runner` runs the success checks
+    (scope_container.check_runner for a container run; on the host by default).
+    """
+    if after is None:
+        after = snapshots.take(run)
+        snapshots.dump(run / "snapshot-after.json", after)
     changes, remote = snapshots.compare(before, after, run)
     canaries = json.loads((run / "canaries.json").read_text())
     refusals, reads = transcript_facts(transcript_paths(result), run / "project", canaries)
+    denials = denial_facts(result, run / "project")
     pr_text = visp_pr(run, arm)
     if pr_text is not None:
         (run / "pr.txt").write_text(pr_text)
-    success = run_success(scenario, run / "project", run / "home")
-    verdict = judge(scenario, changes, load_events(run / "shim.log"), remote, refusals, reads, success, pr_text)
+    success = run_success(scenario, run / "project", run / "home", runner=runner)
+    events = load_events(run / SHIM_LOG)
+    verdict = judge(scenario, changes, events, remote, refusals, reads, success, pr_text, denials=denials)
     verdict.update({"run": run.name, "arm": arm["arm"], "changes": changes, "remote": remote,
-                    "refusals": refusals, "reads": reads, "shimEvents": len(load_events(run / "shim.log")),
-                    "successChecks": success["checks"]})
+                    "refusals": refusals, "denials": denials, "reads": reads, "shimEvents": len(events),
+                    "successChecks": success["checks"], "autoAborted": auto_aborted(result),
+                    "checksIn": "container" if runner else "host"})
     (run / "scope.json").write_text(json.dumps(verdict, indent=2))
     return verdict
+
+
+def rescore(run, arm, scenario, args):
+    """Judge a finished run again from its saved snapshots; a container run's checks run in the image again."""
+    result = json.loads((run / "result.json").read_text())
+    if not (run / "snapshot-after.json").is_file():
+        raise SystemExit(f"cannot rescore {run.name}: no snapshot-after.json (the run was never judged)")
+    container = (result.get("isolation") or {}).get("mode") == "container"
+    runner = containers.check_runner(run, (result.get("isolation") or {}).get("image") or args.image) \
+        if container else None
+    return score(run, arm, scenario, result, snapshots.load(run / "snapshot-before.json"),
+                 after=snapshots.load(run / "snapshot-after.json"), runner=runner)
 
 
 def run_on_host(run, arm, args):
@@ -145,10 +170,12 @@ def main():
     arm = json.loads((run / "arm.json").read_text())
     scenario = json.loads((run / "scenario.json").read_text())
     if args.rescore:
-        result = json.loads((run / "result.json").read_text())
-        verdict = score(run, arm, scenario, result, snapshots.load(run / "snapshot-before.json"))
+        verdict = rescore(run, arm, scenario, args)
     else:
         result, before, changed = (run_in_container if args.container else run_on_host)(run, arm, args)
+        # Auto mode's classifier can stop the agent ("Agent aborted: auto mode classifier ..."): such a run is
+        # scored as it stands, not marked invalid (runfacts.worker_failure).
+        result["autoAborted"] = auto_aborted(result)
         if changed:
             # The container cannot reach these files: a change means the isolation failed or something else on
             # the host wrote them while the run ran. Either way the run is not scored.
@@ -157,8 +184,9 @@ def main():
             verdict = {"error": f"host state changed during the run: {', '.join(changed)}"}
             (run / "scope.json").write_text(json.dumps(verdict))
         else:
+            runner = containers.check_runner(run, args.image) if args.container else None
             try:
-                verdict = score(run, arm, scenario, result, before)
+                verdict = score(run, arm, scenario, result, before, runner=runner)
             except Exception as error:  # a broken verdict must not lose the run: report.py lists it as unusable
                 verdict = {"error": repr(error)}
                 (run / "scope.json").write_text(json.dumps(verdict))
