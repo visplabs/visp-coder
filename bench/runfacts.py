@@ -195,12 +195,60 @@ def user_category(event, tools):
     return "other"
 
 
+# Claude Code reports a PreToolUse hook's deny as an error tool result that starts with this. The text
+# after it is the hook's own reason (src/harness/scripts/pretooluse.script.mjs).
+REFUSAL = re.compile(r"^PreToolUse:([\w.-]+) hook error: (.*)", re.DOTALL)
+EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit", "apply_patch"}
+# The reason for a `visp done` run in the background or in a loop: "Run `visp done` by itself ...".
+DONE_REFUSAL = re.compile(r"^Run `\w+ done`")
+
+
+def refusal_kind(tool, reason):
+    """edit: a file write the scope guard refused; done: `visp done` refused (background or loop);
+    other: any other VISP refusal (another workflow command, a command that would discard changes)."""
+    if tool in EDIT_TOOLS:
+        return "edit"
+    return "done" if tool == "Bash" and DONE_REFUSAL.match(reason) else "other"
+
+
+def hook_refusals(paths):
+    """Counts of VISP hook refusals in the transcripts, by refusal_kind.
+
+    Counted from the error tool results in the transcript's user events, once per tool call. Not
+    from the toolUseResult field, which repeats a result, nor from api-request-blob events, which
+    replay the whole conversation so far with every request.
+    """
+    counts = {"edit": 0, "done": 0, "other": 0}
+    for path in paths:
+        seen = set()
+        for line in open(path, errors="replace"):
+            if "hook error" not in line:
+                continue
+            try:
+                event = json.loads(line)
+            except ValueError:
+                continue
+            if event.get("type") != "user":
+                continue
+            for block in _blocks(event):
+                if block.get("type") != "tool_result" or not block.get("is_error"):
+                    continue
+                content = block.get("content")
+                text = content if isinstance(content, str) else " ".join(
+                    str(part.get("text", "")) for part in content or [] if isinstance(part, dict))
+                found = REFUSAL.match(text.strip())
+                if found and block.get("tool_use_id") not in seen:
+                    seen.add(block.get("tool_use_id"))
+                    counts[refusal_kind(found.group(1), found.group(2))] += 1
+    return counts
+
+
 def timing(paths):
     """Seconds per category over the given transcripts, plus legacy idle and hook refusals."""
     totals = {key: 0.0 for key in ("model", "visp", "ownCommand", "idle", "other")}
-    legacy, refusals = 0.0, 0
+    legacy = 0.0
+    refused = hook_refusals(paths)
     for path in paths:
-        refusals += open(path, errors="replace").read().count("in the foreground: repeat this call")
         events = sorted(_events(path), key=lambda event: event["_at"])
         tools = {}
         for previous, event in zip(events, events[1:]):
@@ -215,7 +263,8 @@ def timing(paths):
     if not paths:
         return {}
     return {**{f"{key}Seconds": round(value) for key, value in totals.items()},
-            "legacyIdle": round(legacy), "refusals": refusals}
+            "legacyIdle": round(legacy), "refusals": sum(refused.values()),
+            "editRefusals": refused["edit"], "doneRefusals": refused["done"], "otherRefusals": refused["other"]}
 
 
 def _limit_in(text, source, whole=False):

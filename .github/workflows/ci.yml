@@ -79,6 +79,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CHROME_BIN: /usr/bin/google-chrome
+      # Chrome sometimes needs more than the 10 s default to start on a shared runner.
+      VISP_BROWSER_STARTUP_TIMEOUT_MS: "30000"
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup

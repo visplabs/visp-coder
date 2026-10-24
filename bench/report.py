@@ -22,7 +22,7 @@ or whose judge call failed has no score: its task is incomplete until --score sc
 
 Per run: those scores, wall time, the worker's time split (runfacts.py: model, visp, own
 commands, idle, and the Oct 13 legacy idle), VISP reviews run and unavailable, pictures delivered
-to the reviewer, hook refusals and timeouts. Per task x arm: means of the scores, medians of the
+to the reviewer, hook refusals (edit, done, other; counted from the hook errors in the worker transcript) and timeouts. Per task x arm: means of the scores, medians of the
 times, sums of the counts. Chain tasks get their own table: chains with a regression, earlier
 checks broken at any later step (unique, pooled over the arm's chains), regressions per carried
 check evaluation, final hidden rate, code score, wall time and cost per chain; --runs adds one
@@ -225,7 +225,9 @@ def facts(entry):
         "timedOut": any(r.get("timedOut") for r in results),
         "idle": split.get("idleSeconds"), "model": split.get("modelSeconds"), "visp": split.get("vispSeconds"),
         "own": split.get("ownCommandSeconds"), "legacyIdle": split.get("legacyIdle"),
-        "refusals": split.get("refusals"), "reviewed": reviewed, "unavailable": unavailable, "pictures": pictures,
+        "refusals": split.get("refusals"), "editRefusals": split.get("editRefusals"),
+        "doneRefusals": split.get("doneRefusals"), "otherRefusals": split.get("otherRefusals"),
+        "reviewed": reviewed, "unavailable": unavailable, "pictures": pictures,
         "cost": cost, "criticCost": critic_cost,
     }
 
@@ -353,6 +355,8 @@ def summarize(rows, needed):
         "own": median(r["own"] for r in rows), "legacyIdle": median(r["legacyIdle"] for r in rows),
         "reviewed": sum(r["reviewed"] for r in rows), "unavailable": sum(r["unavailable"] for r in rows),
         "pictures": sum(r["pictures"] for r in rows), "refusals": sum(r["refusals"] or 0 for r in rows),
+        "refusalSplit": "/".join(str(sum(r.get(key) or 0 for r in rows))
+                                 for key in ("editRefusals", "doneRefusals", "otherRefusals")),
         "timeouts": sum(r["timedOut"] for r in rows),
         "cost": mean(r["cost"] for r in rows), "criticCost": mean(r["criticCost"] for r in rows),
     }
@@ -451,14 +455,14 @@ def markdown(manifest, rows, groups, comparisons, excluded, unfinished, show_run
     probed = any(g["probes"] is not None for g in groups.values())
     out += ["", "| Task | Arm | n | Hidden |" + (" Probes | Probes from findings |" if probed else "") +
             " Judge | Checklist | Code | Wall s | Idle s | Model s | VISP s | Own s "
-            "| Legacy idle s | Reviews run/unavailable | Pictures | Refusals | Timeouts | Cost $ (VISP's) |",
+            "| Legacy idle s | Reviews run/unavailable | Pictures | Refusals edit/done/other | Timeouts | Cost $ (VISP's) |",
             "| --- | --- | --- | --- |" + " --- |" * (14 + (2 if probed else 0))]
     for (task, arm), s in groups.items():
         extra = f" {fmt(s['probes'], 'probes')} | {fmt(s['probeFindings'], 'probes')} |" if probed else ""
         out.append(f"| {task} | {arm} | {s['n']} | {fmt(s['hidden'], 'hidden')} |{extra} {fmt(s['judge'])} | "
                    f"{fmt(s['checklist'])} | {fmt(s['code'])} | {fmt(s['wall'])} | {fmt(s['idle'])} | "
                    f"{fmt(s['model'])} | {fmt(s['visp'])} | {fmt(s['own'])} | {fmt(s['legacyIdle'])} | "
-                   f"{s['reviewed']}/{s['unavailable']} | {s['pictures']} | {s['refusals']} | {s['timeouts']} | "
+                   f"{s['reviewed']}/{s['unavailable']} | {s['pictures']} | {s['refusalSplit']} | {s['timeouts']} | "
                    f"{fmt(s['cost'])} ({fmt(s['criticCost'])}) |")
     out.append("")
     if probed:
@@ -502,13 +506,13 @@ def markdown(manifest, rows, groups, comparisons, excluded, unfinished, show_run
         out += [f"- {name}" for name in unfinished]
     if show_runs:
         out += ["", "| Run | Hidden | Probes | Stage 1 | Judge | Checklist | Code | Wall s | Idle s | Model s | VISP s | Own s "
-                "| Legacy idle s | Reviews | Pictures | Refusals | Timed out | Cost $ | Missing |",
+                "| Legacy idle s | Reviews | Pictures | Refusals edit/done/other | Timed out | Cost $ | Missing |",
                 "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
         for r in rows:
             out.append(f"| {r['run']} | {r['hiddenText'] or '–'} | {r['probesText'] or '–'} | {r['stage1'] or '–'} | {fmt(r['judge'])} | "
                        f"{r['checklistText'] or '–'} | {fmt(r['code'])} | {r['wall']} | {fmt(r['idle'])} | "
                        f"{fmt(r['model'])} | {fmt(r['visp'])} | {fmt(r['own'])} | {fmt(r['legacyIdle'])} | "
-                       f"{r['reviewed']}/{r['unavailable']} | {r['pictures']} | {fmt(r['refusals'])} | "
+                       f"{r['reviewed']}/{r['unavailable']} | {r['pictures']} | {refusal_split(r)} | "
                        f"{'yes' if r['timedOut'] else 'no'} | {fmt(r['cost'])} | {'; '.join(r['problems']) or '–'} |")
     return "\n".join(out) + "\n"
 
@@ -525,6 +529,13 @@ def scope_header(manifest, scope_rows, excluded, unfinished):
     if unfinished:
         out += ["", "Unfinished runs (no result), excluded:", ""] + [f"- {name}" for name in unfinished]
     return "\n".join(out) + "\n"
+
+
+def refusal_split(row):
+    """Hook refusals of one run as edit/done/other; – for a run without transcripts."""
+    if row["refusals"] is None:
+        return "–"
+    return "/".join(str(row.get(key) or 0) for key in ("editRefusals", "doneRefusals", "otherRefusals"))
 
 
 def share(part, whole):
