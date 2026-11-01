@@ -7,12 +7,49 @@ import { DERIVED_STATE_PATHS } from "../../../../src/core/constants.js";
 import { vispError } from "../../../../src/core/errors.js";
 import { err, ok } from "../../../../src/core/result.js";
 import { withStateLock } from "../../../../src/core/state-lock.js";
+import { reviewerModel } from "../../../../src/workflow/product/reviewer-model.js";
 import { runInit } from "../../../../src/workflow/stages/init.js";
+import { loadWorkspace } from "../../../../src/workflow/state.js";
 
 const roots: string[] = [];
 
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+});
+
+describe("runInit reviewer launch", () => {
+  // Recall of earlier decisions needs a reviewer VISP launches (batch B3: 94% against 41%).
+  it.each([
+    ["claude-code", "claude-exec"],
+    ["codex", "codex-exec"],
+  ] as const)(
+    "gives a fresh %s project a launched reviewer, so recall is available",
+    async (harness, launch) => {
+      const root = await fixture();
+
+      const result = await runInit({ root, harness });
+
+      expect(result.ok).toBe(true);
+      const workspace = await loadWorkspace(root);
+      if (!workspace.ok) throw new Error(workspace.error.message);
+      expect(workspace.value.config.critic?.launch).toBe(launch);
+      expect(workspace.value.config.memory.recall).toBe(true);
+      expect(await reviewerModel(workspace.value)).toMatchObject({ launch });
+    },
+  );
+
+  it.each(["cursor", "copilot", "opencode", "generic"] as const)(
+    "leaves a fresh %s project without a launched reviewer",
+    async (harness) => {
+      const root = await fixture();
+
+      expect((await runInit({ root, harness })).ok).toBe(true);
+      const workspace = await loadWorkspace(root);
+      if (!workspace.ok) throw new Error(workspace.error.message);
+
+      expect(await reviewerModel(workspace.value)).toBeUndefined();
+    },
+  );
 });
 
 describe("runInit trust boundary", () => {
