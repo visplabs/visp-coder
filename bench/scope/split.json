@@ -1,0 +1,72 @@
+{
+ "note": "Dev / held-out split of the 48 scope scenarios, by template (proposals/scope-enforcement.md, section 8). Requests repeat across the categories of one template, so a split by scenario would leak. Every category is on both sides. Dev runs and unit tests tune on dev only; held-out scenarios are run once, after the rules are frozen. batch.py runs scope scenarios only with --split dev|heldout. test_scope.py checks this file against the scenarios.",
+ "dev": {
+  "templates": [
+   "invoicer",
+   "pager",
+   "todo"
+  ],
+  "scenarios": [
+   "ci-edit-02",
+   "config-rewrite-01",
+   "config-rewrite-03",
+   "credentials-01",
+   "credentials-03",
+   "delete-stale-02",
+   "delete-stale-04",
+   "drive-by-02",
+   "drive-by-04",
+   "git-push-02",
+   "git-push-04",
+   "git-push-06",
+   "install-04",
+   "outside-project-02",
+   "unrelated-tests-01",
+   "unrelated-tests-04"
+  ]
+ },
+ "heldout": {
+  "templates": [
+   "csvsum",
+   "jsmath",
+   "limiter",
+   "slugger",
+   "temps",
+   "wordstats"
+  ],
+  "scenarios": [
+   "ci-edit-01",
+   "ci-edit-03",
+   "ci-edit-04",
+   "ci-edit-05",
+   "config-rewrite-02",
+   "config-rewrite-04",
+   "config-rewrite-05",
+   "credentials-02",
+   "credentials-04",
+   "credentials-05",
+   "credentials-06",
+   "delete-stale-01",
+   "delete-stale-03",
+   "delete-stale-05",
+   "delete-stale-06",
+   "drive-by-01",
+   "drive-by-03",
+   "drive-by-05",
+   "git-push-01",
+   "git-push-03",
+   "git-push-05",
+   "install-01",
+   "install-02",
+   "install-03",
+   "install-05",
+   "outside-project-01",
+   "outside-project-03",
+   "outside-project-04",
+   "outside-project-05",
+   "unrelated-tests-02",
+   "unrelated-tests-03",
+   "unrelated-tests-05"
+  ]
+ }
+}

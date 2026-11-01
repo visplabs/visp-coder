@@ -14,7 +14,13 @@ order that rotates per task, so machine load and a partial batch fall on every a
 two-session task (session1.md) runs with run_carryover.py in fresh mode: the second session
 starts on the project the first left, notes kept. A -raised task runs in intermediate mode, with a
 session of its intermediate.md between the two. A chain task (steps/) runs with run_chain.py:
-each step is a fresh session on the project the previous step left. Timeouts per session: games
+each step is a fresh session on the project the previous step left. A scope task (scope-<scenario id>,
+scope_env.py) runs with run_scope.py, 1200 s; `--tasks 'scope-*'` (or any glob) expands to the scenarios it
+matches, and its arms are bare, bare-rule, bare+auto, bare-rule+auto (labels bare-auto, bare-rule-auto) and
+visp:<build>. Its worker runs in the scope container (scope_container.py): the batch does not start while the
+image or the token file is missing or a VISP arm is asked for, and --dry-run says so. Scope scenarios run only with `--split dev` or
+`--split heldout` (scope/split.json, scope_split.py); without the flag no scope scenario runs and the driver
+says so. Timeouts per session: games
 3600 s, every other task 2700 s (per step for a chain). A visp-codex arm runs with run_codex.py; every other arm with run_claude.py.
 
 Restartable: a finished run is skipped; a run left unfinished by an interrupted batch is moved
@@ -24,7 +30,7 @@ runners and workers before the driver exits. After each run, runfacts.py checks 
 stop (in CLI error results, API-error events and VISP's failed reviewer and tester records) and
 for a worker failure (the CLI ended a session in error: an API error, no response, a wrapper
 exit); such a run gets invalid.json and is never scored. After a usage limit no further runs
-start, since the limit applies to every run. --rerun-invalid moves invalid runs to discarded/ and
+start, since the limit applies to every run, and none after a scope run's host guard fired (run_scope.py). --rerun-invalid moves invalid runs to discarded/ and
 redoes them. --dry-run prints the queue and what would happen to each run, and changes nothing.
 
 --spend-cap USD starts spend_guard.py as a child: it sums the cost every run's claude-calls.jsonl
@@ -38,6 +44,7 @@ and batch.log. report.py reads the manifest.
 """
 import argparse
 import concurrent.futures
+import fnmatch
 import json
 import os
 import pathlib
@@ -52,12 +59,19 @@ from chains import is_chain, step_files
 from common import RUNS, claude_version, stop_recorded
 from judge import CHECKLISTS, GAMES
 from presets import preset, split_worker_modes, visp_build, worker_env
+import scope_container
+import scope_split
+import scope_verdict
 from run_carryover import batch_mode, planned_sessions
+from scope_env import SCOPE_BARE_ARMS, auto_mode_supported, is_scope_arm, is_scope_task, scope_tasks
 from runfacts import invalid, invalidity, is_finished, mark_if_invalid
 import snapshots
 
 BENCH = pathlib.Path(__file__).resolve().parent
-TIMEOUTS = {"visual": 2700, "game": 3600, "carryover": 2700, "chain": 2700, "code": 2700}
+# Invalid runs that stop the batch: a usage limit applies to every run, and a host state change puts the
+# scope container's isolation in doubt (run_scope.py host guard).
+STOPPING = ("usage limit", "host state changed")
+TIMEOUTS = {"visual": 2700, "game": 3600, "carryover": 2700, "chain": 2700, "code": 2700, "scope": 1200}
 log_lock = threading.Lock()
 stop = threading.Event()
 active, active_lock = set(), threading.Lock()
@@ -65,6 +79,8 @@ guard = None
 
 
 def kind(task):
+    if is_scope_task(task):
+        return "scope"
     task_dir = BENCH / "tasks" / task
     if not task_dir.is_dir():
         raise SystemExit(f"unknown task {task}")
@@ -90,6 +106,30 @@ def label(spec):
     return spec.replace("+", "-"), spec
 
 
+def expand(spec):
+    """The task names a --tasks list names; a glob such as scope-credentials-* matches scope scenarios."""
+    tasks = []
+    for name in spec.split(","):
+        if any(char in name for char in "*?["):
+            found = [task for task in scope_tasks() if fnmatch.fnmatchcase(task, name)]
+            if not found:
+                raise SystemExit(f"no scope scenario matches {name}")
+            tasks += found
+        else:
+            tasks.append(name)
+    return tasks
+
+
+def select_split(tasks, split):
+    """(tasks to run, scope tasks left out): a scope scenario runs only on the chosen side of the split.
+
+    Without a split no scope scenario runs, so a held-out scenario is never run by accident.
+    """
+    allowed = set(scope_split.task_names(split)) if split else set()
+    left_out = [task for task in tasks if is_scope_task(task) and task not in allowed]
+    return [task for task in tasks if task not in left_out], left_out
+
+
 def worker_note(arm):
     """What a worker mode of the arm sets, for the dry run; "" for none."""
     modes = split_worker_modes(arm)[1]
@@ -97,7 +137,12 @@ def worker_note(arm):
 
 
 def plan(args):
-    tasks = args.tasks.split(",")
+    tasks, left_out = select_split(expand(args.tasks), args.split)
+    if left_out and not args.split:
+        print(f"no --split given: running none of the {len(left_out)} scope scenarios. "
+              "Pass --split dev or --split heldout.")
+    elif left_out:
+        print(f"--split {args.split}: {len(left_out)} scope scenarios on the other side are not run.")
     arms = [label(spec) for spec in args.arms.split(",")]
     for _, arm in arms:
         if split_worker_modes(arm)[1] and split_worker_modes(arm)[0].startswith("visp-codex:"):
@@ -108,6 +153,11 @@ def plan(args):
     for rep in range(1, args.reps + 1):
         for index, task in enumerate(tasks):
             task_kind = kind(task)
+            bases = [split_worker_modes(arm)[0] for _, arm in arms]
+            if task_kind != "scope" and any(base in SCOPE_BARE_ARMS and base != "bare" for base in bases):
+                raise SystemExit("the bare-rule and +auto arms apply only to scope tasks")
+            if task_kind == "scope" and any(not is_scope_arm(base) for base in bases):
+                raise SystemExit(f"a scope task takes the arms {', '.join(SCOPE_BARE_ARMS)} and visp:<build>")
             if task_kind in ("carryover", "chain") and any(arm.startswith("visp-codex:") for _, arm in arms):
                 raise SystemExit(f"{task} has several sessions, which {task_kind} runs make with Claude Code only")
             shift = (rep - 1 + index) % len(arms)
@@ -118,6 +168,25 @@ def plan(args):
                              **({"note": worker_note(arm)} if worker_note(arm) else {}),
                              "mode": batch_mode(task) if task_kind == "carryover" else None})
     return tasks, arms, runs
+
+
+def isolation(runs, arms, announce):
+    """Why the scope runs of a batch cannot start in their container (scope_container.preflight); [] when they can.
+
+    Reads no token, only the token file's metadata. With announce, prints what the runs will use.
+    """
+    if not any(entry["kind"] == "scope" for entry in runs):
+        return []
+    token_file = scope_container.default_token_file()
+    problems, facts = scope_container.preflight(scope_container.IMAGE, token_file)
+    if any(arm.startswith("visp") for _, arm in arms):
+        problems.append("a VISP arm cannot run a scope task in the container yet (its build is not in the image)")
+    if announce:
+        print(f"scope isolation: container {scope_container.IMAGE} ({(facts or {}).get('claude', 'no image')}), "
+              f"token file {token_file}, egress only to {', '.join(scope_container.ALLOW_HOSTS)}")
+        for problem in problems:
+            print(f"warning: {problem}")
+    return problems
 
 
 def log(directory, message):
@@ -175,7 +244,7 @@ def execute(entry, args, directory):
     if action.startswith("skip"):
         return name, action
     if stop.is_set():
-        return name, "not started (usage limit)"
+        return name, "not started (batch stopped)"
     if action in ("redo", "rerun"):
         # A driver killed earlier can leave its runner and worker running in this directory.
         stopped = stop_recorded(run)
@@ -196,6 +265,8 @@ def execute(entry, args, directory):
         argv = [str(BENCH / "run_carryover.py"), name, "--modes", entry["mode"], "--timeout", timeout]
     elif entry["kind"] == "chain":
         argv = [str(BENCH / "run_chain.py"), name, "--timeout", timeout]
+    elif entry["kind"] == "scope":
+        argv = [str(BENCH / "run_scope.py"), name, "--timeout", timeout]
     elif entry["arm"].startswith("visp-codex:"):
         argv = [str(BENCH / "run_codex.py"), name, "--timeout", timeout]
     else:
@@ -216,7 +287,7 @@ def execute(entry, args, directory):
     outcome = "finished" if is_finished(run, entry["twoSessions"]) else f"no result (exit {runner.returncode})"
     stopped = mark_if_invalid(run) if outcome == "finished" else None
     if stopped:
-        if stopped["reason"] == "usage limit":
+        if stopped["reason"] in STOPPING:
             stop.set()
         outcome = f"invalid ({stopped['reason']}): {stopped['source']}: {stopped['match'].strip()[:160]!r}"
     log(directory, f"{name}: {outcome} in {round(time.time() - started)} s {stdout.strip()[-200:]} "
@@ -291,11 +362,16 @@ def main():
     parser.add_argument("--preset", default="default")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--rerun-invalid", action="store_true")
+    parser.add_argument("--split", choices=scope_split.SPLITS,
+                        help="run only the scope scenarios of this side of scope/split.json (default: none)")
     parser.add_argument("--spend-cap", type=float, metavar="USD",
                         help="stop the batch above this total cost (spend_guard.py); counts runs already made")
     parser.add_argument("--spend-interval", type=float, default=60, help="seconds between the guard's looks")
     args = parser.parse_args()
     tasks, arms, runs = plan(args)
+    if not runs:
+        print("nothing to run")
+        return
     drive(args, tasks, arms, runs)
 
 
@@ -312,14 +388,25 @@ def describe(entry):
 def drive(args, tasks, arms, runs, extra=None):
     """Run (or, with --dry-run, list) the planned runs; `extra` is added to the manifest.
 
-    args needs batch, jobs, preset, reps, dry_run, rerun_invalid, spend_cap and spend_interval.
+    args needs batch, jobs, preset, reps, dry_run, rerun_invalid, spend_cap and spend_interval; split only
+    for scope tasks (a driver without scope runs, such as snapshot_rerun.py, may leave it out).
     """
     settings = preset(args.preset)
+    split = getattr(args, "split", None)
     directory = RUNS / "batches" / args.batch
     manifest_path = directory / "manifest.json"
     previous = json.loads(manifest_path.read_text()) if manifest_path.exists() else None
     if previous and previous["preset"] != args.preset:
         raise SystemExit(f"batch {args.batch} was started with preset {previous['preset']}, not {args.preset}")
+    if previous and any(is_scope_task(task) for task in tasks) and previous.get("split") != split:
+        raise SystemExit(f"batch {args.batch} was started with split {previous.get('split')}, not {split}")
+    if any(split_worker_modes(arm)[0].endswith("+auto") for _, arm in arms) \
+            and not auto_mode_supported(settings["worker"]["model"]):
+        raise SystemExit(f"auto mode does not support the worker model {settings['worker']['model']} of preset "
+                         f"{args.preset} (https://code.claude.com/docs/en/permission-modes)")
+    scope_problems = isolation(runs, arms, args.dry_run)
+    if scope_problems and not args.dry_run:
+        raise SystemExit("scope runs cannot start:\n  - " + "\n  - ".join(scope_problems))
     builds = {visp_build(arm)[0] for _, arm in arms if arm.startswith(("visp:", "visp-codex:"))}
     missing = sorted(build for build in builds if not (RUNS / "shims" / build).is_dir())
     if missing:
@@ -327,9 +414,17 @@ def drive(args, tasks, arms, runs, extra=None):
         if not args.dry_run:
             raise SystemExit(message)
         print(f"warning: {message}")
+    # The frozen list behind the scope primary metric, recorded with the batch (scope_verdict.d6_paths checks it).
+    scope_notes = {"d6Paths": {"file": "bench/scope/d6-paths.json", "sha256": scope_verdict.D6_PATHS_SHA256}} \
+        if any(entry["kind"] == "scope" for entry in runs) else {}
+    if scope_notes:
+        scope_verdict.d6_paths()
     if args.dry_run:
         print(f"batch {args.batch}, preset {args.preset} (worker {settings['worker']['model']}"
               f" {settings['worker']['effort'] or 'default effort'}), {len(runs)} runs, {args.jobs} at a time")
+        if scope_notes:
+            print(f"scope primary metric: D6 list {scope_notes['d6Paths']['file']} sha256 "
+                  f"{scope_notes['d6Paths']['sha256']}")
         if args.spend_cap is not None:
             print(f"spend guard: stops the batch above ${args.spend_cap:.2f}, looking every {args.spend_interval:g} s")
         for entry in runs:
@@ -351,11 +446,12 @@ def drive(args, tasks, arms, runs, extra=None):
             log(directory, f"warning: this batch was started with Claude Code {previous['claudeVersion']}, "
                            f"the one on PATH is {version}; runs of one batch should share a version")
         manifest = {"batch": args.batch, "preset": args.preset, "settings": settings,
-                    "tasks": list(dict.fromkeys([*tasks, *(entry["task"] for entry in kept)])),
+                    "tasks": list(dict.fromkeys([*tasks, *(entry["task"] for entry in kept)])), "split": split,
                     "arms": [{"label": name, "arm": arm} for name, arm in arms] + carried, "reps": args.reps,
                     "claudeVersion": version,
                     "created": (previous or {}).get("created") or time.strftime("%Y-%m-%dT%H:%M:%S"),
-                    "driverPid": os.getpid(), "spendCap": args.spend_cap, "runs": runs + kept, **(extra or {})}
+                    "driverPid": os.getpid(), "spendCap": args.spend_cap, "runs": runs + kept, **scope_notes,
+                    **(extra or {})}
         manifest_path.write_text(json.dumps(manifest, indent=2))
         log(directory, f"batch {args.batch}: {len(runs)} runs, preset {args.preset}, {args.jobs} at a time")
         if args.spend_cap is not None:
@@ -369,7 +465,8 @@ def drive(args, tasks, arms, runs, extra=None):
         manifest["lastPass"] = {"finished": time.strftime("%Y-%m-%dT%H:%M:%S"), "outcomes": outcomes}
         manifest_path.write_text(json.dumps(manifest, indent=2))
         if stop.is_set():
-            log(directory, "stopped early: a usage limit was hit; run again with --rerun-invalid after it resets")
+            log(directory, "stopped early: a usage limit was hit or the host guard fired (see invalid.json); "
+                           "run again with --rerun-invalid once it is resolved")
         log(directory, "batch pass finished")
     finally:
         stop_guard()
