@@ -6,6 +6,5 @@ Next: visp work --feature 001-draw-a-ps5-controller
 Read the full brief with visp brief --feature 001-draw-a-ps5-controller.
 
 --- stderr
-visp feature: recording the request takes up to 30 s (rule and memory checks). If your tool returns early, keep polling; never run visp feature twice.
 
 --- exit 0

@@ -132,6 +132,17 @@ process.stdout.write(process.env.FAKE_NEXT ?? "");
     expect(stop({ ...next, progress: "p2" }, who)).toBe("");
   });
 
+  // done or next already printed it with what is open; a block only cost a second final answer.
+  it("lets the worker stop at a handoff that names no command", () => {
+    const next = work("p1", {
+      action: "fix",
+      completion: "handoff",
+      objective: "The independent review budget is spent. Run nothing more for it",
+      command: undefined,
+    });
+    expect(stop(next, "handoff-done")).toBe("");
+  });
+
   it("raises an unresolved environment once", () => {
     const who = "environment";
     const next = work("p1", {

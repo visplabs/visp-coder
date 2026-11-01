@@ -40,10 +40,11 @@ it("routes review through visp next and starts work while feature writes tests",
     );
     expect(guide).toContain("Run visp critic/review only when visp next prints it.");
     expect(guide).toContain(
-      "Run done/verify/accept/next/pr in the foreground, alone, with the host's maximum shell timeout: no run_in_background, loop or file redirect.",
+      "Run feature/done/verify/accept/next/pr in the foreground, alone, with the host's maximum shell timeout: no run_in_background, loop or file redirect.",
     );
+    // A lean feature starts no tester and ended in 4–9 s; the background advice cost a `sleep 20`.
     expect(guide).toContain(
-      "Only feature may be backgrounded (leave it running on blocking hosts). When it prints, run visp work unless --check did; never rerun feature; after kill/error recover by id.",
+      "If visp.yml sets profile full or worker weak, background feature on blocking hosts. When feature prints, run visp work unless --check did; never rerun feature; after kill/error recover by id.",
     );
     // "Poll" invited shell loops around visp status, which the hook now refuses.
     expect(guide).not.toContain("Poll; never duplicate");

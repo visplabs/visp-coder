@@ -95,7 +95,7 @@ function launchedGuidance(stopped: string | undefined, hasFindings: boolean) {
     return "VISP's reviewer is still running. Wait: run visp next.";
   const head = stopped.split(". No new invocation")[0];
   const route =
-    "Follow `visp next`: it says when to run visp done again and when to hand off with visp pr.";
+    "Follow `visp next`: it says when to run visp done again and when the rest goes to a human reviewer.";
   // Findings exist: the reviewer did review an earlier version, so it is only unable to run now.
   if (hasFindings)
     return `Use the recorded findings to choose the next correction; delegate nothing and run no review command. VISP's reviewer cannot review a new version now: ${head}. ${route}`;

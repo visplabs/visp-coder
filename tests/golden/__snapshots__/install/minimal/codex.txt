@@ -3,7 +3,7 @@ $ visp install --harness codex --profile minimal
 Installed visp assets for codex:
   wrote    AGENTS.visp.md
   wrote    .agents/skills/visp/SKILL.md
-  wrote    VISP.commands.md
+  wrote    .visp/VISP.commands.md
   wrote    .visp/hooks/codex-hooks.mjs
   wrote    .codex/hooks.json
   wrote    AGENTS.md
@@ -244,6 +244,114 @@ case "$verdict" in
     ;;
 esac
 
+=== .visp/VISP.commands.md
+# VISP command guide
+
+The executable is `visp`; the package is `visp-coder`. Commands accept `--help`.
+
+`visp next` only reports the next action; it does not record final acceptance. Run `visp accept` when that action directs it.
+
+| When | Command | Next |
+|---|---|---|
+| New request | `visp feature "<goal>" --check "<test command>" --source-brief -` | Pass the request with a quoted heredoc and the host's maximum timeout. --check also works all of it as one slice (the visp work --check step). On the lean profile (the default) it returns in seconds: run it in the foreground. Only when visp.yml sets workflow.profile: full or worker: weak does it keep running while VISP writes acceptance tests: on Codex keep its session open and poll it; on a blocking shell (Claude Code Bash) start it with run_in_background:true and read its output for the result. Once it prints, you have the slice (without --check, run visp work --feature <id> --check "<test command>" for one). Never start feature again: a repeat can create a second feature. After a kill or error, run visp work --feature <id>; add --retry-tests only when work reports the acceptance tests failed or stopped. Use brief --template for several usable slices. |
+| Resume a feature in progress | `visp next` | Read-only routing: follow the returned action; unresolved is not complete. |
+| Plan or revise a decision | `visp brief --template` | Prefer --patch - for changed fields; keep the first slice to one usable behavior. |
+| Implement a slice | `visp work --check "<test command>"` | Read relevant outcomes/code, then edit only the authorized scope. --inspect reads without authorizing. |
+| An ownership/caller/test question | `visp query search "<symbol or behavior>"` | Use callers, testsFor or impact with the returned entity; inspect source. |
+| Observe a browser interaction | `visp capture --task <id> --from -` | Use act, settle, act again in one journey; inspect images. After repair, --replay <run-id> repeats the original check. |
+| Only when `visp next` prints a critic command | `visp critic --preflight` | Host-delegated review only (with VISP's own reviewer `visp done` runs it). Setup-needed: inspect capabilities; ready: prepare, delegate, submit, or dispatch through an attached adapter. |
+| Only when `visp next` shows a manual-feedback request | `visp critic feedback --ask "What should I improve in this version?"` | Ask the user with the host's question tool only if it exists and questions are allowed; otherwise `--id <request-id> --defer`. Continue unrelated work. |
+| Only when `visp next` prints a review command | `visp review --task <id> --prepare` | Pause edits until it returns. Read packetPath and images; submit with --session <id> --from -. |
+| The slice is usable | `visp done --task <id>` | Run it in the foreground, never with run_in_background or a redirect: it waits for VISP's reviewer (about 1-2 min) and prints the result, so there is nothing to poll. A feature that lists requirements takes one --account "R001=<check id> <test name>" per requirement (work prints the full command). Then follow the next step it prints; a handoff or complete ends your loop. |
+| Next directs final acceptance | `visp accept --feature <id>` | Run the final product checks and report accepted status or remaining gaps. |
+| Only when `visp next` prints it | `visp pr --feature <id>` | Prints the evidence record and what is still open for the human reviewer. It reads recorded state; it changes and pushes nothing. |
+
+For a literal request containing backticks, dollar signs or quotes, use a quoted heredoc:
+
+```sh
+visp feature "<goal>" --check "<test command>" --source-brief - <<'REQUEST'
+<verbatim request>
+REQUEST
+```
+
+`--check` makes `feature` also run `visp work --check "<test command>"`, so its reply holds the slice's context and the `visp done` to run next. Without it, run `visp work --check "<test command>"` after `feature`.
+
+A repeat `visp work` may pass `--known <contextId>` from an earlier reply still in view; that reply's unchanged excerpts are not repeated.
+
+## Understand, build, observe
+
+Edit the existing brief returned by --template; preserve originalRequest, feature and acceptanceBaseline.
+Use these field shapes, replacing the illustrative result and file path:
+{
+  "outcomes": [
+    {
+      "id": "O001",
+      "kind": "functional",
+      "statement": "The requested behavior is observable"
+    }
+  ],
+  "slices": [
+    {
+      "id": "T001",
+      "goal": "Deliver the usable behavior",
+      "outcomes": [
+        "O001"
+      ],
+      "scope": {
+        "allowed": [
+          "src/feature.js"
+        ]
+      },
+      "checks": []
+    }
+  ]
+}
+Optional behavior examples use {title, given: [], when, expected: [], outcomes: []}.
+Executable checks use --check-template command or --check-template browser.
+A command check whose result is an image file (render, chart, SVG) adds `images: [out.png]`, a PNG or SVG it writes in every run, and lists an experience outcome naming what the picture must show.
+Prefer --patch - --reason "<decision>" for changed fields (arrays merge by ID); use --from - --reason "<decision>" for a full replacement. Status and execution records are generated, not brief inputs.
+
+Use `visp brief --check-template command` or `visp brief --check-template browser` for editable check shapes (MCP: brief with checkTemplate). Replace the example executable or URL/selectors and link only outcomes actually exercised. Descriptive prose belongs in brief examples. Unlinked exploratory checks remain allowed; passing them does not declare coverage.
+
+Keep the template's `acceptanceBaseline` unchanged: VISP pins independently supplied acceptance checks there. Put implementation checks in `checks`; do not hash the source you intend to change into an acceptance expectation.
+Resolve research questions with the host's research tools or a bounded local experiment only when the answer can change implementation. Record the conclusion, evidence and consequence in the existing brief. The retired research/spec/plan/tasks commands are not another workflow. Graph queries answer concrete code questions; an empty graph does not delay a new slice.
+
+Start with one complete behavior through result and recovery. Challenge a slice that includes every level or screen before expanding content. Do not impose arbitrary file or layer counts. Assess functionality, non-functional needs, experience and code quality against the user's request.
+
+## Recovery and legacy features
+
+If `work` reports a browser startup or permission gap, recover the host and retry with
+`visp work --retry-environment`. A startup gap does not prevent scoped implementation. If
+the scope check rejects the work, inspect the named changes, restore unintended changes or
+revise the intended scope, then retry. Keep sandboxing enabled and never work around a URL policy refusal.
+
+For a legacy feature or current product history needing upgrade, use the installed
+`visp-migrate --project <project> preview`, then
+`visp-migrate --project <project> apply`. Preview is read-only; apply preserves a raw backup
+in the migration transaction. Stop old writers before applying and restart MCP with the upgraded
+executable afterward. `visp next` and `visp status` only read state; they never migrate it.
+
+For UI work, recover the browser and capture the usable interaction before spending a product critic call. Continue the same build–observe–fix loop when the critic is unavailable.
+
+For a browser capture, pipe YAML/JSON to `visp capture --task <id> --from -`:
+
+```yaml
+url: project:/index.html
+viewport: {width: 1280, height: 720}
+actions:
+  - {kind: click, selector: "#start", capture: true}
+  - kind: drag
+    selector: "#handle"
+    position: {x: 0.5, y: 0.5}
+    by: {x: -0.4, y: 0.2}
+    captureDuring: true
+    captureAfterMs: [300, 900]
+  - {kind: wait-for, selector: "#result", visibility: visible, capture: true}
+```
+
+Waits use `durationMs` (1–10000). Follow settling waits with `wait-for` or `compare` to establish the expected state. Use real controls. `project:/index.html` serves a static page (HTML/JS/CSS, no backend) from the project on a port VISP chooses, so start nothing; for an app with a backend or build step, start your server on a free port you choose (not a fixed common one such as 3000, which another process may hold) and use its URL. A drag ends at viewport-pixel `to` or, as fractions of the element's box, `by`; it starts at `from` (pixels) or `position` (fractions). `captureDuring: true` captures the held state at full pull before release and `captureAfterMs: [300, 900]` captures again that many ms after release; `position`/`by` refuse rotated, skewed, flipped or offset-path elements, so use pixels there. Each journey allows six total captures, including the automatic initial capture, the final capture when the last action does not request one, `capture: true`, drag `captureDuring: true` and each `captureAfterMs` offset. Operation records are generated. Capture and verify return matching before/after observations; investigate possible regressions and execution gaps, and inspect actual images. Work and review handoffs attach a recheck to findings linked to recorded execution: use its command to revisit the original path, then inspect the result and one nearby behavior affected by the edit. A matching rerun is observed-unassessed, not a resolved finding. These comparisons are advisory, not quality approval. Legacy runs without a saved journey still need --from. A different input that succeeds does not resolve an earlier failed input.
+
+
 === .visp/hooks/codex-hooks.mjs (executable)
 #!/usr/bin/env node
 // managed by visp; hook-version: 18
@@ -359,6 +467,9 @@ if (input?.hook_event_name === "Stop") {
     const now = Date.now();
     const kind =
       next.completion === "handoff" ? "handoff" : next.completion === "unresolved-environment" ? "environment" : "work";
+    // A handoff with nothing to run was printed, with what is open, by the done or next the
+    // worker read; blocking it only cost a second final answer.
+    if (kind === "handoff" && !next.command) process.exit(0);
     const limit = kind === "work" ? 2 : 1;
     // Ids and values change from call to call; the command's verb and flags name the step.
     const words = String(next.command ?? "").split(/\s+/).filter(Boolean);
@@ -410,9 +521,7 @@ if (input?.hook_event_name === "Stop") {
     const reason = !next.feature
       ? command ? `${objective}. Run: ${command}` : `${objective}.`
       : kind === "handoff"
-      ? command
-        ? `${objective}. Run: ${command} once, then say in your final message what is still open and that ${feature} needs the human reviewer.`
-        : `${objective}. Say in your final message what is still open and that ${feature} needs the human reviewer.`
+      ? `${objective}. Run: ${command} once, then say in your final message what is still open and that ${feature} needs the human reviewer.`
       : kind === "environment"
       ? `VISP cannot verify ${feature} until its execution environment works: ${objective}.${command ? ` Run: ${command} once.` : ""} If it is still unavailable, say in your final message which capability is missing and that ${feature} is not verified; do not retry it repeatedly.`
       : `VISP's next step for ${feature}: ${objective}.${command ? ` Run: ${command}.` : ""} If your own \`visp next\` shows a different step, follow that one. If you cannot finish, say in your final message what is left and why.`;
@@ -1049,12 +1158,12 @@ process.stdout.write(JSON.stringify(deny(reason)));
 
 === AGENTS.md
 <!-- visp:instructions:start -->
-Follow the VISP project instructions in [AGENTS.visp.md](AGENTS.visp.md). The package is visp-coder; the executable is `visp`. Use VISP MCP tools when connected: `visp_next({})`, then `visp_<command>` schemas; otherwise use CLI `visp next`.
+Follow the VISP project instructions in [AGENTS.visp.md](AGENTS.visp.md). The package is visp-coder; the executable is `visp`. Use VISP MCP tools when connected (`visp_<command>` schemas), otherwise the CLI. A new request starts with `visp feature`; `visp next` resumes one in progress.
 
 | When | Command |
 |---|---|
-| Start or resume | `visp next` |
 | New request | `visp feature "<goal>" --check "<test command>" --source-brief -` |
+| Resume a feature in progress | `visp next` |
 | Plan or revise a decision | `visp brief --template` |
 | Implement a slice | `visp work --check "<test command>"` |
 | An ownership/caller/test question | `visp query search "<symbol or behavior>"` |
@@ -1063,14 +1172,14 @@ Follow the VISP project instructions in [AGENTS.visp.md](AGENTS.visp.md). The pa
 | Next directs final acceptance | `visp accept --feature <id>` |
 | Only when `visp next` prints it | `visp pr --feature <id>` |
 
-Research relevant uncertainties with host tools; apply conclusions in the brief. Read [VISP.commands.md](VISP.commands.md) for input examples, critic dispatch and recovery. No custom skill is needed. Reviewer configuration is not proof of invocation or quality.
+Research relevant uncertainties with host tools; apply conclusions in the brief. Input examples, critic dispatch and recovery, only when a command fails or points there: [.visp/VISP.commands.md](.visp/VISP.commands.md). No custom skill is needed. Reviewer configuration is not proof of invocation or quality.
 <!-- visp:instructions:end -->
 
 === AGENTS.visp.md
 # visp
 
 First: `visp feature "<goal>" --check "<test command>" --source-brief - <<'REQUEST'` (request, then REQUEST): records the request and works it as one slice. `visp brief --template` for many slices.
-Loop: `visp work` → implement → `visp done` → `visp next`. Run `visp accept` only when `visp next` directs it.
+Loop: `visp work` → implement → `visp done` → its next step. Run `visp accept` only when a next step directs it.
 
 - Keep request with --source-brief; preserve outcomes, expectations and scope.allowed.
 - Edit only what the request needs; never push, install packages or delete unrelated files.
@@ -1080,120 +1189,12 @@ Loop: `visp work` → implement → `visp done` → `visp next`. Run `visp accep
 - Image-file result (render, chart, SVG): give its brief check `images: [out.png]` (a PNG or SVG it writes; keep the requested format too) and an experience outcome naming what the picture must show.
 - UI previews (aim line, predicted path): use the real action's function and start point; check with real input. Do not delete or shrink requested content to pass a check.
 - If visp done runs VISP's reviewer, run or delegate no review; visp next waits. Fix findings, rerun done. Run visp critic/review only when visp next prints it.
-- Run done/verify/accept/next/pr in the foreground, alone, with the host's maximum shell timeout: no run_in_background, loop or file redirect. done waits for VISP's reviewer and prints the result. Only feature may be backgrounded (leave it running on blocking hosts). When it prints, run visp work unless --check did; never rerun feature; after kill/error recover by id.
+- Run feature/done/verify/accept/next/pr in the foreground, alone, with the host's maximum shell timeout: no run_in_background, loop or file redirect. done waits for VISP's reviewer and prints the result. If visp.yml sets profile full or worker weak, background feature on blocking hosts. When feature prints, run visp work unless --check did; never rerun feature; after kill/error recover by id.
 - Sandbox denied? Rerun with escalation.
 - Missing product evidence stays unresolved. Report reviewer.context honestly. Do not force extra review rounds.
-- Before the final answer, run `visp next`; respect execution refusals.
+- Before the final answer, reach next action complete or a handoff in a done/accept/next reply (report what it lists as open); respect execution refusals.
 
-VISP generates records; see VISP.commands.md.
-
-=== VISP.commands.md
-# VISP command guide
-
-The executable is `visp`; the package is `visp-coder`. Commands accept `--help`.
-
-`visp next` only reports the next action; it does not record final acceptance. Run `visp accept` when that action directs it.
-
-| When | Command | Next |
-|---|---|---|
-| Start or resume | `visp next` | Read-only routing: follow the returned action; unresolved is not complete. |
-| New request | `visp feature "<goal>" --check "<test command>" --source-brief -` | Pass the request with a quoted heredoc and the host's maximum timeout. --check also works all of it as one slice (the visp work --check step). It keeps running while VISP writes acceptance tests: on Codex keep its session open and poll it; on a blocking shell (Claude Code Bash) start it with run_in_background:true and read its output for the result; if the host can do neither, wait for it. Once it prints, you have the slice (without --check, run visp work --feature <id> --check "<test command>" for one). Never start feature again: a repeat can create a second feature. After a kill or error, run visp work --feature <id>; add --retry-tests only when work reports the acceptance tests failed or stopped. Use brief --template for several usable slices. |
-| Plan or revise a decision | `visp brief --template` | Prefer --patch - for changed fields; keep the first slice to one usable behavior. |
-| Implement a slice | `visp work --check "<test command>"` | Read relevant outcomes/code, then edit only the authorized scope. --inspect reads without authorizing. |
-| An ownership/caller/test question | `visp query search "<symbol or behavior>"` | Use callers, testsFor or impact with the returned entity; inspect source. |
-| Observe a browser interaction | `visp capture --task <id> --from -` | Use act, settle, act again in one journey; inspect images. After repair, --replay <run-id> repeats the original check. |
-| Only when `visp next` prints a critic command | `visp critic --preflight` | Host-delegated review only (with VISP's own reviewer `visp done` runs it). Setup-needed: inspect capabilities; ready: prepare, delegate, submit, or dispatch through an attached adapter. |
-| Only when `visp next` shows a manual-feedback request | `visp critic feedback --ask "What should I improve in this version?"` | Ask the user with the host's question tool only if it exists and questions are allowed; otherwise `--id <request-id> --defer`. Continue unrelated work. |
-| Only when `visp next` prints a review command | `visp review --task <id> --prepare` | Pause edits until it returns. Read packetPath and images; submit with --session <id> --from -. |
-| The slice is usable | `visp done --task <id>` | Run it in the foreground, never with run_in_background or a redirect: it waits for VISP's reviewer (about 1-2 min) and prints the result, so there is nothing to poll. A feature that lists requirements takes one --account "R001=<check id> <test name>" per requirement (work prints the full command). Then follow its returned action and `visp next`. |
-| Next directs final acceptance | `visp accept --feature <id>` | Run the final product checks and report accepted status or remaining gaps. |
-| Only when `visp next` prints it | `visp pr --feature <id>` | Prints the evidence record and what is still open for the human reviewer. It reads recorded state; it changes and pushes nothing. |
-
-For a literal request containing backticks, dollar signs or quotes, use a quoted heredoc:
-
-```sh
-visp feature "<goal>" --check "<test command>" --source-brief - <<'REQUEST'
-<verbatim request>
-REQUEST
-```
-
-`--check` makes `feature` also run `visp work --check "<test command>"`, so its reply holds the slice's context and the `visp done` to run next. Without it, run `visp work --check "<test command>"` after `feature`.
-
-A repeat `visp work` may pass `--known <contextId>` from an earlier reply still in view; that reply's unchanged excerpts are not repeated.
-
-## Understand, build, observe
-
-Edit the existing brief returned by --template; preserve originalRequest, feature and acceptanceBaseline.
-Use these field shapes, replacing the illustrative result and file path:
-{
-  "outcomes": [
-    {
-      "id": "O001",
-      "kind": "functional",
-      "statement": "The requested behavior is observable"
-    }
-  ],
-  "slices": [
-    {
-      "id": "T001",
-      "goal": "Deliver the usable behavior",
-      "outcomes": [
-        "O001"
-      ],
-      "scope": {
-        "allowed": [
-          "src/feature.js"
-        ]
-      },
-      "checks": []
-    }
-  ]
-}
-Optional behavior examples use {title, given: [], when, expected: [], outcomes: []}.
-Executable checks use --check-template command or --check-template browser.
-A command check whose result is an image file (render, chart, SVG) adds `images: [out.png]`, a PNG or SVG it writes in every run, and lists an experience outcome naming what the picture must show.
-Prefer --patch - --reason "<decision>" for changed fields (arrays merge by ID); use --from - --reason "<decision>" for a full replacement. Status and execution records are generated, not brief inputs.
-
-Use `visp brief --check-template command` or `visp brief --check-template browser` for editable check shapes (MCP: brief with checkTemplate). Replace the example executable or URL/selectors and link only outcomes actually exercised. Descriptive prose belongs in brief examples. Unlinked exploratory checks remain allowed; passing them does not declare coverage.
-
-Keep the template's `acceptanceBaseline` unchanged: VISP pins independently supplied acceptance checks there. Put implementation checks in `checks`; do not hash the source you intend to change into an acceptance expectation.
-Resolve research questions with the host's research tools or a bounded local experiment only when the answer can change implementation. Record the conclusion, evidence and consequence in the existing brief. The retired research/spec/plan/tasks commands are not another workflow. Graph queries answer concrete code questions; an empty graph does not delay a new slice.
-
-Start with one complete behavior through result and recovery. Challenge a slice that includes every level or screen before expanding content. Do not impose arbitrary file or layer counts. Assess functionality, non-functional needs, experience and code quality against the user's request.
-
-## Recovery and legacy features
-
-If `work` reports a browser startup or permission gap, recover the host and retry with
-`visp work --retry-environment`. A startup gap does not prevent scoped implementation. If
-the scope check rejects the work, inspect the named changes, restore unintended changes or
-revise the intended scope, then retry. Keep sandboxing enabled and never work around a URL policy refusal.
-
-For a legacy feature or current product history needing upgrade, use the installed
-`visp-migrate --project <project> preview`, then
-`visp-migrate --project <project> apply`. Preview is read-only; apply preserves a raw backup
-in the migration transaction. Stop old writers before applying and restart MCP with the upgraded
-executable afterward. `visp next` and `visp status` only read state; they never migrate it.
-
-For UI work, recover the browser and capture the usable interaction before spending a product critic call. Continue the same build–observe–fix loop when the critic is unavailable.
-
-For a browser capture, pipe YAML/JSON to `visp capture --task <id> --from -`:
-
-```yaml
-url: project:/index.html
-viewport: {width: 1280, height: 720}
-actions:
-  - {kind: click, selector: "#start", capture: true}
-  - kind: drag
-    selector: "#handle"
-    position: {x: 0.5, y: 0.5}
-    by: {x: -0.4, y: 0.2}
-    captureDuring: true
-    captureAfterMs: [300, 900]
-  - {kind: wait-for, selector: "#result", visibility: visible, capture: true}
-```
-
-Waits use `durationMs` (1–10000). Follow settling waits with `wait-for` or `compare` to establish the expected state. Use real controls. `project:/index.html` serves a static page (HTML/JS/CSS, no backend) from the project on a port VISP chooses, so start nothing; for an app with a backend or build step, start your server on a free port you choose (not a fixed common one such as 3000, which another process may hold) and use its URL. A drag ends at viewport-pixel `to` or, as fractions of the element's box, `by`; it starts at `from` (pixels) or `position` (fractions). `captureDuring: true` captures the held state at full pull before release and `captureAfterMs: [300, 900]` captures again that many ms after release; `position`/`by` refuse rotated, skewed, flipped or offset-path elements, so use pixels there. Each journey allows six total captures, including the automatic initial capture, the final capture when the last action does not request one, `capture: true`, drag `captureDuring: true` and each `captureAfterMs` offset. Operation records are generated. Capture and verify return matching before/after observations; investigate possible regressions and execution gaps, and inspect actual images. Work and review handoffs attach a recheck to findings linked to recorded execution: use its command to revisit the original path, then inspect the result and one nearby behavior affected by the edit. A matching rerun is observed-unassessed, not a resolved finding. These comparisons are advisory, not quality approval. Legacy runs without a saved journey still need --from. A different input that succeeds does not resolve an earlier failed input.
-
+VISP generates records. Only if a command fails: .visp/VISP.commands.md.
 
 === visp.yml
 preset: javascript

@@ -189,7 +189,7 @@ describe("critic advice when VISP launches the reviewer", () => {
     expect(advice?.guidance).not.toContain("No new invocation");
     expect(advice?.guidance).not.toContain("baseline");
     expect(advice?.guidance).toMatch(
-      /Follow `visp next`: it says when to run visp done again and when to hand off with visp pr\.$/,
+      /Follow `visp next`: it says when to run visp done again and when the rest goes to a human reviewer\.$/,
     );
     const status = await critic({ operation: "status" });
     expect(status).toMatchObject({
@@ -351,7 +351,7 @@ describe("critic advice when VISP launches the reviewer", () => {
     expect(advice?.guidance).toContain("cannot review a new version now");
     expect(advice?.guidance).toContain("budget exhausted");
     expect(advice?.guidance).not.toContain("has not reviewed this version");
-    expect(advice?.guidance).toMatch(/Follow `visp next`.*visp pr\.$/);
+    expect(advice?.guidance).toMatch(/Follow `visp next`.*human reviewer\.$/);
     expect(advice?.command).toBeUndefined();
   });
 });

@@ -2,7 +2,6 @@
   "isError": false,
   "next": {
     "action": "fix",
-    "command": "visp pr --feature 001-return-two-from-the-public",
     "mayEdit": true,
     "completion": "handoff",
     "task": "T001",

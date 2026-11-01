@@ -196,7 +196,7 @@
       "objective": "The independent review budget is spent. VISP's independent reviewer cannot run again. The listed required findings are still open. Fix each reported problem, extend your checks to exercise it, and rerun visp done.",
       "criticAdvice": {
         "status": "unavailable",
-        "guidance": "Use the recorded findings to choose the next correction; delegate nothing and run no review command. VISP's reviewer cannot review a new version now: Feature critic call budget exhausted; unresolved. Follow `visp next`: it says when to run visp done again and when to hand off with visp pr.",
+        "guidance": "Use the recorded findings to choose the next correction; delegate nothing and run no review command. VISP's reviewer cannot review a new version now: Feature critic call budget exhausted; unresolved. Follow `visp next`: it says when to run visp done again and when the rest goes to a human reviewer.",
         "findings": [
           {
             "dimension": "functional",
@@ -217,7 +217,7 @@
     },
     "criticAdvice": {
       "status": "unavailable",
-      "guidance": "Use the recorded findings to choose the next correction; delegate nothing and run no review command. VISP's reviewer cannot review a new version now: Feature critic call budget exhausted; unresolved. Follow `visp next`: it says when to run visp done again and when to hand off with visp pr.",
+      "guidance": "Use the recorded findings to choose the next correction; delegate nothing and run no review command. VISP's reviewer cannot review a new version now: Feature critic call budget exhausted; unresolved. Follow `visp next`: it says when to run visp done again and when the rest goes to a human reviewer.",
       "findings": [
         {
           "dimension": "functional",

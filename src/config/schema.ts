@@ -67,6 +67,14 @@ const workflowSchema = z
      * passed before and fails now.
      */
     regressionGate: z.enum(["off", "advise", "gate"]).default("advise"),
+    /**
+     * Claude Code only, opt-in: `true` makes `visp install` set
+     * `CLAUDE_CODE_AUTO_COMPACT_WINDOW=100000` and `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=90` in
+     * `.claude/settings.json`, so a session compacts at about 90k tokens, below the 100k prompt
+     * size where Haiku 5.5 prices every token 5 times higher. Unset or `false` leaves them out
+     * and removes VISP's values at the next install.
+     */
+    autoCompact: z.boolean().optional(),
   })
   .strict()
   .default({});

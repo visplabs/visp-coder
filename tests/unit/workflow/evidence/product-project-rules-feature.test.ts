@@ -26,10 +26,10 @@ afterEach(() => {
   workspace = undefined;
 });
 
-async function project(critic?: Record<string, unknown>) {
+async function project(critic?: Record<string, unknown>, profile?: "lean" | "full") {
   workspace = await TestWorkspace.create(
     { "src/items.ts": "export const items = 1;\n" },
-    { critic: Boolean(critic) },
+    { critic: Boolean(critic), ...(profile ? { profile } : {}) },
   );
   await workspace.installFoundation();
   if (critic) {
@@ -105,6 +105,17 @@ it("reads the rules with a VISP-launched Claude reviewer's model", async () => {
     model: "claude-sonnet-5-5",
   });
   expect(await recorded()).toEqual(["Every money field ends in Cents."]);
+});
+
+// On 8 held-out prompts Haiku 5.5 found the 15 rules Sonnet 5.5 found, at a tenth of the cost.
+it("reads a lean feature's rules with the lean reviewer model", async () => {
+  await project(
+    { enabled: true, harness: "claude-code", launch: "claude-exec", model: "claude-sonnet-5-5" },
+    "lean",
+  );
+  extractor.mockResolvedValue([]);
+  await feature("Prices", "House style for this API: money fields end in Cents.");
+  expect(extractorModel).toHaveBeenCalledWith({ launch: "claude-exec", model: "claude-haiku-5-5" });
 });
 
 it("falls back to phrase matching when the model fails", async () => {

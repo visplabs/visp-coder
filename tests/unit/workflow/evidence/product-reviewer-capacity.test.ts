@@ -259,6 +259,43 @@ describe("VISP's reviewer capacity", () => {
     expect(await capacity(await subject())).toEqual({ available: true });
   });
 
+  // Batch leandef2: a valid "satisfied" review that named an expectation the outcome does not
+  // have was rejected, and the lean cadence then counted it as its one review and never retried.
+  it("does not count a review VISP rejected as a lean review round", async () => {
+    await launch("codex-exec");
+    const raw = parse(await readFile(join(setup.workspace.root, "visp.yml"), "utf8"));
+    raw.workflow = { ...raw.workflow, reviewCadence: "feature" };
+    await setup.workspace.write("visp.yml", stringify(raw));
+    setup.workspace.commit("lean review cadence");
+    await ready();
+    const source = await subject();
+    const invented = attached(
+      vi.fn(async (packet: CriticPacket) => {
+        const base = answer(packet);
+        const assessments = base.review.assessments.map((entry) => ({
+          ...entry,
+          expectations: [
+            { id: "stated-rules-1-to-8", status: "satisfied", reason: "Traced", evidence: [] },
+          ],
+        }));
+        return {
+          model: config.model,
+          response: { ...base, review: { ...base.review, assessments } },
+        };
+      }),
+    );
+    await run({ operation: "review" }, invented);
+    expect(await capacity(source)).toMatchObject({
+      available: true,
+      callsRemaining: config.maxCalls - 1,
+    });
+    await run({ operation: "review" }, working());
+    expect(await capacity(source)).toMatchObject({
+      available: false,
+      reason: expect.stringContaining("One independent review ran"),
+    });
+  });
+
   describe("routes", () => {
     const next = async () => {
       const result = await runProductNext(await setup.workspace.state(), { task: "T001" });
@@ -295,9 +332,11 @@ describe("VISP's reviewer capacity", () => {
       expect(handoff).toMatchObject({
         action: "fix",
         completion: "handoff",
-        command: `visp pr --feature ${setup.brief.feature}`,
       });
-      expect(handoff.objective).toContain("remaining findings go to a human reviewer");
+      // The handoff ends the worker's loop: its evidence is the report, with nothing to run.
+      expect(handoff.command).toBeUndefined();
+      expect(handoff.objective).toContain("list the remaining findings shown here");
+      expect(handoff.objective).toContain("needs a human reviewer");
       expect(handoff.objective).not.toContain("Fix what you can");
       const record = await readProductRecord(await setup.workspace.state(), {
         feature: setup.brief.feature,
@@ -442,7 +481,6 @@ describe("VISP's reviewer capacity", () => {
       }
       expect(await nextStep()).toMatchObject({
         completion: "handoff",
-        command: `visp pr --feature ${setup.brief.feature}`,
       });
       return route;
     }
@@ -510,8 +548,8 @@ describe("VISP's reviewer capacity", () => {
       const stuck = await next();
       expect(stuck).toMatchObject({
         completion: "handoff",
-        command: expect.stringContaining("visp pr"),
       });
+      expect(stuck.command).toBeUndefined();
       expect(stuck.objective).toContain("failed twice on this source");
       await edit("changed again");
       const again = await next();
@@ -566,7 +604,6 @@ describe("VISP's reviewer capacity", () => {
       expect(await next()).toMatchObject({
         action: "fix",
         completion: "handoff",
-        command: `visp pr --feature ${setup.brief.feature}`,
       });
     });
 
@@ -585,8 +622,8 @@ describe("VISP's reviewer capacity", () => {
         action: "fix",
         completion: "handoff",
         mayEdit: false,
-        command: expect.stringContaining("visp pr"),
       });
+      expect(step.command).toBeUndefined();
       expect(step.objective).toContain("remaining assessment");
     });
 

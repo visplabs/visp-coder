@@ -14,6 +14,5 @@ Full result: add --json. Tool success does not imply product acceptance.
 Next: visp done --feature 001-return-two-from-the-public --task T001
 
 --- stderr
-visp feature: recording the request takes up to 30 s (rule and memory checks). If your tool returns early, keep polling; never run visp feature twice.
 
 --- exit 0

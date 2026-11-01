@@ -2,6 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { exists } from "../../../src/core/fs.js";
+import { assetFingerprint } from "../../../src/harness/asset-inspection.js";
 import { installHarness } from "../../../src/harness/install.js";
 import { TestWorkspace } from "../support/workspace.js";
 
@@ -51,7 +52,7 @@ describe("profile switching", () => {
     await install("minimal");
 
     const guide = await readFile(file("AGENTS.visp.md"), "utf8");
-    expect(guide).toContain("Before the final answer, run `visp next`");
+    expect(guide).toContain("Before the final answer, reach next action complete or a handoff");
     expect(guide).toContain("visp work");
   });
 
@@ -72,6 +73,51 @@ describe("profile switching", () => {
 
     expect(await readFile(file(".claude/skills/visp/SKILL.md"), "utf8")).toBe("my own notes\n");
     expect(outcome.manualSteps.join(" ")).toContain(".claude/skills/visp/SKILL.md");
+  });
+
+  /** An earlier build wrote the command guide at the root, where every worker's `ls` found it. */
+  async function olderGuideAtRoot(content: string) {
+    const state = await workspace.state();
+    await writeFile(file("VISP.commands.md"), content, "utf8");
+    const manifest = JSON.parse(await readFile(state.paths.assetManifest, "utf8"));
+    manifest["VISP.commands.md"] = assetFingerprint(content);
+    await writeFile(state.paths.assetManifest, JSON.stringify(manifest), "utf8");
+  }
+
+  it("moves an unedited command guide from the project root into .visp/", async () => {
+    await install("minimal");
+    await olderGuideAtRoot("# VISP command guide\n\nAn earlier build's text.\n");
+
+    const outcome = await install("minimal");
+
+    expect(await exists(file("VISP.commands.md"))).toBe(false);
+    expect(await readFile(file(".visp/VISP.commands.md"), "utf8")).toContain(
+      "# VISP command guide",
+    );
+    expect(outcome.assets).toContainEqual({ path: "VISP.commands.md", status: "removed" });
+  });
+
+  it("keeps an edited command guide at the root and says where the guide went", async () => {
+    await install("minimal");
+    await olderGuideAtRoot("# VISP command guide\n");
+    await writeFile(file("VISP.commands.md"), "# VISP command guide\n\nMy notes.\n", "utf8");
+
+    const outcome = await install("minimal");
+
+    expect(await readFile(file("VISP.commands.md"), "utf8")).toContain("My notes.");
+    expect(outcome.manualSteps.join(" ")).toContain(
+      "VISP.commands.md is an edited copy of the command guide, which now lives at .visp/VISP.commands.md",
+    );
+  });
+
+  it("leaves a root VISP.commands.md that no install recorded", async () => {
+    await install("minimal");
+    await writeFile(file("VISP.commands.md"), "# Our own commands\n", "utf8");
+
+    const outcome = await install("minimal");
+
+    expect(await readFile(file("VISP.commands.md"), "utf8")).toBe("# Our own commands\n");
+    expect(outcome.manualSteps.join(" ")).not.toContain("VISP.commands.md");
   });
 
   it("is idempotent: a repeated install changes nothing", async () => {

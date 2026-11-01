@@ -23,16 +23,18 @@ Prefer --patch - --reason "<decision>" for changed fields (arrays merge by ID); 
 /** One discoverability catalogue for generated host instructions and their examples. */
 export const VISP_COMMANDS = [
   {
-    command: "next",
-    when: "Start or resume",
-    example: "visp next",
-    next: "Read-only routing: follow the returned action; unresolved is not complete.",
-  },
-  {
     command: "feature",
     when: "New request",
     example: 'visp feature "<goal>" --check "<test command>" --source-brief -',
-    next: 'Pass the request with a quoted heredoc and the host\'s maximum timeout. --check also works all of it as one slice (the visp work --check step). It keeps running while VISP writes acceptance tests: on Codex keep its session open and poll it; on a blocking shell (Claude Code Bash) start it with run_in_background:true and read its output for the result; if the host can do neither, wait for it. Once it prints, you have the slice (without --check, run visp work --feature <id> --check "<test command>" for one). Never start feature again: a repeat can create a second feature. After a kill or error, run visp work --feature <id>; add --retry-tests only when work reports the acceptance tests failed or stopped. Use brief --template for several usable slices.',
+    next: 'Pass the request with a quoted heredoc and the host\'s maximum timeout. --check also works all of it as one slice (the visp work --check step). On the lean profile (the default) it returns in seconds: run it in the foreground. Only when visp.yml sets workflow.profile: full or worker: weak does it keep running while VISP writes acceptance tests: on Codex keep its session open and poll it; on a blocking shell (Claude Code Bash) start it with run_in_background:true and read its output for the result. Once it prints, you have the slice (without --check, run visp work --feature <id> --check "<test command>" for one). Never start feature again: a repeat can create a second feature. After a kill or error, run visp work --feature <id>; add --retry-tests only when work reports the acceptance tests failed or stopped. Use brief --template for several usable slices.',
+  },
+  {
+    command: "next",
+    // "Start or resume" sent workers to `next` before a new request, which always answered
+    // "run visp feature" (4 of 6 lean runs in batch leandef2).
+    when: "Resume a feature in progress",
+    example: "visp next",
+    next: "Read-only routing: follow the returned action; unresolved is not complete.",
   },
   {
     command: "brief",
@@ -80,7 +82,7 @@ export const VISP_COMMANDS = [
     command: "done",
     when: "The slice is usable",
     example: "visp done --task <id>",
-    next: 'Run it in the foreground, never with run_in_background or a redirect: it waits for VISP\'s reviewer (about 1-2 min) and prints the result, so there is nothing to poll. A feature that lists requirements takes one --account "R001=<check id> <test name>" per requirement (work prints the full command). Then follow its returned action and `visp next`.',
+    next: 'Run it in the foreground, never with run_in_background or a redirect: it waits for VISP\'s reviewer (about 1-2 min) and prints the result, so there is nothing to poll. A feature that lists requirements takes one --account "R001=<check id> <test name>" per requirement (work prints the full command). Then follow the next step it prints; a handoff or complete ends your loop.',
   },
   {
     command: "accept",
@@ -109,6 +111,16 @@ export function commandMap(includeNext = true, includeCritic = includeNext) {
     ),
   ].join("\n");
 }
+
+/**
+ * Where install writes the command guide. At the project root it was in every worker's first
+ * `ls`, and every lean worker of batch leandef2 read its 3.2k tokens before starting (6 of 6);
+ * on the larger task that text then rode every turn above the 100k-token price tier. The
+ * resident guides name it for recovery only.
+ */
+export const COMMAND_GUIDE_PATH = ".visp/VISP.commands.md";
+/** Where an earlier build wrote the command guide; install removes an unedited copy. */
+export const RETIRED_COMMAND_GUIDE_PATH = "VISP.commands.md";
 
 /**
  * The installed guide must not depend on critic settings: readiness compares installed

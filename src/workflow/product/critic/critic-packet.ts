@@ -176,6 +176,7 @@ export async function criticPacket(
       ),
       independent.outcomes.map((outcome) => outcome.id),
       disputes.map((dispute) => dispute.test),
+      independent.outcomes.flatMap((outcome) => outcome.expectations.map((entry) => entry.id)),
     ),
   };
   const ids = deliveredReviewEvidenceIds(

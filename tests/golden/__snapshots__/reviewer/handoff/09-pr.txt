@@ -42,14 +42,10 @@ Unchecked (advise mode): 0 commands (0 linked to the change, 0 from earlier feat
 
 ## Next
 
-The independent review budget is spent. Run visp pr (it prints the evidence record and changes and pushes nothing); the remaining findings go to a human reviewer
-
-`visp pr --feature 001-return-two-from-the-public`
+The independent review budget is spent. Run nothing more for it: in your final answer, list the remaining findings shown here and say that 001-return-two-from-the-public needs a human reviewer
 
 Detail: `visp pr --full --feature 001-return-two-from-the-public` adds the full handoff document; `--json` gives this record as data; `visp ui` shows it under Evidence; raw records are in `.visp/features/001-return-two-from-the-public/`.
 
-
-Next: visp pr --feature 001-return-two-from-the-public
 
 --- stderr
 

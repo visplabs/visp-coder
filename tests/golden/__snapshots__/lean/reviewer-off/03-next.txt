@@ -1,0 +1,10 @@
+$ visp next
+--- stdout
+next: {"feature":"001-return-two-from-the-public","action":"accept","objective":"Run final checks against the assembled product and preserved expectations","command":"visp accept --feature 001-return-two-from-the-public","mayEdit":false}
+Full result: add --json.
+
+Next: visp accept --feature 001-return-two-from-the-public
+
+--- stderr
+
+--- exit 0

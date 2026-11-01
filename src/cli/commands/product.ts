@@ -15,6 +15,7 @@ import {
   runProductWork,
   updateProductBrief,
 } from "../../workflow/product/index.js";
+import { featureProfile } from "../../workflow/product/profile.js";
 import {
   configuredReviewStarter,
   reviewWaitMs,
@@ -281,6 +282,22 @@ async function withFirstSlice<T extends { duplicateOf?: string; brief: { feature
   };
 }
 
+/**
+ * Whether `feature` may outlast a shell tool's early return: Codex's rule and memory checks, or
+ * a tester on the full profile. A lean feature starts no tester, and with `claude-exec` it ended
+ * in 4–9 s in 12 of 12 leandef runs; the notice there sent workers to `sleep 20` and poll.
+ */
+function slowStart(
+  state: WorkspaceState,
+  request: string,
+  starter: ReturnType<typeof configuredTestsStarter>,
+): boolean {
+  if (state.config.critic?.launch === "codex-exec") return true;
+  return (
+    !!starter && featureProfile(state, { brief: { originalRequest: request } }).name === "full"
+  );
+}
+
 export function featureCommand(): Command {
   return new Command("feature")
     .description("Start a product brief from the original request")
@@ -315,22 +332,18 @@ export function featureCommand(): Command {
         true,
         async (state) => {
           const starter = configuredTestsStarter(state);
-          if ((starter || state.config.critic?.launch === "codex-exec") && !isJson(opts))
+          // Long requests with quotes are hard to pass as one shell argument.
+          const sourceBrief =
+            opts.sourceBrief === "-"
+              ? (await readStandardInput()).toString("utf8")
+              : opts.sourceBrief;
+          if (slowStart(state, sourceBrief ?? goal, starter) && !isJson(opts))
             process.stderr.write(
               "visp feature: recording the request takes up to 30 s (rule and memory checks). If your tool returns early, keep polling; never run visp feature twice.\n",
             );
           const created = await createProductFeatureChecked(
             state,
-            {
-              goal,
-              // Long requests with quotes are hard to pass as one shell argument.
-              sourceBrief:
-                opts.sourceBrief === "-"
-                  ? (await readStandardInput()).toString("utf8")
-                  : opts.sourceBrief,
-              branch: opts.branch,
-              riskLevel: risk.value,
-            },
+            { goal, sourceBrief, branch: opts.branch, riskLevel: risk.value },
             starter,
           );
           if (!created.ok) return created;

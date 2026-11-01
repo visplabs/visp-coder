@@ -1,4 +1,4 @@
-import { afterEach, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { DECLINED_TESTER, FakeModels, testerSuite } from "./support/fake-models.js";
 import { BRIEF, CLAUDE, GOAL, GoldenProject, REQUEST, Recorder } from "./support/project.js";
 
@@ -160,4 +160,84 @@ it("starts the lean slice in the feature command, and marks tests the check does
   ]);
   await run.models("02-done-claimed", models);
   await run.cli("03-pr", ["pr"]);
+});
+
+/**
+ * D13: a lean feature runs no VISP reviewer unless the project or the user set the critic's
+ * mode. In batch B2 lean with the reviewer and lean without it scored the same hidden checks and
+ * probes, and the reviewer cost more. The critic's launch and model stay configured.
+ */
+const LAUNCH_ONLY = { critic: { harness: "claude-code", launch: "claude-exec" } };
+const reviews = async () => (await models.calls()).filter((call) => call.role === "reviewer");
+
+it("runs no reviewer on a lean feature when no critic mode is set", async () => {
+  project = await GoldenProject.create({ harness: "claude-code", ...LAUNCH_ONLY });
+  await models.plan({ reviews: ["satisfied"] });
+  const run = new Recorder(project, "lean/reviewer-off");
+  await run.cli("01-feature-check", [
+    "feature",
+    GOAL,
+    "--check",
+    "node checks/value.check.mjs",
+    "--source-brief",
+    REQUEST,
+  ]);
+  await run.models("01-feature-check", models);
+  await project.setValue(2);
+  await run.cli("02-done", ["done"]);
+  expect(await reviews()).toEqual([]);
+  await run.models("02-done", models);
+  await run.cli("03-next", ["next"]);
+  await run.cli("04-accept", ["accept"]);
+  expect(await reviews()).toEqual([]);
+});
+
+// B2's reviewer-off arm set `critic.mode: off` and accept still asked for a reviewer
+// assessment: workers spent 11.8 turns after the last done, against 4.5 with the reviewer.
+it("accepts a lean feature on its checks when critic.mode is explicitly off", async () => {
+  project = await GoldenProject.create({
+    harness: "claude-code",
+    critic: { harness: "claude-code", launch: "claude-exec", mode: "off" },
+  });
+  await models.plan({ reviews: ["satisfied"] });
+  const run = new Recorder(project, "lean/reviewer-off-explicit");
+  await run.cli("01-feature-check", [
+    "feature",
+    GOAL,
+    "--check",
+    "node checks/value.check.mjs",
+    "--source-brief",
+    REQUEST,
+  ]);
+  await models.clear();
+  await project.setValue(2);
+  await run.cli("02-done", ["done"]);
+  const accepted = await run.cli("03-accept", ["accept"]);
+  expect(accepted.exitCode).toBe(0);
+  expect(accepted.stdout).toContain('"status":"accepted"');
+  expect(await reviews()).toEqual([]);
+});
+
+// A feature that leaves lean (here a check failed on two versions) gets the full loop's reviewer.
+it("turns the reviewer on when a lean feature escalates to the full profile", async () => {
+  project = await GoldenProject.create({ harness: "claude-code", ...LAUNCH_ONLY });
+  await models.plan({ reviews: ["satisfied"] });
+  const run = new Recorder(project, "lean/reviewer-escalated");
+  await run.cli("01-feature-check", [
+    "feature",
+    GOAL,
+    "--check",
+    "node checks/value.check.mjs",
+    "--source-brief",
+    REQUEST,
+  ]);
+  await models.clear();
+  await project.setValue(3);
+  await run.cli("02-done-failing", ["done"]);
+  await project.setValue(4);
+  await run.cli("03-done-failing-again", ["done"]);
+  await project.setValue(2);
+  await run.cli("04-done-escalated", ["done"]);
+  expect(await reviews()).toHaveLength(1);
+  await run.models("04-done-escalated", models);
 });

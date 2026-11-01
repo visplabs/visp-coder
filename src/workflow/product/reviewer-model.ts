@@ -9,6 +9,7 @@ import {
   runClaudeStructured,
   runCodexStructured,
 } from "./critic/critic-exec.js";
+import { leanCriticConfig } from "./profile.js";
 
 /** The reviewer VISP launches, whose model also reads rules and chooses memories. */
 export interface ReviewerModel {
@@ -20,13 +21,18 @@ export interface ReviewerModel {
  * The model of the reviewer VISP launches (`critic.launch: codex-exec` or `claude-exec`).
  * Only codex-exec was read, so under claude-exec (bench batch co1) no rule was read by a model
  * and no earlier decision reached a later feature. A reviewer the host runs gives VISP no
- * model of its own to call: VISP launches a model only where the project lets it.
+ * model of its own to call: VISP launches a model only where the project lets it. `lean` gives
+ * the lean profile's reviewer model (`critic.leanModel`, Haiku under Claude Code).
  */
-export async function reviewerModel(workspace: WorkspaceState): Promise<ReviewerModel | undefined> {
+export async function reviewerModel(
+  workspace: WorkspaceState,
+  lean = false,
+): Promise<ReviewerModel | undefined> {
   const launch = workspace.config.critic?.launch;
   if (launch !== "codex-exec" && launch !== "claude-exec") return undefined;
   const critic = await resolveCriticPolicy(workspace.config.harness, workspace.config.critic);
-  const model = critic.ok ? critic.value.config?.model : undefined;
+  const config = critic.ok ? critic.value.config : undefined;
+  const model = config && (lean ? leanCriticConfig(workspace, config).model : config.model);
   return model ? { launch, model } : undefined;
 }
 

@@ -12,6 +12,7 @@ import { type FeatureMemory, featureMemory } from "./feature-memory.js";
 import type { ProductFeatureOptions, ProductFeatureOutcome } from "./feature-model.js";
 import type { HostRequest } from "./host-prompts.js";
 import type { ProductState } from "./model.js";
+import { featureProfile } from "./profile.js";
 import {
   mergeProjectRules,
   type RuleExtractor,
@@ -22,9 +23,19 @@ import { reviewerModel } from "./reviewer-model.js";
 import { reviewerRuleExtractor } from "./rule-extraction.js";
 import { readProductRecord } from "./store.js";
 
-/** With a reviewer VISP launches, its model reads the rules; otherwise phrase matching does. */
-async function ruleReader(workspace: WorkspaceState): Promise<RuleExtractor | undefined> {
-  const reviewer = await reviewerModel(workspace);
+/**
+ * With a reviewer VISP launches, its model reads the rules; otherwise phrase matching does. A
+ * lean feature uses the lean reviewer model: on Sonnet the reader cost $0.009–0.026 a call in
+ * batch leandef2, a quarter of lean's model spend on bundles. On 8 held-out prompts with 15
+ * standing rules Haiku 5.5 found all 15, as Sonnet 5.5 did, and as many false rules on 6
+ * ordinary requests (6 each, mostly the benchmark's own wrapper text).
+ */
+async function ruleReader(
+  workspace: WorkspaceState,
+  request: string,
+): Promise<RuleExtractor | undefined> {
+  const lean = featureProfile(workspace, { brief: { originalRequest: request } }).name === "lean";
+  const reviewer = await reviewerModel(workspace, lean);
   return reviewer ? reviewerRuleExtractor(reviewer) : undefined;
 }
 
@@ -47,7 +58,7 @@ export async function featureRequest(
 ): Promise<Result<FeatureRequest>> {
   const recorded = await readProjectRules(workspace);
   if (!recorded.ok) return recorded;
-  const stated = await statedRules(host?.prompts ?? [], await ruleReader(workspace));
+  const stated = await statedRules(host?.prompts ?? [], await ruleReader(workspace, request));
   const rules = mergeProjectRules(
     recorded.value.rules,
     stated,

@@ -124,7 +124,7 @@ void spec; void key; void adapterFor; const usage: NormalizedUsage | undefined =
   for (const path of [
     "AGENTS.md",
     "AGENTS.visp.md",
-    "VISP.commands.md",
+    ".visp/VISP.commands.md",
     ".agents/skills/visp/SKILL.md",
     ".codex/config.toml",
     ".git/hooks/pre-commit",
@@ -209,7 +209,7 @@ void spec; void key; void adapterFor; const usage: NormalizedUsage | undefined =
   if (answer.data?.status !== "answered" || answer.data?.provenance !== "caller-reported") throw new Error("Manual critic did not retain the user's reply");
   const manualWork = JSON.parse(run(bin,["work","--task","T001","--json"],project,env));
   if (manualWork.data?.userFeedback?.feedback[0]?.reply !== answer.data.reply) throw new Error("Manual feedback missing from actor work context");
-  if (!readFileSync(join(project,"VISP.commands.md"),"utf8").includes("critic feedback")) throw new Error("Packaged command guide omits manual feedback");
+  if (!readFileSync(join(project,".visp/VISP.commands.md"),"utf8").includes("critic feedback")) throw new Error("Packaged command guide omits manual feedback");
   run(bin,["critic","--mode","auto","--json"],project,env);
   const preparedReview = JSON.parse(run(bin, ["review", "--prepare", "--task", "T001", "--json"], project, env));
   if (!preparedReview.data?.session || !existsSync(preparedReview.data.packetPath)) throw new Error("Packaged review session unavailable");

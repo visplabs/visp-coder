@@ -23,7 +23,9 @@ import {
   CLAUDE_PRE_TOOL_USE_HOOK,
   CLAUDE_SETTINGS_FILE,
   planClaudeSettingsRemoval,
+  withCompactionEnv,
 } from "./claude-settings.js";
+import { commandGuide, RETIRED_COMMAND_GUIDE_PATH } from "./command-guide.js";
 import { preCommitHookPath } from "./git-hook.js";
 import {
   HOOK_MARKER,
@@ -221,6 +223,11 @@ function generatedAssets(harness: Harness): Asset[] {
     render: renderPreToolUseHook,
   });
   assets.set(CI_WORKFLOW, { path: CI_WORKFLOW, content: renderCiWorkflow(pinnedRange()) });
+  // An install from an earlier build may still have the command guide at the project root.
+  assets.set(RETIRED_COMMAND_GUIDE_PATH, {
+    path: RETIRED_COMMAND_GUIDE_PATH,
+    content: commandGuide(false, true),
+  });
   return [...assets.values()];
 }
 
@@ -318,16 +325,28 @@ async function planClaudeSettings(
       reason: "an edited VISP hook entry remains; use --force to remove it",
     });
   }
-  if (removal.status !== "removed") return ok(undefined);
+  const hooksGone = removal.status === "removed" ? (removal.content ?? "") : current.value;
+  // The lean compaction variables go too, where they still hold VISP's values.
+  const content = withCompactionEnv(hooksGone, false) ?? "";
+  if (content === (current.value ?? "")) return ok(undefined);
   return rewriteShared(
     fs,
     CLAUDE_SETTINGS_FILE,
     current.value,
-    { content: removal.content ?? "", empty: removal.empty === true },
+    { content, empty: removal.empty === true || emptySettings(content) },
     createdByInstall(manifest, CLAUDE_SETTINGS_FILE),
     plan,
-    "removed VISP's hook entries",
+    "removed VISP's hook entries and settings",
   );
+}
+
+function emptySettings(content: string): boolean {
+  try {
+    const value = JSON.parse(content);
+    return typeof value === "object" && value !== null && Object.keys(value).length === 0;
+  } catch {
+    return content.trim() === "";
+  }
 }
 
 async function planMcpRemoval(

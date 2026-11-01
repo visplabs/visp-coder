@@ -404,7 +404,7 @@ async function reservationCapacity(
   if (budgetGap) return err(vispError("STAGE_BLOCKED", budgetGap));
   const roundGap =
     selected.phase === "product"
-      ? reviewRoundGap(workspace, selected.record, budget.value.budget)
+      ? reviewRoundGap(workspace, selected.record, budget.value)
       : undefined;
   if (roundGap) return err(vispError("STAGE_BLOCKED", roundGap));
   const authorizationGap = criticRecoveryAuthorizationGap(request);

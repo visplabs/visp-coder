@@ -279,7 +279,6 @@ describe("final executable correction", () => {
     expect(next).toMatchObject({
       action: "fix",
       completion: "handoff",
-      command: expect.stringContaining("visp pr"),
       objective: expect.stringContaining("remaining assessment"),
     });
   });

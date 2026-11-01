@@ -104,6 +104,20 @@ export function changeEscalation(
 }
 
 /**
+ * The reviewer a feature turns on when it leaves lean: a lean feature pinned with no reviewer
+ * (no critic mode was set) gets the full profile's, configured at `visp feature`. Empty otherwise.
+ */
+export function escalatedReviewer(
+  workspace: WorkspaceState,
+  record: ProfileSubject & { readonly state: Pick<ProductState, "criticLeanOff"> },
+):
+  | Pick<ProductState, "criticEnabled" | "criticLeanOff" | "criticAcceptOnChecks">
+  | Record<string, never> {
+  if (!record.state.criticLeanOff || featureProfile(workspace, record).name !== "full") return {};
+  return { criticEnabled: true, criticLeanOff: undefined, criticAcceptOnChecks: undefined };
+}
+
+/**
  * The reviewer a lean feature pins at `visp feature`. In the October critic ablation on picture
  * tasks a Haiku 5.5 reviewer scored 7.53 against Sonnet's 7.60 (pairwise within noise) at about
  * a third of the cost per run ($0.13 vs $0.37). The host's own review was not chosen: it spends

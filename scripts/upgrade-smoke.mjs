@@ -205,7 +205,7 @@ try {
     "Generated upgrade changes must still respect the original scope",
   );
   assert.match(JSON.stringify(blocked.error), /scope|allowed/i);
-  brief.slices[0].scope.allowed.push("AGENTS.visp.md", "VISP.commands.md", "visp.yml");
+  brief.slices[0].scope.allowed.push("AGENTS.visp.md", "VISP.commands.md", ".visp/VISP.commands.md", "visp.yml");
   current(
     [
       "brief",
