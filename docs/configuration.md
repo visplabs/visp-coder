@@ -11,7 +11,7 @@ profile: minimal            # minimal or standard
 
 critic:                     # see docs/critic.md
   harness: claude-code
-  # launch: codex-exec
+  launch: claude-exec       # written by init for claude-code; codex-exec for codex; host elsewhere
   # webSearch: true        # reviewer web search, every query logged (codex-exec only)
   # existingCodeTests: true # experimental: independent tester on existing codebases
   # leanModel: claude-haiku-5-5 # reviewer of lean features (claude-code default)
@@ -76,7 +76,7 @@ telemetry:
 | `context.tokenBudget` | Approximate budget for the complete context `work` delivers. |
 | `context.maxSnippets` | Maximum source excerpts in delivered context. |
 | `memory.enabled` | Enable earlier-request recall; `false` turns every memory path off. |
-| `memory.recall` | With a reviewer VISP launches (`critic.launch: codex-exec` or `claude-exec`), use its model to select decisions from earlier requests and append them to a new feature's original request and `work` replies. Defaults to `true`; set `false` to skip this recall. A reviewer the host runs (no `critic.launch`, as `visp init` sets up for Claude Code) gives VISP no model to call, so nothing is recalled. |
+| `memory.recall` | With a reviewer VISP launches (`critic.launch: codex-exec` or `claude-exec`), use its model to select decisions from earlier requests and append them to a new feature's original request and `work` replies. Defaults to `true`; set `false` to skip this recall. A reviewer the host runs (`critic.launch: host`, or none) gives VISP no model to call, so nothing is recalled. `visp init` writes `claude-exec` for Claude Code and `codex-exec` for Codex. |
 | `telemetry.enabled` | Local usage import; activity recording is independent. Records stay on the machine. |
 
 `visp doctor --settings` (MCP `visp_doctor` with `settings: true`) shows each effective value, whether it came from the file or a default, and which controls are inactive.
@@ -114,7 +114,7 @@ Other operations are `entity`, `neighbors` and `callees`. `tracePath` takes a so
 
 ## Memory and project rules
 
-With the default `memory.recall: true` and a reviewer VISP launches (`critic.launch: codex-exec` or `claude-exec`), each new feature can receive relevant decisions from earlier feature requests: VISP records earlier requests in `.visp/state/request-history.json`, and the reviewer's model, at low effort and seeing only the notes, chooses the ones that constrain the new request. The selected decisions are appended to the feature's original request, so the tester and reviewer see them as part of that request. Set `memory.recall: false` to disable this step. VISP calls a model only where the project lets it launch the reviewer, so with a reviewer the host runs (no `critic.launch`, the Claude Code default from `visp init`) nothing is recalled and rules are found by phrase matching; set `critic.launch: claude-exec` to turn both on.
+With the default `memory.recall: true` and a reviewer VISP launches (`critic.launch: codex-exec` or `claude-exec`), each new feature can receive relevant decisions from earlier feature requests: VISP records earlier requests in `.visp/state/request-history.json`, and the reviewer's model, at low effort and seeing only the notes, chooses the ones that constrain the new request. The selected decisions are appended to the feature's original request, so the tester and reviewer see them as part of that request. Set `memory.recall: false` to disable this step. VISP calls a model only where the project lets it launch the reviewer, so with a reviewer the host runs (`critic.launch: host`, or none: a project initialised before `claude-exec` became the Claude Code default, or one that set `host`) nothing is recalled and rules are found by phrase matching. `visp init --harness claude-code` now writes `critic.launch: claude-exec`; add it to an existing `visp.yml` to turn both on. It needs the `claude` CLI signed in (`visp doctor` checks).
 
 Project rules are different: they are requirements the user stated for all later work, such as "these conventions apply to this change and all later work" followed by a list, or "from now on, never log request bodies". `visp feature` finds them in the user's recorded prompts (never in a worker's text; with `critic.launch: codex-exec` or `claude-exec` the reviewer's model reads them and each must quote the prompt, otherwise phrase matching does), records them in `.visp/rules.json`, and the tester, the reviewer and every `work` reply read the current rules (a later message that replaces or withdraws a rule wins; a removed rule stops applying at once). `visp rules` lists them and `visp rules remove <id>` removes one that was not meant.
 

@@ -46,7 +46,7 @@ critic:
   model: claude-sonnet-5-5
 ```
 
-The same flow as `codex-exec`, with one `claude -p` session per reserved call: `--restricted --safe-mode` with only the Read, Grep and Glob tools (confined to the project and a temporary directory holding the packet's screenshots), so it cannot run commands, edit files or fetch pages; user, project and local settings files, project `CLAUDE.md`, skills, plugins and hooks are not loaded, and nothing can prompt for permission; no MCP servers (`--strict-mcp-config`) and no saved session; the configured `model` and `reasoningEffort` (`--effort`); and the packet's response schema as structured output (`--json-schema`). It uses your Claude Code sign-in. The worker can use any harness. The independent tester runs the same way, as one `claude -p` session in an empty temporary directory (new projects only; tests of an existing codebase with `existingCodeTests` need `codex-exec` with `harness: codex`). Both need the `claude` CLI signed in (`claude auth status`). As for the reviewer, a critic without its own `harness` uses the project's `harness`, so `launch: codex-exec` in a Codex project or `claude-exec` in a Claude Code project starts the tester. The reviewer-model rule and memory readers stay Codex-only; with `claude-exec` rules are read by phrase matching. Requirements: `critic.harness: claude-code` and a runnable `claude` CLI signed in for the process that runs `visp done` (checked with `claude auth status` before a call is reserved); `visp doctor` checks both.
+The same flow as `codex-exec`, with one `claude -p` session per reserved call: `--restricted --safe-mode` with only the Read, Grep and Glob tools (confined to the project and a temporary directory holding the packet's screenshots), so it cannot run commands, edit files or fetch pages; user, project and local settings files, project `CLAUDE.md`, skills, plugins and hooks are not loaded, and nothing can prompt for permission; no MCP servers (`--strict-mcp-config`) and no saved session; the configured `model` and `reasoningEffort` (`--effort`); and the packet's response schema as structured output (`--json-schema`). It uses your Claude Code sign-in. The worker can use any harness. The independent tester runs the same way, as one `claude -p` session in an empty temporary directory (new projects only; tests of an existing codebase with `existingCodeTests` need `codex-exec` with `harness: codex`). Both need the `claude` CLI signed in (`claude auth status`). As for the reviewer, a critic without its own `harness` uses the project's `harness`, so `launch: codex-exec` in a Codex project or `claude-exec` in a Claude Code project starts the tester. The reviewer's model also reads project rules and recalls earlier decisions (`memory.recall`), as one low-effort `claude -p` call. `visp init --harness claude-code` writes `launch: claude-exec`; a project that sets `launch: host` gets no recall. Requirements: `critic.harness: claude-code` and a runnable `claude` CLI signed in for the process that runs `visp done` (checked with `claude auth status` before a call is reserved); `visp doctor` checks both.
 
 #### Independent acceptance tests
 
@@ -75,9 +75,9 @@ In trials 11 of 14 pinned suites were correct against a reference implementation
 
 Safety in execution mode: the copy leaves out VISP state, `workflow.blockedPaths` and common secret files (`.env`, `.env.*`, private keys, `.npmrc`, `.pypirc`, `.netrc`); the session's commands get only core environment variables (`PATH`, `HOME` and similar), not tokens or credentials; and every command is logged to `.visp/features/<id>/tester-activity.jsonl` counted by `visp pr`, and listed by `visp pr --full` under "Tester commands with network access". The Codex sandbox still lets the session read other files your user account can read, so enable execution mode only for repositories whose content you trust.
 
-### `host`: the coding host delegates (default)
+### `host`: the coding host delegates (default when no launch is set)
 
-Without `launch: codex-exec`, VISP never starts a model. After checks run, `next` and `status` include `criticAdvice` alongside the normal next action. The host then follows a three-step protocol:
+Without `launch: codex-exec` or `claude-exec`, VISP never starts a model. After checks run, `next` and `status` include `criticAdvice` alongside the normal next action. The host then follows a three-step protocol:
 
 ```sh
 visp critic --preflight                           # read-only: readiness and requirements
@@ -133,7 +133,7 @@ Project settings in `visp.yml`:
 ```yaml
 critic:
   harness: codex            # codex, claude-code, cursor, copilot
-  launch: codex-exec        # claude-exec, or host (default)
+  launch: codex-exec        # claude-exec, or host (default when unset; init writes codex-exec and claude-exec)
   mode: auto                # auto, manual, both, off
   model: gpt-5.6-sol
   reasoningEffort: high     # low, medium, high, xhigh
