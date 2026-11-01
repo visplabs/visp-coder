@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { Command } from "commander";
 import { VERSION } from "../core/version.js";
+import { reportError, startErrorReporting } from "../telemetry/error-reporting.js";
 import { adapterFor } from "./adapters.js";
 import {
   comparisonObservationSchema,
@@ -202,6 +203,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     ) {
       return "exitCode" in cause && typeof cause.exitCode === "number" ? cause.exitCode : 1;
     }
+    await reportError(cause);
     print({ ok: false, error: cause instanceof Error ? cause.message : String(cause) });
     return 1;
   } finally {
@@ -221,6 +223,8 @@ const invoked = (() => {
   }
 })();
 if (invoked)
-  main(process.argv).then((code) => {
-    process.exitCode = code;
-  });
+  startErrorReporting()
+    .then(() => main(process.argv))
+    .then((code) => {
+      process.exitCode = code;
+    });
