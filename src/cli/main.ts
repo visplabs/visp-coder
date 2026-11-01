@@ -2,6 +2,7 @@ import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { EXIT, PACKAGE_NAME } from "../core/constants.js";
 import { fromUnknown, vispError } from "../core/errors.js";
+import { reportError, startErrorReporting } from "../telemetry/error-reporting.js";
 import { emitError } from "./output.js";
 import { buildProgram } from "./program.js";
 
@@ -25,6 +26,7 @@ export async function main(argv: readonly string[]): Promise<number> {
         },
       );
     }
+    await reportError(cause);
     return emitError(PACKAGE_NAME, fromUnknown(cause), {
       json: argv.includes("--json"),
     });
@@ -85,7 +87,9 @@ const isEntrypoint = (() => {
 })();
 
 if (isEntrypoint) {
-  main(process.argv).then((code) => {
-    process.exitCode = code;
-  });
+  startErrorReporting()
+    .then(() => main(process.argv))
+    .then((code) => {
+      process.exitCode = code;
+    });
 }
