@@ -644,10 +644,9 @@ async function planHook(
   return planGitHook(fs, paths, force, plan);
 }
 
-/** Whether install sets the lean worker's compaction variables (`workflow.autoCompact`). */
+/** Whether install sets the compaction variables: only when `workflow.autoCompact` is true. */
 function autoCompact(settings: VispConfig): boolean {
-  const { workflow } = settings;
-  return workflow.autoCompact ?? (workflow.profile === "lean" && workflow.worker !== "weak");
+  return settings.workflow.autoCompact ?? false;
 }
 
 async function planClaudeHook(

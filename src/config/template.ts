@@ -154,10 +154,10 @@ function renderCriticBlock(harness: Harness): string {
     );
   if (harness === "claude-code")
     lines.push(
-      "  # After checks pass, VISP launches a read-only claude -p reviewer (the claude CLI must be",
-      "  # signed in) and returns its findings from visp done. It also lets VISP recall earlier",
-      "  # decisions (memory.recall). Use host to delegate to a Claude Code subagent instead; then",
-      "  # nothing is recalled.",
+      "  # VISP launches a read-only claude -p reviewer (the claude CLI must be signed in) for a",
+      "  # full feature, and for a lean one only when critic.mode is set. It also lets VISP recall",
+      "  # earlier decisions (memory.recall). Use host to delegate to a Claude Code subagent",
+      "  # instead; then nothing is recalled.",
       "  launch: claude-exec",
     );
   lines.push("  # enabled: false");

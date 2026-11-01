@@ -9,7 +9,7 @@ import { uninstallHarness } from "../../../src/harness/uninstall.js";
 import { TestWorkspace } from "../support/workspace.js";
 
 /**
- * A lean Claude Code worker compacts at 90% of a 100k-token window, below the prompt size where
+ * With `workflow.autoCompact: true` a Claude Code worker compacts at 90% of a 100k-token window, below the prompt size where
  * every Haiku 5.5 price is 5 times higher (leandef2: 15 to 23 turns above it on extend).
  */
 describe("the compaction variables", () => {
@@ -71,8 +71,8 @@ describe("install and uninstall", () => {
   const env = async () =>
     JSON.parse(await readFile(join(workspace.root, ".claude/settings.json"), "utf8")).env;
 
-  it("sets them for a lean project and removes them when workflow.autoCompact is false", async () => {
-    await configure({ profile: "lean" });
+  it("sets them only when workflow.autoCompact is true, and removes them when it is false", async () => {
+    await configure({ profile: "lean", autoCompact: true });
     await install();
     expect(await env()).toEqual(COMPACTION_ENV);
     await configure({ profile: "lean", autoCompact: false });
@@ -80,7 +80,10 @@ describe("install and uninstall", () => {
     expect(await env()).toBeUndefined();
   });
 
-  it("does not set them for the full profile or a weak worker", async () => {
+  it("does not set them by default, for any profile or worker", async () => {
+    await configure({ profile: "lean" });
+    await install();
+    expect(await env()).toBeUndefined();
     await configure({ profile: "full" });
     await install();
     expect(await env()).toBeUndefined();
@@ -90,7 +93,7 @@ describe("install and uninstall", () => {
   });
 
   it("are removed by uninstall", async () => {
-    await configure({ profile: "lean" });
+    await configure({ profile: "lean", autoCompact: true });
     await install();
     const state = await workspace.state();
     const removed = await uninstallHarness(state.paths, { harness: "claude-code" });
