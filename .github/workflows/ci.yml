@@ -55,7 +55,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The golden gate compares the branch with its merge base on the target branch.
+          fetch-depth: 0
       - uses: ./.github/actions/setup
+      - name: Golden gate (kind a or b)
+        if: github.event_name == 'pull_request'
+        run: node scripts/sdlc/golden-gate.mjs origin/${{ github.base_ref }}
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm knip
