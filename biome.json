@@ -1,7 +1,13 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.5.2/schema.json",
   "files": {
-    "includes": ["src/**/*.ts", "tests/**/*.ts", "ui/src/**/*.ts", "src/**/*.script.mjs"]
+    "includes": [
+      "src/**/*.ts",
+      "tests/**/*.ts",
+      "ui/src/**/*.ts",
+      "src/**/*.script.mjs",
+      "scripts/sdlc/**/*.mjs"
+    ]
   },
   "formatter": {
     "enabled": true,
@@ -38,6 +44,137 @@
     }
   },
   "overrides": [
+    {
+      "includes": ["src/**", "scripts/sdlc/**"],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "noExcessiveLinesPerFunction": {
+              "level": "error",
+              "options": {
+                "maxLines": 80
+              }
+            }
+          },
+          "style": {
+            "noExcessiveLinesPerFile": {
+              "level": "error",
+              "options": {
+                "maxLines": 400
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/**/*.script.mjs"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noExcessiveLinesPerFile": "off"
+          },
+          "complexity": {
+            "noExcessiveLinesPerFunction": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "src/cli/commands/product.ts",
+        "src/core/file-transaction.ts",
+        "src/core/fs.ts",
+        "src/core/state-lock.ts",
+        "src/doctor/checks.ts",
+        "src/doctor/installation.ts",
+        "src/graph/projection.ts",
+        "src/graph/store/store.ts",
+        "src/harness/claude-settings.ts",
+        "src/harness/install-plan.ts",
+        "src/harness/uninstall.ts",
+        "src/orchestrate/guard-evaluation.ts",
+        "src/runner/comparison.ts",
+        "src/testing/browser-journey.ts",
+        "src/testing/browser-session.ts",
+        "src/ui/contract.ts",
+        "src/ui/server.ts",
+        "src/ui/views.ts",
+        "src/workflow/evidence/test-inspection.ts",
+        "src/workflow/product-compact-text.ts",
+        "src/workflow/product/account-verification.ts",
+        "src/workflow/product/assessment.ts",
+        "src/workflow/product/candidate.ts",
+        "src/workflow/product/check/check-execution.ts",
+        "src/workflow/product/code-context.ts",
+        "src/workflow/product/critic/critic-exec.ts",
+        "src/workflow/product/critic/critic-native-workflow.ts",
+        "src/workflow/product/critic/critic-reservation.ts",
+        "src/workflow/product/critic/critic-result.ts",
+        "src/workflow/product/critic/critic-status.ts",
+        "src/workflow/product/evidence-references.ts",
+        "src/workflow/product/evidence.ts",
+        "src/workflow/product/feedback.ts",
+        "src/workflow/product/flip/flip-check.ts",
+        "src/workflow/product/flip/flip-environment.ts",
+        "src/workflow/product/migration.ts",
+        "src/workflow/product/model.ts",
+        "src/workflow/product/review/done-review.ts",
+        "src/workflow/product/review/review-diff.ts",
+        "src/workflow/product/tester/pinned-dispute-model.ts",
+        "src/workflow/product/tester/pinned-disputes.ts",
+        "src/workflow/product/work.ts"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noExcessiveLinesPerFile": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "src/cli/commands/critic.ts",
+        "src/cli/commands/doctor.ts",
+        "src/mcp/tools/evidence.ts",
+        "src/mcp/tools/workflow.ts",
+        "src/runner/evaluator.ts",
+        "src/runner/main.ts",
+        "src/runner/review-calibration.ts",
+        "src/testing/browser-session.ts",
+        "src/testing/chrome-transport.ts",
+        "src/testing/project-server.ts",
+        "src/testing/ui.ts",
+        "src/workflow/evidence/product-capture-execution.ts",
+        "src/workflow/product/check/check-execution.ts",
+        "src/workflow/product/code-context.ts",
+        "src/workflow/product/context.ts",
+        "src/workflow/product/critic/critic-native.ts",
+        "src/workflow/product/critic/critic-packet.ts",
+        "src/workflow/product/critic/critic-reservation.ts",
+        "src/workflow/product/critic/critic-result.ts",
+        "src/workflow/product/evidence.ts",
+        "src/workflow/product/experiments.ts",
+        "src/workflow/product/flip/flip-check.ts",
+        "src/workflow/product/host-feedback.ts",
+        "src/workflow/product/review/review-bundle.ts",
+        "src/workflow/product/review/review-session.ts",
+        "src/workflow/product/review/review-submission.ts",
+        "src/workflow/product/review/review.ts",
+        "src/workflow/product/scopes.ts",
+        "src/workflow/product/status-next-closed.ts",
+        "src/workflow/product/status-next-open.ts",
+        "src/workflow/product/status-next.ts"
+      ],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "noExcessiveLinesPerFunction": "off"
+          }
+        }
+      }
+    },
     {
       "includes": ["src/**/*.script.mjs"],
       "formatter": {
