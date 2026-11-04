@@ -17,7 +17,14 @@ fs.appendFileSync(path.join(dir, "calls.jsonl"), JSON.stringify({
   args, config: process.env.GH_CONFIG_DIR ?? null, body: body() ?? null,
 }) + "\\n");
 const [group, action, number] = args;
-if (group === "api") {
+if (group === "api" && action === "graphql") {
+  const field = args.find((arg) => arg.startsWith("number="));
+  process.stdout.write(fs.readFileSync(path.join(dir, "graphql-" + field.slice(7) + ".json"), "utf8"));
+} else if (group === "repo" && action === "view") {
+  process.stdout.write(JSON.stringify({ nameWithOwner: "o/r" }));
+} else if (group === "pr" && action === "view") {
+  process.stdout.write(fs.readFileSync(path.join(dir, "pr-" + number + ".json"), "utf8"));
+} else if (group === "api") {
   const file = path.join(dir, "sub-issues.json");
   process.stdout.write(fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "[]");
 } else if (group === "issue" && action === "create") {

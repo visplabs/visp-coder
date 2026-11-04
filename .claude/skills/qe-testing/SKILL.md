@@ -39,5 +39,6 @@ cases.
 - **QE-20 Run, do not read.** A case passes only when its command ran and passed in this
   worktree. Record the command and the deciding output line.
 - **QE-21 Journeys** use `src/testing` (browser journeys) or the built CLI; set
-  `VISP_SENTRY_ENVIRONMENT=qe` with a DSN, and treat any Sentry event from the run as a failure.
+  `VISP_SENTRY_ENVIRONMENT=qe` and `VISP_SENTRY_TAGS=feature=..,task=..,run_id=..` with a DSN,
+  and treat any Sentry event with the run's `run_id` as a failure.
 - **QE-22 Report honestly.** Skipped is not passed. Say why a case was skipped.

@@ -66,6 +66,7 @@ The maintainer's agent workflow is recorded in [docs/adr/0001-agent-sdlc.md](doc
 | `pnpm sdlc validate <file...>` | Check YAML files against the schema each names |
 | `pnpm sdlc trace F-12 [--results <vitest json>]` | Follow every clause to criteria, test cases and results; exit 1 on an error |
 | `pnpm sdlc packet F-12 [--results <vitest json>]` | Write the owner packet to `.sdlc/features/F-12/` |
+| `pnpm sdlc check-pr <n> [--results <vitest json>]` | The CI gate for a task PR (below) |
 
 A test case links its test as `<path> > <describe titles> > <test title>`. Produce results with `pnpm exec vitest run <files> --reporter=json --outputFile=results.json`. `.sdlc/` sits in the main checkout and is shared by every worktree.
 
@@ -83,6 +84,13 @@ The manager starts each task agent with a line `SDLC-Task: F-12/T-13` in its pro
 | `scope.mjs` | PreToolUse `Edit`, `Write`, `MultiEdit`, `NotebookEdit`, `Bash` | Lets a coder change only its task's `scope.paths`, never `.claude/`, `.github/`, `scripts/sdlc/`, golden snapshots or lint, test and package configuration |
 | `biome-feedback.mjs` | PostToolUse `Edit`, `Write`, `MultiEdit` | Tells the agent at once when Biome reports errors in the file it wrote |
 | `subagent-stop.mjs` | SubagentStop | Validates the agent's yaml report, checks a coder's changed files against its scope, re-runs `build:fast`, the covering tests and the typecheck (one heavy run at a time), then files the report under `.sdlc/features/<F>/tasks/<T>/` and a worklog entry under `.sdlc/worklog/`. For `qe-spec` it writes the checked spec into the feature issue. A refused report keeps the agent working; after five refusals it stops and the failure is logged |
+
+**CI gate.** `.github/workflows/sdlc-trace.yml` runs `pnpm sdlc check-pr` on every pull request. A PR names its task with a line `Task: #<n>` in its body or a commit message (`Closes #<n>` does nothing on PRs into `develop`, which is not the default branch). The gate then reads the task sub-issue, its feature issue and the feature's comments, and passes only when:
+
+- the newest unedited approval comment by `SDLC_OWNER_LOGIN` (a repository variable) is newer than the issue's last body edit and carries the hash of the spec as it is now;
+- every test case of the task's criteria links a test, and those tests pass.
+
+A PR without a task line is skipped. The job does not re-run when an issue changes, so before merging a task PR whose spec may have changed, re-run the job or run `pnpm sdlc check-pr <n>` locally.
 
 The stage agents are in `.claude/agents/` and their skills in `.claude/skills/`:
 
