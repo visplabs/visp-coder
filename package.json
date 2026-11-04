@@ -57,6 +57,7 @@
     "lint": "biome check src tests ui/src scripts/sdlc",
     "knip": "knip && knip --cycles",
     "format": "biome check --write src tests ui/src scripts/sdlc",
+    "sdlc": "node scripts/sdlc/sdlc.mjs",
     "test": "vitest run",
     "test:unit": "pnpm build && vitest run tests/unit",
     "test:integration": "pnpm build && vitest run tests/integration",

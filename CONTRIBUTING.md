@@ -56,6 +56,19 @@ Browser tests need an installed Chrome or Chromium; VISP never downloads one.
 
 **Agent safety hook.** `.claude/settings.json` registers `scripts/sdlc/hooks/safety.mjs` for Claude Code's Bash tool. It refuses force pushes, pushes to `main` or `develop`, tags, `gh pr merge`, releases, publishing, branch and worktree deletion, `git clean -x` and credential reads. It does nothing unless `SDLC_OWNER=1` is set, for example in `.claude/settings.local.json` under `env`, so it only affects the maintainer's agent sessions.
 
+## Agent SDLC
+
+The maintainer's agent workflow is recorded in [docs/adr/0001-agent-sdlc.md](docs/adr/0001-agent-sdlc.md). A feature's spec lives in its GitHub issue as fenced YAML blocks (`intent@1`, `acceptance@1`, `test-cases@1`); the schemas are in `scripts/sdlc/schemas/`.
+
+| Command | What it does |
+| --- | --- |
+| `pnpm sdlc pull F-12` | Copy the spec blocks of issue #12 into `.sdlc/features/F-12/spec/`, read-only |
+| `pnpm sdlc validate <file...>` | Check YAML files against the schema each names |
+| `pnpm sdlc trace F-12 [--results <vitest json>]` | Follow every clause to criteria, test cases and results; exit 1 on an error |
+| `pnpm sdlc packet F-12 [--results <vitest json>]` | Write the owner packet to `.sdlc/features/F-12/` |
+
+A test case links its test as `<path> > <describe titles> > <test title>`. Produce results with `pnpm exec vitest run <files> --reporter=json --outputFile=results.json`. `.sdlc/` sits in the main checkout and is shared by every worktree.
+
 ## Project layout
 
 | Path | Contents |
@@ -74,7 +87,7 @@ Browser tests need an installed Chrome or Chromium; VISP never downloads one.
 | `src/core/` | Shared primitives: file transactions, state lock, exec, paths, errors |
 | `tests/unit`, `tests/integration`, `tests/functional`, `tests/browser`, `tests/qualification` | Test suites |
 | `tests/fixtures/` | Briefs, replies, comparison scenarios and legacy history used by tests |
-| `scripts/` | Package smoke test, upgrade qualification, review-calibration preparation, and `sdlc/` (agent safety hook, golden gate) |
+| `scripts/` | Package smoke test, upgrade qualification, review-calibration preparation, and `sdlc/` (agent safety hook, golden gate, spec schemas and the `sdlc` commands) |
 | `bench/` | Benchmark tasks, hidden checks and runners comparing VISP with other workflows ([bench/README.md](bench/README.md)) |
 
 CLI and MCP are thin adapters: decisions and data shapes live in `src/workflow/product/`, so a behavior change normally belongs there with tests for both surfaces.
