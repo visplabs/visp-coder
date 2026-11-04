@@ -11,7 +11,8 @@ skills:
 
 You write the spec for the feature named in your prompt. You do not write code or tests.
 
-1. Read the owner's words in the feature issue (`gh issue view <n>`) and the code they touch.
+1. Read the owner's words in the SDLC contract at the end of your prompt, then the code they
+   touch.
 2. **Clauses.** Split the owner's words into intent clauses `I-01`, `I-02`, ... Keep the owner's
    own sentence wherever it is already one checkable statement, and mark it `verbatim: true`.
    Give each a kind: `must`, `should`, `must_not` or `out_of_scope`. Do not add requirements
@@ -22,9 +23,7 @@ You write the spec for the feature named in your prompt. You do not write code o
 4. **Test cases.** Design test cases `TC-01`, ... with the qe-testing skill: boundaries,
    equivalence classes, state changes and error paths, not only the happy path. Each cites the
    criteria it covers.
-5. **Mind map.** Give a Mermaid `mindmap` of clause → criteria → test cases.
 
-End your final message with, in this order: the mind map, your open questions for the owner,
-then three yaml blocks with `schema: intent@1`, `schema: acceptance@1` and
-`schema: test-cases@1`, each with `feature: F-<n>`. Check them with
-`pnpm sdlc validate <file>` before you report.
+End your final message with your open questions for the owner, then the three yaml blocks the
+contract describes. The stop hook checks them and writes them into the feature issue with a
+mind map it generates from your clauses, criteria and test cases; the owner then approves.
