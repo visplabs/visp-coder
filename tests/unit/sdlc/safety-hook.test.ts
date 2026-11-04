@@ -76,6 +76,16 @@ describe("sdlc safety hook", () => {
     'bash -c "git push -f origin feat/x"',
     "SOME=1 git push origin main",
     "sudo npm publish",
+    "GH_CONFIG_DIR= gh issue comment 12 --body x",
+    "env -u GH_CONFIG_DIR gh pr create",
+    "unset GH_CONFIG_DIR",
+    "export GH_TOKEN=abc",
+    "gh issue edit 12 --body x",
+    "gh issue edit 12 --body-file spec.md",
+    "gh issue delete 12",
+    "gh issue unlock 12",
+    "gh api -X PATCH repos/o/r/issues/12",
+    "gh api --method DELETE repos/o/r/issues/comments/5",
   ])("blocks %s", (command) => {
     const result = runHook(command);
     expect(result.status, result.stderr).toBe(2);
@@ -102,6 +112,11 @@ describe("sdlc safety hook", () => {
     'git commit -m "docs: never git push --force or gh pr merge"',
     "echo 'npm publish happens on main only'",
     "grep -rn 'git push' docs",
+    "gh issue create --title t --body b --label sdlc:task",
+    "gh issue comment 12 --body 'task T-13 done'",
+    "gh issue edit 13 --add-label sdlc:task",
+    "gh api repos/{owner}/{repo}/issues/12/sub_issues",
+    "gh api -X POST repos/o/r/issues/12/sub_issues -F sub_issue_id=7",
   ])("allows %s", (command) => {
     const result = runHook(command);
     expect(result.status, result.stderr).toBe(0);

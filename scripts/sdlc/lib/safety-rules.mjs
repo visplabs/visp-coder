@@ -1,6 +1,7 @@
 // Commands an agent must leave to the owner: force pushes, pushes to main or develop, tags,
-// merges, releases, publishing, branch and worktree deletion, `git clean -x` and credential
-// reads. Each rule gets the words of one simple command and returns what the command would do
+// merges, releases, publishing, branch and worktree deletion, `git clean -x`, credential reads,
+// changing the GitHub identity agents run under, and editing or deleting issues (the spec and
+// the owner's approval live there). Each rule gets the words of one simple command and returns what the command would do
 // that is refused, or undefined. It catches mistakes; a determined script can still get past it.
 
 import { execFileSync } from "node:child_process";
@@ -12,13 +13,28 @@ const CREDENTIAL_PATHS = [".config/gh/hosts.yml", ".git-credentials", ".npmrc"];
 const WRAPPERS = new Set(["sudo", "env", "command", "exec", "time", "nohup"]);
 const SHELLS = new Set(["bash", "sh", "zsh"]);
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
+const IDENTITY_VAR = /^(GH_CONFIG_DIR|GH_TOKEN|GITHUB_TOKEN|GH_ENTERPRISE_TOKEN)(=|$)/;
+const IDENTITY_EXPANSION = /\$\{?(GH_CONFIG_DIR|GH_TOKEN|GITHUB_TOKEN|GH_ENTERPRISE_TOKEN)\b/;
+const UNSETTERS = new Set(["-u", "--unset", "unset", "export"]);
 
 export function refusal(line, cwd) {
   for (const words of splitCommands(line)) {
-    const reason = refuseCommand(stripPrefixes(words), cwd);
+    const reason = identityRefusal(words) ?? refuseCommand(stripPrefixes(words), cwd);
     if (reason) return reason;
   }
   return undefined;
+}
+
+// Agents act as the agent bot through GH_CONFIG_DIR; setting, unsetting or reading these
+// variables would let them act, or read a token, as someone else.
+function identityRefusal(words) {
+  const touches = words.some(
+    (word, i) =>
+      IDENTITY_EXPANSION.test(word) ||
+      (IDENTITY_VAR.test(word) && (word.includes("=") || UNSETTERS.has(words[i - 1] ?? ""))) ||
+      (IDENTITY_VAR.test(word) && (words[0] === "unset" || words[0] === "export")),
+  );
+  return touches ? "changes or reads the GitHub identity agents run under" : undefined;
 }
 
 function stripPrefixes(words) {
@@ -143,7 +159,27 @@ function ghRule(args) {
   if (group === "release" && action && !RELEASE_READS.has(action)) return "changes a release";
   if (group === "auth" && action === "token") return "reads stored credentials";
   if (group === "repo" && REPO_CHANGES.has(action)) return "changes repository settings";
+  if (group === "issue" && ISSUE_CHANGES.has(action)) return "deletes, unlocks or moves an issue";
+  if (group === "issue" && action === "edit" && args.some((arg) => BODY_FLAG.test(arg))) {
+    return "edits an issue body, where the spec and the owner's words live";
+  }
+  if (group === "api" && WRITE_METHODS.has(apiMethod(args))) {
+    return "changes GitHub data through the API";
+  }
   return undefined;
+}
+
+const ISSUE_CHANGES = new Set(["delete", "unlock", "transfer"]);
+const BODY_FLAG = /^(--body|--body-file|-b|-F)(=|$)/;
+const WRITE_METHODS = new Set(["PATCH", "PUT", "DELETE"]);
+
+function apiMethod(args) {
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "-X" || args[i] === "--method") return (args[i + 1] ?? "").toUpperCase();
+    const joined = args[i].match(/^(?:-X|--method=)(.+)$/);
+    if (joined) return joined[1].toUpperCase();
+  }
+  return "GET";
 }
 
 const PACKAGE_CHANGES = new Set(["publish", "unpublish", "deprecate"]);
