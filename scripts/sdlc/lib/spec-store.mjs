@@ -46,14 +46,18 @@ export function loadSpec(dir) {
   };
 }
 
-// Stage reports under tasks/<task>/*.yml, oldest first. Invalid files are returned apart.
+// Stage reports under tasks/<task>/*.yml, oldest first; task.yml is the task's contract, not a
+// report. Invalid files are returned apart.
 export function loadArtifacts(featurePath) {
   const tasks = join(featurePath, "tasks");
   if (!existsSync(tasks)) return { artifacts: [], invalid: [] };
   const artifacts = [];
   const invalid = [];
   for (const task of readdirSync(tasks)) {
-    for (const file of readdirSync(join(tasks, task)).filter((name) => name.endsWith(".yml"))) {
+    const reports = readdirSync(join(tasks, task)).filter(
+      (name) => name.endsWith(".yml") && name !== "task.yml",
+    );
+    for (const file of reports) {
       const path = join(tasks, task, file);
       const result = validateDocument(readYaml(path));
       if (result.ok) artifacts.push(result.value);
@@ -66,4 +70,16 @@ export function loadArtifacts(featurePath) {
 
 function readYaml(path) {
   return parse(readFileSync(path, "utf8"));
+}
+
+// The task@1 block of a task sub-issue, or undefined when it has none.
+export function taskDocument(body, feature, number) {
+  const block = yamlBlocks(body).find((doc) => doc.schema === "task@1");
+  if (!block) return undefined;
+  const result = validateDocument(block);
+  if (!result.ok) throw new Error(`#${number} task@1 block: ${result.errors.join("; ")}`);
+  if (result.value.feature !== feature || result.value.task !== `T-${number}`) {
+    throw new Error(`#${number} task@1 block names ${result.value.feature}/${result.value.task}`);
+  }
+  return result.value;
 }
