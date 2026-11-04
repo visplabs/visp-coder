@@ -3,7 +3,7 @@
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { TASK_LINE } from "./agents.mjs";
+import { FEATURE_LINE, TASK_LINE } from "./agents.mjs";
 
 // SubagentStop names the transcript; tool events only give the session's, so the subagent's
 // agent-<id>.jsonl is looked for below the session transcript's folder.
@@ -42,11 +42,15 @@ export function readTranscript(path) {
     });
 }
 
-export function taskMarker(entries) {
+// The work named in the subagent's prompt: { feature, task } or, for qe-spec, { feature }.
+export function workMarker(entries) {
   for (const entry of entries) {
     if (entry.type !== "user") continue;
-    const match = textOf(entry.message?.content).match(TASK_LINE);
-    if (match) return { feature: match[1], task: match[2] };
+    const text = textOf(entry.message?.content);
+    const task = text.match(TASK_LINE);
+    if (task) return { feature: task[1], task: task[2] };
+    const feature = text.match(FEATURE_LINE);
+    if (feature) return { feature: feature[1] };
   }
   return undefined;
 }

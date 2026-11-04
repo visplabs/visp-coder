@@ -11,12 +11,16 @@ code, tests or specs yourself.
 
 ## Inputs
 
-- The feature issue `F-<n>` with the approved `intent@1`, `acceptance@1` and `test-cases@1`
-  blocks. Run `pnpm sdlc pull F-<n>` first and again after any issue changes.
+- The feature issue `F-<n>`, opened by the owner's `/feature`, holding the owner's words and,
+  once `qe-spec` has run and the owner has approved it, the `intent@1`, `acceptance@1` and
+  `test-cases@1` blocks. Run `pnpm sdlc pull F-<n>` first and again after any issue changes.
 - `CONTRIBUTING.md` ("Agent SDLC") and `AGENTS.md` for the repository's rules.
 
 ## Steps
 
+0. **Spec.** If the feature issue has no approved spec (no `intent-approved` label), start
+   `qe-spec` with the line `SDLC-Feature: F-<n>`. Show the owner its open questions and wait for
+   the owner's `/approve F-<n>`. Never approve, and never edit the issue body yourself.
 1. **Plan tasks.** Split the criteria into tasks a single agent can deliver and verify in one
    pull request. Create each as a sub-issue of the feature with one `task@1` yaml block
    (criteria, `scope.paths` as narrow as possible, track, size S/M/L) and the label `sdlc:task`,

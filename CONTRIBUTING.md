@@ -54,7 +54,7 @@ Browser tests need an installed Chrome or Chromium; VISP never downloads one.
 
 **Golden gate.** CI runs `node scripts/sdlc/golden-gate.mjs origin/<base>` on pull requests. Any change under `tests/golden/__snapshots__` makes the branch kind (b), and then a commit body must say "Kind (b)" and which snapshots changed. Run it locally before pushing.
 
-**Agent safety hook.** `.claude/settings.json` registers `scripts/sdlc/hooks/safety.mjs` for Claude Code's Bash tool. It refuses force pushes, pushes to `main` or `develop`, tags, `gh pr merge`, releases, publishing, branch and worktree deletion, `git clean -x` and credential reads. It does nothing unless `SDLC_OWNER=1` is set, for example in `.claude/settings.local.json` under `env`, so it only affects the maintainer's agent sessions.
+**Agent safety hook.** `.claude/settings.json` registers `scripts/sdlc/hooks/safety.mjs` for Claude Code's Bash tool. It refuses force pushes, pushes to `main` or `develop`, tags, `gh pr merge`, releases, publishing, branch and worktree deletion, `git clean -x`, credential reads, changes to the GitHub identity agents run under (`GH_CONFIG_DIR`, `GH_TOKEN`), and editing, deleting or unlocking issues, where specs and approvals live. It does nothing unless `SDLC_OWNER=1` is set, for example in `.claude/settings.local.json` under `env`, so it only affects the maintainer's agent sessions.
 
 ## Agent SDLC
 
@@ -62,21 +62,27 @@ The maintainer's agent workflow is recorded in [docs/adr/0001-agent-sdlc.md](doc
 
 | Command | What it does |
 | --- | --- |
-| `pnpm sdlc pull F-12` | Copy the spec blocks of issue #12 into `.sdlc/features/F-12/spec/`, and each task sub-issue's `task@1` block into `tasks/T-<n>/task.yml`, read-only |
+| `pnpm sdlc pull F-12` | Copy the owner's words of issue #12 into `.sdlc/features/F-12/owner-text.md`, its spec blocks into `spec/`, and each task sub-issue's `task@1` block into `tasks/T-<n>/task.yml`, read-only |
 | `pnpm sdlc validate <file...>` | Check YAML files against the schema each names |
 | `pnpm sdlc trace F-12 [--results <vitest json>]` | Follow every clause to criteria, test cases and results; exit 1 on an error |
 | `pnpm sdlc packet F-12 [--results <vitest json>]` | Write the owner packet to `.sdlc/features/F-12/` |
 
 A test case links its test as `<path> > <describe titles> > <test title>`. Produce results with `pnpm exec vitest run <files> --reporter=json --outputFile=results.json`. `.sdlc/` sits in the main checkout and is shared by every worktree.
 
+A feature starts with two owner-only commands. They have `disable-model-invocation`, so no agent can run them, and the `owner-commands.mjs` hook (UserPromptExpansion) does the work under the owner's own GitHub login rather than the agent bot's:
+
+- `/feature <your request>` opens a feature issue (label `sdlc:feature`) holding your words verbatim and keeps a local copy; the session then starts `qe-spec`. When `qe-spec` stops, the stop hook checks its spec (valid blocks, your words unchanged, every must clause traced to a criterion and every criterion to a test case) and writes it into the issue with a generated Mermaid mind map.
+- `/approve F-12` shows the clauses, criteria and spec hash without approving. `/approve F-12 <hash prefix>` approves exactly that: it refuses if the spec changed since it was shown, then comments the full hash, labels the issue `intent-approved` and locks it. Set `SDLC_OWNER_GH_CONFIG_DIR` if your own gh login is not in the default config directory.
+
 The manager starts each task agent with a line `SDLC-Task: F-12/T-13` in its prompt. These hooks in `.claude/settings.json` then hold the agents to the contract; like the safety hook, they do nothing unless `SDLC_OWNER=1`:
 
 | Hook | Event | What it does |
 | --- | --- | --- |
-| `agent-contract.mjs` | PreToolUse `Agent` | Refuses a coder, reviewer or QE-verify agent without a task line; appends the owner's words, the task's clauses, criteria and test cases, the role's rules and the report format |
+| `owner-commands.mjs` | UserPromptExpansion `feature`, `approve` | Runs `/feature` and `/approve` as described above |
+| `agent-contract.mjs` | PreToolUse `Agent` | Refuses `qe-spec` without an `SDLC-Feature: F-12` line and appends your words; refuses a coder, reviewer or QE-verify agent without a task line and appends the owner's words, the task's clauses, criteria and test cases, the role's rules and the report format |
 | `scope.mjs` | PreToolUse `Edit`, `Write`, `MultiEdit`, `NotebookEdit`, `Bash` | Lets a coder change only its task's `scope.paths`, never `.claude/`, `.github/`, `scripts/sdlc/`, golden snapshots or lint, test and package configuration |
 | `biome-feedback.mjs` | PostToolUse `Edit`, `Write`, `MultiEdit` | Tells the agent at once when Biome reports errors in the file it wrote |
-| `subagent-stop.mjs` | SubagentStop | Validates the agent's yaml report, checks a coder's changed files against its scope, re-runs `build:fast`, the covering tests and the typecheck (one heavy run at a time), then files the report under `.sdlc/features/<F>/tasks/<T>/` and a worklog entry under `.sdlc/worklog/`. A refused report keeps the agent working; after five refusals it stops and the failure is logged |
+| `subagent-stop.mjs` | SubagentStop | Validates the agent's yaml report, checks a coder's changed files against its scope, re-runs `build:fast`, the covering tests and the typecheck (one heavy run at a time), then files the report under `.sdlc/features/<F>/tasks/<T>/` and a worklog entry under `.sdlc/worklog/`. For `qe-spec` it writes the checked spec into the feature issue. A refused report keeps the agent working; after five refusals it stops and the failure is logged |
 
 The stage agents are in `.claude/agents/` and their skills in `.claude/skills/`:
 

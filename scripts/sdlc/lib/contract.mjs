@@ -17,10 +17,7 @@ export function renderContract(agentType, spec, task) {
     "",
     "### The owner's words",
     "",
-    ...spec.intent.owner_text
-      .trimEnd()
-      .split("\n")
-      .map((line) => `> ${line}`),
+    ...quote(spec.intent.owner_text),
     "",
     "### Intent clauses this task serves",
     "",
@@ -41,6 +38,35 @@ export function renderContract(agentType, spec, task) {
     "",
     ...roleRules(agentType, task),
   ].join("\n");
+}
+
+// The contract for qe-spec: the owner's words and the three spec blocks it must hand back.
+export function renderSpecContract(feature, ownerText) {
+  return [
+    "## SDLC contract",
+    "",
+    "Added by the agent-contract hook. Where it and the rest of this prompt differ, it wins.",
+    "",
+    "### The owner's words",
+    "",
+    ...quote(ownerText),
+    "",
+    "### Your report",
+    "",
+    "End your final message, or your SubagentHandback report, with three yaml blocks:",
+    `\`schema: intent@1\`, \`schema: acceptance@1\` and \`schema: test-cases@1\`, each with`,
+    `\`feature: ${feature}\`. In intent@1, \`owner_text\` is the owner's words above, character for`,
+    "character. The stop hook validates the blocks, checks that every must clause has a criterion",
+    "and every criterion a test case, and writes them into the feature issue with a generated mind",
+    "map for the owner to approve. If it refuses the report, fix what it says and report again.",
+  ].join("\n");
+}
+
+function quote(text) {
+  return text
+    .trimEnd()
+    .split("\n")
+    .map((line) => `> ${line}`);
 }
 
 function roleRules(agentType, task) {

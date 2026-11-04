@@ -43,7 +43,7 @@ export function fileArtifact(cwd, artifact, now) {
 export function writeWorklog(cwd, envelope, { status, summary, now }) {
   const entry = {
     schema: "worklog@1",
-    id: `${envelope.task}-worklog-${stamp(now)}`,
+    id: `${envelope.task ?? envelope.feature}-worklog-${stamp(now)}`,
     ...envelope,
     created_at: now.toISOString(),
     status,
@@ -52,7 +52,8 @@ export function writeWorklog(cwd, envelope, { status, summary, now }) {
   const result = validateDocument(entry);
   if (!result.ok) throw new Error(`worklog entry is invalid: ${result.errors.join("; ")}`);
   const dir = join(sdlcRoot(cwd), "worklog", now.toISOString().slice(0, 10));
-  return writeUnique(dir, `${stamp(now)}_${envelope.agent}_${envelope.task}`, result.value);
+  const work = envelope.task ?? envelope.feature;
+  return writeUnique(dir, `${stamp(now)}_${envelope.agent}_${work}`, result.value);
 }
 
 // Files changed since the branch left `base`, committed or not, plus untracked files.

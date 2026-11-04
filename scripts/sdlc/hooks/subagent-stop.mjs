@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 
-// Claude Code SubagentStop hook for task agents (coders, reviewer, QE verify). It reads the
-// agent's yaml report, adds an envelope it builds itself, validates it and, for a coder, checks
-// the changed files against the task scope and re-runs the build, tests and typecheck. A report
-// that fails keeps the agent working with the reason; after five refusals the agent may stop
-// and the failure is logged. Every accepted report is filed and logged in the worklog.
+// Claude Code SubagentStop hook for the SDLC agents. For task agents (coders, reviewer, QE
+// verify) it reads the yaml report, adds an envelope it builds itself, validates it and, for a
+// coder, checks the changed files against the task scope and re-runs the build, tests and
+// typecheck. For qe-spec it validates and traces the drafted spec and writes it into the
+// feature issue. A report that fails keeps the agent working with the reason; after five
+// refusals the agent may stop and the failure is logged. Every accepted report is logged in the
+// worklog.
 
 import { countBlock, loadTask, taskOf } from "../lib/agent-task.mjs";
-import { CODERS, TASK_REPORTS } from "../lib/agents.mjs";
+import { CODERS, SPEC_AGENT, TASK_REPORTS } from "../lib/agents.mjs";
 import {
   buildArtifact,
   changedFiles,
@@ -18,6 +20,7 @@ import {
 import { readEvent, respond } from "../lib/hook-io.mjs";
 import { repoRoot } from "../lib/paths.mjs";
 import { pathRefusal } from "../lib/scope-rules.mjs";
+import { fileSpec } from "../lib/spec-filing.mjs";
 import {
   finalReport,
   findAgentTranscript,
@@ -30,15 +33,16 @@ const MAX_BLOCKS = 5;
 
 const event = await readEvent();
 const type = TASK_REPORTS[event.agent_type];
-const task = type ? taskOf(event) : undefined;
-if (!task) process.exit(0);
+const isSpec = event.agent_type === SPEC_AGENT;
+const task = type || isSpec ? taskOf(event) : undefined;
+if (!task || (type && !task.task)) process.exit(0);
 
 const entries = readTranscript(findAgentTranscript(event));
 const { model, usage } = modelAndUsage(entries);
 const now = new Date();
 const envelope = {
   feature: task.feature,
-  task: task.task,
+  ...(task.task ? { task: task.task } : {}),
   agent: event.agent_type,
   agent_id: event.agent_id,
   ...(model ? { model } : {}),
@@ -46,8 +50,10 @@ const envelope = {
   usage,
 };
 
-const outcome = examine();
-if (outcome.artifact) {
+const outcome = isSpec ? examineSpec() : examine();
+if (outcome.spec) {
+  writeWorklog(event.cwd, envelope, { status: "done", summary: outcome.spec, now });
+} else if (outcome.artifact) {
   fileArtifact(event.cwd, outcome.artifact, now);
   const body = outcome.artifact.body;
   const summary = body.summary ?? `verdict: ${body.verdict}`;
@@ -60,6 +66,15 @@ if (outcome.artifact) {
 } else {
   const summary = `stopped after ${MAX_BLOCKS} refused reports; last: ${outcome.reason.split("\n")[0]}`;
   writeWorklog(event.cwd, envelope, { status: "failed", summary, now });
+}
+
+function examineSpec() {
+  const reason = fileSpec(
+    event.cwd,
+    task.feature,
+    finalReport(entries, event.last_assistant_message),
+  );
+  return reason ? { reason } : { spec: `spec drafted into the ${task.feature} issue` };
 }
 
 function examine() {

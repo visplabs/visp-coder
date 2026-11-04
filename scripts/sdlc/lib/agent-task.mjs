@@ -1,17 +1,18 @@
-// Which task a subagent works on, and how often its stop was refused. Found once from the task
-// line in the subagent's transcript, then kept in .sdlc/run/agents/<agent_id>.json.
+// Which feature and task a subagent works on, and how often its stop was refused. Found once
+// from the task or feature line in the subagent's transcript, then kept in
+// .sdlc/run/agents/<agent_id>.json.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { parse } from "yaml";
 import { validateDocument } from "../schemas/index.mjs";
 import { featureDir, sdlcRoot } from "./paths.mjs";
-import { findAgentTranscript, readTranscript, taskMarker } from "./transcript.mjs";
+import { findAgentTranscript, readTranscript, workMarker } from "./transcript.mjs";
 
 export function taskOf(event) {
   const state = readState(event);
-  if (state.task) return state;
-  const marker = taskMarker(readTranscript(findAgentTranscript(event)));
+  if (state.feature) return state;
+  const marker = workMarker(readTranscript(findAgentTranscript(event)));
   if (!marker) return undefined;
   const next = { ...state, ...marker };
   writeState(event, next);

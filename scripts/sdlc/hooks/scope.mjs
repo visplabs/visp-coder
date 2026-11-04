@@ -13,7 +13,7 @@ const event = await readEvent();
 if (!CODERS.has(event.agent_type)) process.exit(0);
 
 const task = taskOf(event);
-if (!task) {
+if (!task?.task) {
   denyTool(
     'No SDLC task is known for this agent; the manager must start it with "SDLC-Task: F-12/T-13".',
   );

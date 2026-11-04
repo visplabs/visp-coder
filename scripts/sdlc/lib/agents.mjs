@@ -11,5 +11,9 @@ export const TASK_REPORTS = {
   "qe-verify": "qe-report",
 };
 
-// The line the manager puts in a task agent's prompt; hooks find the task through it.
+// The agent that turns the owner's words into the spec; it works on a feature, not a task.
+export const SPEC_AGENT = "qe-spec";
+
+// The lines the manager puts in an agent's prompt; hooks find the work through them.
 export const TASK_LINE = /SDLC-Task: (F-\d+)\/(T-\d+)/;
+export const FEATURE_LINE = /SDLC-Feature: (F-\d+)/;
