@@ -68,3 +68,16 @@ export const testCasesSchema = z
     cases: z.array(testCase).min(1),
   })
   .strict();
+
+// A task sub-issue of the feature: the criteria it delivers and the paths its coder may edit.
+export const taskSchema = z
+  .object({
+    schema: z.literal("task@1"),
+    feature: featureId,
+    task: taskId,
+    criteria: z.array(criterionId).min(1),
+    scope: z.object({ paths: z.array(z.string().min(1)).min(1) }).strict(),
+    track: z.enum(["trivial", "standard", "complex"]),
+    size: z.enum(["S", "M", "L"]),
+  })
+  .strict();

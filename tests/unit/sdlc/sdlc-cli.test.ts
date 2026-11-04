@@ -43,22 +43,38 @@ cases:
     criteria: [AC-01]
     test: tests/worklog.test.ts > worklog > writes one file`;
 
+const TASK = `schema: task@1
+feature: F-12
+task: T-13
+criteria: [AC-01]
+scope:
+  paths: [scripts/sdlc/lib/worklog.mjs, "tests/unit/sdlc/**"]
+track: standard
+size: M`;
+
 let repo = "";
 
 function issueBody(...blocks: string[]) {
   return ["Owner request.", ...blocks.map((block) => `\`\`\`yaml\n${block}\n\`\`\``)].join("\n\n");
 }
 
-function setIssue(body: string) {
-  const issue = { title: "Work log", body, updatedAt: "2026-11-02T10:00:00Z", url: "https://x/12" };
-  writeFileSync(join(repo, "issue.json"), JSON.stringify(issue));
+function setIssue(body: string, number = 12, title = "Work log") {
+  const issue = { title, body, updatedAt: "2026-11-02T10:00:00Z", url: `https://x/${number}` };
+  writeFileSync(join(repo, `issue-${number}.json`), JSON.stringify(issue));
+}
+
+function setSubIssues(numbers: number[]) {
+  writeFileSync(
+    join(repo, "sub-issues.json"),
+    JSON.stringify(numbers.map((number) => ({ number }))),
+  );
 }
 
 function sdlc(...args: string[]) {
   return spawnSync(process.execPath, [cli, ...args], {
     cwd: repo,
     encoding: "utf8",
-    env: { ...process.env, SDLC_GH: join(repo, "fake-gh"), FAKE_ISSUE: join(repo, "issue.json") },
+    env: { ...process.env, SDLC_GH: join(repo, "fake-gh"), FAKE_DIR: repo },
   });
 }
 
@@ -66,9 +82,13 @@ describe("sdlc command line", () => {
   beforeEach(() => {
     repo = mkdtempSync(join(tmpdir(), "sdlc-cli-"));
     spawnSync("git", ["init", "-q", repo]);
-    writeFileSync(join(repo, "fake-gh"), '#!/bin/sh\ncat "$FAKE_ISSUE"\n');
+    writeFileSync(
+      join(repo, "fake-gh"),
+      '#!/bin/sh\nif [ "$1" = api ]; then cat "$FAKE_DIR/sub-issues.json"; else cat "$FAKE_DIR/issue-$3.json"; fi\n',
+    );
     chmodSync(join(repo, "fake-gh"), 0o755);
     setIssue(issueBody(INTENT, ACCEPTANCE, TEST_CASES));
+    setSubIssues([]);
   });
   afterEach(() => rmSync(repo, { recursive: true, force: true }));
 
@@ -80,6 +100,17 @@ describe("sdlc command line", () => {
     }
     expect(statSync(join(spec, "intent.yml")).mode & 0o222).toBe(0);
     expect(sdlc("pull", "F-12").status).toBe(0);
+  });
+
+  it("pulls each task sub-issue's contract next to the spec", () => {
+    setSubIssues([13, 14]);
+    setIssue(issueBody(TASK), 13, "Write worklog files");
+    setIssue("A sub-issue without a task block.", 14, "Notes");
+    const result = sdlc("pull", "F-12");
+    expect(result.status, result.stderr).toBe(0);
+    const task = readFileSync(join(repo, ".sdlc/features/F-12/tasks/T-13/task.yml"), "utf8");
+    expect(task).toContain("scripts/sdlc/lib/worklog.mjs");
+    expect(result.stdout).toContain("#14 has no task@1 block");
   });
 
   it("refuses an issue with a missing block or another feature's block", () => {
@@ -126,6 +157,8 @@ describe("sdlc command line", () => {
   });
 
   it("writes an owner packet with the clause table, the spec hash and stage reports", () => {
+    setSubIssues([13]);
+    setIssue(issueBody(TASK), 13, "Write worklog files");
     sdlc("pull", "F-12");
     const task = join(repo, ".sdlc/features/F-12/tasks/T-13");
     mkdirSync(task, { recursive: true });
@@ -153,6 +186,8 @@ describe("sdlc command line", () => {
     expect(packet).toMatch(/Spec hash: `[0-9a-f]{64}`/);
     expect(packet).toContain("Consider a shorter name");
     expect(packet).toContain("1,500 tokens");
+    expect(packet).not.toContain("task@1");
+    expect(packet).not.toContain("invalid report");
   });
 
   it("hashes the spec the same way whatever the key order", () => {

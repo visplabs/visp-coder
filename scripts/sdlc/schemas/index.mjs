@@ -1,12 +1,13 @@
 // Picks the schema a document names in its `schema` field and checks the document against it.
 
 import { handoffSchema, qeReportSchema, reviewSchema, worklogSchema } from "./artifacts.mjs";
-import { acceptanceSchema, intentSchema, testCasesSchema } from "./spec.mjs";
+import { acceptanceSchema, intentSchema, taskSchema, testCasesSchema } from "./spec.mjs";
 
 const SCHEMAS = {
   "intent@1": intentSchema,
   "acceptance@1": acceptanceSchema,
   "test-cases@1": testCasesSchema,
+  "task@1": taskSchema,
   "handoff@1": handoffSchema,
   "review@1": reviewSchema,
   "qe-report@1": qeReportSchema,
