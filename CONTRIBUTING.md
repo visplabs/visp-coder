@@ -78,6 +78,19 @@ The manager starts each task agent with a line `SDLC-Task: F-12/T-13` in its pro
 | `biome-feedback.mjs` | PostToolUse `Edit`, `Write`, `MultiEdit` | Tells the agent at once when Biome reports errors in the file it wrote |
 | `subagent-stop.mjs` | SubagentStop | Validates the agent's yaml report, checks a coder's changed files against its scope, re-runs `build:fast`, the covering tests and the typecheck (one heavy run at a time), then files the report under `.sdlc/features/<F>/tasks/<T>/` and a worklog entry under `.sdlc/worklog/`. A refused report keeps the agent working; after five refusals it stops and the failure is logged |
 
+The stage agents are in `.claude/agents/` and their skills in `.claude/skills/`:
+
+| Agent | Model, effort | Does |
+| --- | --- | --- |
+| `manager` | sonnet, high | Runs a feature: task sub-issues, stage agents, pull requests, owner packet (`claude --agent manager`) |
+| `architect` | opus, xhigh | Records architecture decisions in `docs/adr/` |
+| `qe-spec` | sonnet, high | Turns the owner's words into clauses, criteria, a mind map and test cases |
+| `coder-s`, `coder-m`, `coder-l` | haiku medium, sonnet high, opus xhigh | Implement one task by size, with unit and integration tests, in their own worktree |
+| `reviewer` | opus, high | Reviews a task blind against the owner's words; blocking findings need evidence |
+| `qe-verify` | sonnet, high | Runs journeys, end-to-end and performance cases |
+
+Skills: `coding-typescript`, `unit-integration-testing`, `qe-testing`, `performance-testing`. Their rules carry ids (`TS-03`, `UT-02`, ...) that review findings cite.
+
 The owner's `.claude/settings.local.json` turns them on and adds what must not affect other contributors: fork mode off, so each agent keeps its own model and hooks; the agent bot's GitHub identity; and the worktree hook, which starts agent worktrees from `origin/develop` on a `sdlc/<name>` branch, then installs and builds:
 
 ```json
