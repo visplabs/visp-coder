@@ -5,7 +5,12 @@ coverage/
 .visp/
 *.log
 .DS_Store
-.claude/
+.claude/*
+!.claude/settings.json
+!.claude/agents/
+!.claude/skills/
+!.claude/commands/
+.sdlc/
 .codex/
 .agents/
 .cursor/

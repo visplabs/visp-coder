@@ -50,6 +50,12 @@ The job summary of the release run repeats steps 4 and 5.
 
 Browser tests need an installed Chrome or Chromium; VISP never downloads one.
 
+**Size limits.** Biome fails a file in `src/` or `scripts/sdlc/` over 400 lines and a function over 80. Files that were already over a limit are listed in `biome.json` overrides; when you split one, remove it from the list. Do not add new entries.
+
+**Golden gate.** CI runs `node scripts/sdlc/golden-gate.mjs origin/<base>` on pull requests. Any change under `tests/golden/__snapshots__` makes the branch kind (b), and then a commit body must say "Kind (b)" and which snapshots changed. Run it locally before pushing.
+
+**Agent safety hook.** `.claude/settings.json` registers `scripts/sdlc/hooks/safety.mjs` for Claude Code's Bash tool. It refuses force pushes, pushes to `main` or `develop`, tags, `gh pr merge`, releases, publishing, branch and worktree deletion, `git clean -x` and credential reads. It does nothing unless `SDLC_OWNER=1` is set, for example in `.claude/settings.local.json` under `env`, so it only affects the maintainer's agent sessions.
+
 ## Project layout
 
 | Path | Contents |
@@ -68,7 +74,7 @@ Browser tests need an installed Chrome or Chromium; VISP never downloads one.
 | `src/core/` | Shared primitives: file transactions, state lock, exec, paths, errors |
 | `tests/unit`, `tests/integration`, `tests/functional`, `tests/browser`, `tests/qualification` | Test suites |
 | `tests/fixtures/` | Briefs, replies, comparison scenarios and legacy history used by tests |
-| `scripts/` | Package smoke test, upgrade qualification and review-calibration preparation |
+| `scripts/` | Package smoke test, upgrade qualification, review-calibration preparation, and `sdlc/` (agent safety hook, golden gate) |
 | `bench/` | Benchmark tasks, hidden checks and runners comparing VISP with other workflows ([bench/README.md](bench/README.md)) |
 
 CLI and MCP are thin adapters: decisions and data shapes live in `src/workflow/product/`, so a behavior change normally belongs there with tests for both surfaces.
