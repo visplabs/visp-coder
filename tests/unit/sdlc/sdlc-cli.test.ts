@@ -113,6 +113,15 @@ describe("sdlc command line", () => {
     expect(result.stdout).toContain("#14 has no task@1 block");
   });
 
+  it("pulls a feature that has the owner's words but no spec yet", () => {
+    setIssue("<!-- sdlc:owner-text -->\nKeep a work log.\n<!-- /sdlc:owner-text -->");
+    const result = sdlc("pull", "F-12");
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("no spec yet");
+    const words = readFileSync(join(repo, ".sdlc/features/F-12/owner-text.md"), "utf8");
+    expect(words).toBe("Keep a work log.");
+  });
+
   it("refuses an issue with a missing block or another feature's block", () => {
     setIssue(issueBody(INTENT, ACCEPTANCE));
     const missing = sdlc("pull", "F-12");

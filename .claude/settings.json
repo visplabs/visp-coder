@@ -50,6 +50,18 @@
           }
         ]
       }
+    ],
+    "UserPromptExpansion": [
+      {
+        "matcher": "feature|approve",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/sdlc/hooks/owner-commands.mjs\"",
+            "timeout": 120
+          }
+        ]
+      }
     ]
   }
 }

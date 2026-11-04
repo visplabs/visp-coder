@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 // A temporary git repository with feature F-12's spec and task T-13's contract already pulled,
 // plus a place for Claude Code transcripts, for running SDLC hooks against.
 
-const SPEC: Record<string, string> = {
+export const SPEC: Record<string, string> = {
   "spec/intent.yml": `schema: intent@1
 feature: F-12
 owner_text: Work log entries are separate timestamped files.

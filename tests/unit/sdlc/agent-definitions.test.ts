@@ -55,6 +55,13 @@ describe("SDLC agent and skill definitions", () => {
     }
   });
 
+  it("keeps the owner commands out of the model's reach", () => {
+    for (const command of ["feature", "approve"]) {
+      const meta = frontmatter(join(root, ".claude/commands", `${command}.md`));
+      expect(meta["disable-model-invocation"], command).toBe(true);
+    }
+  });
+
   it("preloads only skills that exist, each with a name and description", () => {
     for (const { file, meta } of agents) {
       for (const skill of (meta.skills as string[] | undefined) ?? []) {

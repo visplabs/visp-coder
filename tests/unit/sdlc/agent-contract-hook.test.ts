@@ -62,6 +62,21 @@ describe("agent contract hook", () => {
     expect(output.permissionDecisionReason).toContain("pnpm sdlc pull F-12");
   });
 
+  it("gives qe-spec the owner's words recorded by /feature", () => {
+    fixture.write(".sdlc/features/F-12/owner-text.md", "Keep a work log.\nOne file per stop.");
+    const result = spawnAgent("qe-spec", "Write the spec.\nSDLC-Feature: F-12");
+    const prompt = (result.json as Output).hookSpecificOutput.updatedInput?.prompt ?? "";
+    expect(prompt).toContain("> Keep a work log.\n> One file per stop.");
+    expect(prompt).toContain("intent@1");
+  });
+
+  it("refuses qe-spec for a feature without recorded words", () => {
+    const result = spawnAgent("qe-spec", "SDLC-Feature: F-44");
+    const output = (result.json as Output).hookSpecificOutput;
+    expect(output.permissionDecision).toBe("deny");
+    expect(output.permissionDecisionReason).toContain("/feature");
+  });
+
   it("leaves other agents alone", () => {
     const result = spawnAgent("Explore", "Find the worklog code.");
     expect(result.status).toBe(0);
