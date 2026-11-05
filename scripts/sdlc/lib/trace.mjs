@@ -32,6 +32,35 @@ export function trace(spec, results) {
   return { problems, clauses: clauseReport, criteria: criteriaReport };
 }
 
+// The trace of one task: its criteria, their clauses and the test cases that cover them. A pull
+// request for the task passes only when every one of those test cases links a test that passed,
+// so an unlinked test case is an error here, not a warning.
+export function traceTask(spec, task, results) {
+  const criteria = spec.acceptance.criteria.filter((c) => task.criteria.includes(c.id));
+  const clauseIds = new Set(criteria.flatMap((criterion) => criterion.clauses));
+  const cases = spec.testCases.cases
+    .filter((testCase) => testCase.criteria.some((id) => task.criteria.includes(id)))
+    .map((testCase) => ({
+      ...testCase,
+      criteria: testCase.criteria.filter((id) => task.criteria.includes(id)),
+    }));
+  const report = trace(
+    {
+      intent: { clauses: spec.intent.clauses.filter((clause) => clauseIds.has(clause.id)) },
+      acceptance: { criteria },
+      testCases: { cases },
+    },
+    results,
+  );
+  const unknown = task.criteria
+    .filter((id) => !criteria.some((criterion) => criterion.id === id))
+    .map((id) => error("dangling", `${task.task} names unknown criterion ${id}`));
+  const problems = report.problems.map((problem) =>
+    problem.kind === "unlinked" ? { ...problem, severity: "error" } : problem,
+  );
+  return { ...report, problems: [...unknown, ...problems] };
+}
+
 // Keys a vitest JSON report (`--reporter=json`) as "<path> > <describe titles> > <title>".
 export function resultsIndex(report, root) {
   const index = new Map();

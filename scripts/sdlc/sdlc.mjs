@@ -1,17 +1,19 @@
 #!/usr/bin/env node
 // Commands for the agent SDLC. See CONTRIBUTING.md ("Agent SDLC").
 
+import * as checkPr from "./commands/check-pr.mjs";
 import * as packet from "./commands/packet.mjs";
 import * as pull from "./commands/pull.mjs";
 import * as trace from "./commands/trace.mjs";
 import * as validate from "./commands/validate.mjs";
 
-const COMMANDS = { pull, validate, trace, packet };
+const COMMANDS = { pull, validate, trace, packet, "check-pr": checkPr };
 const USAGE = `usage: sdlc <command>
   pull F-12                         cache the spec blocks of feature issue #12
   validate <file...>                check YAML files against their schema
   trace F-12 [--results <json>]     follow clauses to criteria, tests and results
-  packet F-12 [--results <json>]    write the owner packet`;
+  packet F-12 [--results <json>]    write the owner packet
+  check-pr <n> [--results <json>]   CI gate: spec approved, the task's linked tests pass`;
 
 const [name, ...args] = process.argv.slice(2);
 const command = COMMANDS[name];

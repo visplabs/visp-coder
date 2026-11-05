@@ -1,0 +1,31 @@
+name: sdlc-trace
+
+# The agent SDLC gate for task pull requests (CONTRIBUTING.md, "Agent SDLC"). A PR whose body or
+# commits say "Task: #<n>" passes only when the owner approved the feature's spec as it stands
+# and every test case of the task links a test that passes. Other PRs are skipped. It runs on
+# `pull_request`, never `pull_request_target`, so a fork's code never sees a write token.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+concurrency:
+  group: sdlc-trace-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  sdlc-trace:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - run: pnpm build:fast
+      - name: Spec approved and the task's tests pass
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SDLC_OWNER_LOGIN: ${{ vars.SDLC_OWNER_LOGIN }}
+        run: pnpm sdlc check-pr ${{ github.event.pull_request.number }}

@@ -158,6 +158,6 @@ The rolling trail retains 100 executions, 20 capture runs and 40 captures, plus 
 
 ## Error reporting
 
-VISP sends nothing off the machine by default. To send crash reports from `visp`, `visp serve` and `visp-runner` to your own Sentry project, set `VISP_SENTRY_DSN` to its DSN; `VISP_SENTRY_ENVIRONMENT` names the environment (default `production`). VISP never reads `SENTRY_DSN`, which belongs to the product being built.
+VISP sends nothing off the machine by default. To send crash reports from `visp`, `visp serve` and `visp-runner` to your own Sentry project, set `VISP_SENTRY_DSN` to its DSN; `VISP_SENTRY_ENVIRONMENT` names the environment (default `production`), and `VISP_SENTRY_TAGS` adds tags to every report as comma-separated `key=value` pairs (for example `feature=F-12,task=T-13,run_id=qe-1`; keys are lowercase words, and pairs that do not fit are dropped). VISP never reads `SENTRY_DSN`, which belongs to the product being built.
 
 A report holds the error, its stack trace and the VISP version. Request data, MCP payloads, user details and local variable values are turned off. Errors a command reports as its result (a failed check, a refused write) are not crashes and are not sent.
