@@ -18,7 +18,11 @@ try {
 }
 if (event.tool_name !== "Bash") process.exit(0);
 
-const reason = refusal(String(event.tool_input?.command ?? ""), event.cwd ?? process.cwd());
+const reason = refusal(
+  String(event.tool_input?.command ?? ""),
+  event.cwd ?? process.cwd(),
+  event.agent_type,
+);
 if (reason) {
   console.error(`sdlc safety: this command ${reason}. Leave it to the owner to run.`);
   process.exit(2);

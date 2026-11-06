@@ -2,13 +2,15 @@
 // Claude Code PreToolUse hook for the Agent tool. A task agent (coder, reviewer, QE verify) must
 // be started with an "SDLC-Task: F-12/T-13" line and gets the task contract appended: the
 // owner's words, the clauses and criteria, the role's rules and the report format. qe-spec must
-// be started with "SDLC-Feature: F-12" and gets the owner's words and its report format. Other
-// agents pass untouched.
+// be started with "SDLC-Feature: F-12" and gets the owner's words and its report format. Any
+// SDLC agent loses a `model` or `effort` given on the call, which would outrank its definition
+// (sdlc.config.json decides both). Other agents pass untouched.
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { loadTask } from "../lib/agent-task.mjs";
 import { FEATURE_LINE, SPEC_AGENT, TASK_LINE, TASK_REPORTS } from "../lib/agents.mjs";
+import { loadConfig } from "../lib/config.mjs";
 import { renderContract, renderSpecContract } from "../lib/contract.mjs";
 import { denyTool, readEvent, respond } from "../lib/hook-io.mjs";
 import { featureDir } from "../lib/paths.mjs";
@@ -25,6 +27,16 @@ if (TASK_REPORTS[agentType]) {
 } else if (agentType === SPEC_AGENT) {
   const contract = specContract();
   if (contract) allow(contract.feature, contract.text);
+} else if (isSdlcAgent(agentType) && ("model" in input || "effort" in input)) {
+  allow(agentType, "");
+}
+
+function isSdlcAgent(type) {
+  try {
+    return type in loadConfig(event.cwd).agents;
+  } catch {
+    return false;
+  }
 }
 
 function taskContract() {
@@ -70,12 +82,15 @@ function specContract() {
 }
 
 function allow(work, contract) {
+  const { model: _model, effort: _effort, ...rest } = input;
   respond({
     hookSpecificOutput: {
       hookEventName: "PreToolUse",
       permissionDecision: "allow",
-      permissionDecisionReason: `SDLC contract for ${work} added`,
-      updatedInput: { ...input, prompt: `${prompt}\n\n${contract}` },
+      permissionDecisionReason: contract
+        ? `SDLC contract for ${work} added`
+        : `SDLC: ${work} runs on the model and effort its definition sets`,
+      updatedInput: { ...rest, prompt: contract ? `${prompt}\n\n${contract}` : prompt },
     },
   });
 }

@@ -1,0 +1,54 @@
+{
+  "$comment": "Agent SDLC settings (CONTRIBUTING.md, Agent SDLC). Ids, not display names. Only the owner edits this file; the scope hook refuses every agent.",
+  "baseBranch": "chore/sdlc-atlassian",
+  "owner": { "accountId": "70121:c2afbcea-4dab-468f-99ed-f959f08b036a" },
+  "jira": {
+    "site": "djkeshawa.atlassian.net",
+    "cloudId": "b8f4a960-7eea-46c8-a65f-3e222943a151",
+    "project": { "key": "VISP", "id": "10005" },
+    "issueTypes": { "epic": "10000", "story": "10005", "task": "10017", "subtask": "10018" },
+    "statuses": {
+      "todo": "10021",
+      "ready": "10022",
+      "inProgress": "3",
+      "inReview": "10023",
+      "done": "10013"
+    },
+    "secret": { "service": "visp-sdlc", "account": "visp-agent" }
+  },
+  "confluence": {
+    "spaceKey": "VISP",
+    "spaceId": "18120706",
+    "pages": {
+      "home": "18120878",
+      "designs": "18186241",
+      "testCases": "18219009",
+      "adrs": "18251777",
+      "knowledge": "18219026"
+    }
+  },
+  "loops": {
+    "inner": { "min": 2, "max": 10 },
+    "verify": { "min": 2, "max": 3 },
+    "ci": { "min": 2, "max": 3 }
+  },
+  "budget": { "agentRunsPerEpic": 40, "coderRunsPerEpic": 25 },
+  "reviewer": {
+    "host": "codex",
+    "model": "gpt-6.1-sol",
+    "effort": "max",
+    "codexHome": "~/.codex-visp",
+    "timeoutMinutes": 20,
+    "fallbackAgent": "reviewer-fallback"
+  },
+  "agents": {
+    "manager": { "model": "claude-opus-5-5", "effort": "high", "mcp": [] },
+    "qe-spec": { "model": "claude-opus-5-5", "effort": "xhigh", "mcp": [] },
+    "architect": { "model": "claude-opus-5-5", "effort": "xhigh", "mcp": [] },
+    "coder": { "model": "claude-sonnet-5-5", "effort": "high", "mcp": [] },
+    "reviewer": { "model": "claude-haiku-5-5", "effort": "high", "mcp": [] },
+    "reviewer-fallback": { "model": "claude-opus-5-5", "effort": "high", "mcp": [] },
+    "qe-verify": { "model": "claude-opus-5-5", "effort": "high", "mcp": [] },
+    "clerk": { "model": "claude-haiku-5-5", "effort": "high", "mcp": [] }
+  }
+}

@@ -3,11 +3,11 @@ import { runHook, type SdlcRepo, sdlcRepo } from "./support/sdlc-repo.js";
 
 let fixture: SdlcRepo;
 
-function spawnAgent(subagentType: string, prompt: string) {
+function spawnAgent(subagentType: string, prompt: string, extra: Record<string, unknown> = {}) {
   return runHook("agent-contract.mjs", {
     hook_event_name: "PreToolUse",
     tool_name: "Agent",
-    tool_input: { subagent_type: subagentType, description: "work", prompt },
+    tool_input: { subagent_type: subagentType, description: "work", prompt, ...extra },
     cwd: fixture.repo,
   });
 }
@@ -46,6 +46,23 @@ describe("agent contract hook", () => {
     expect(prompt).toContain("Work log entries are separate timestamped files.");
     expect(prompt).toContain("review@1");
     expect(prompt).toMatch(/blocking finding/i);
+  });
+
+  it("drops a model or effort given on the call, so the definition decides", () => {
+    const coder = spawnAgent("coder-m", "SDLC-Task: F-12/T-13", { model: "haiku" });
+    const coderInput = (coder.json as Output).hookSpecificOutput.updatedInput ?? {};
+    expect(coderInput).not.toHaveProperty("model");
+    const clerk = spawnAgent("clerk", "File the task.", { model: "opus", effort: "max" });
+    const output = (clerk.json as Output).hookSpecificOutput;
+    expect(output.permissionDecision).toBe("allow");
+    expect(output.updatedInput).not.toHaveProperty("model");
+    expect(output.updatedInput).not.toHaveProperty("effort");
+    expect(output.updatedInput?.prompt).toBe("File the task.");
+  });
+
+  it("leaves a call without overrides, or by an agent outside the SDLC, untouched", () => {
+    expect(spawnAgent("clerk", "File the task.").json).toBeUndefined();
+    expect(spawnAgent("Explore", "Look around.", { model: "haiku" }).json).toBeUndefined();
   });
 
   it("refuses an SDLC agent started without a task line", () => {

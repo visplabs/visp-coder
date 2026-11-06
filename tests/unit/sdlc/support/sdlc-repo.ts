@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -64,6 +64,7 @@ export function sdlcRepo(): SdlcRepo {
   git("config", "user.name", "test");
   write("README.md", "test\n");
   write(".gitignore", ".sdlc/\n");
+  write("sdlc.config.json", readFileSync(join(process.cwd(), "sdlc.config.json"), "utf8"));
   git("add", ".");
   git("commit", "-q", "-m", "base");
   for (const [path, content] of Object.entries(SPEC)) write(`.sdlc/features/F-12/${path}`, content);

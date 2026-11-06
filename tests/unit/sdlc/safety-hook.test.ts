@@ -6,7 +6,10 @@ import { afterAll, describe, expect, it } from "vitest";
 
 const hook = join(process.cwd(), "scripts/sdlc/hooks/safety.mjs");
 
-function runHook(command: string, options: { owner?: boolean; cwd?: string } = {}) {
+function runHook(
+  command: string,
+  options: { owner?: boolean; cwd?: string; agentType?: string } = {},
+) {
   const env = { ...process.env };
   delete env.SDLC_OWNER;
   if (options.owner !== false) env.SDLC_OWNER = "1";
@@ -15,6 +18,7 @@ function runHook(command: string, options: { owner?: boolean; cwd?: string } = {
     tool_name: "Bash",
     tool_input: { command },
     cwd: options.cwd ?? process.cwd(),
+    ...(options.agentType ? { agent_id: "a1", agent_type: options.agentType } : {}),
   };
   return spawnSync(process.execPath, [hook], {
     input: JSON.stringify(input),
@@ -86,6 +90,13 @@ describe("sdlc safety hook", () => {
     "gh issue unlock 12",
     "gh api -X PATCH repos/o/r/issues/12",
     "gh api --method DELETE repos/o/r/issues/comments/5",
+    "cat ~/.codex-visp/auth.json",
+    "cp /home/u/.codex/auth.json /tmp/a",
+    "CODEX_HOME=/tmp/x pnpm sdlc review --task VISP-2/VISP-3 --round 1",
+    "export CODEX_HOME=/tmp/x",
+    "export CLAUDE_CODE_SUBAGENT_MODEL_FORCE=claude-haiku-5-5",
+    "CLAUDE_CODE_SUBAGENT_MODEL=haiku claude -p hi",
+    "CLAUDE_CODE_EFFORT_LEVEL=low claude -p hi",
   ])("blocks %s", (command) => {
     const result = runHook(command);
     expect(result.status, result.stderr).toBe(2);
@@ -120,6 +131,41 @@ describe("sdlc safety hook", () => {
   ])("allows %s", (command) => {
     const result = runHook(command);
     expect(result.status, result.stderr).toBe(0);
+  });
+
+  it.each([
+    ["coder", "codex exec --full-auto fix it"],
+    ["reviewer", "codex exec -s danger-full-access review"],
+    ["coder", "pnpm sdlc review --task VISP-2/VISP-3 --round 1"],
+    ["manager", "node scripts/sdlc/sdlc.mjs review --task VISP-2/VISP-3 --round 1"],
+    ["manager", "pnpm sdlc jira transition VISP-3 Ready"],
+    ["coder", "pnpm run sdlc jira comment VISP-3 --body x"],
+    ["reviewer", "./scripts/sdlc/sdlc.mjs jira create --type Task"],
+  ])("blocks %s from running %s", (agentType, command) => {
+    const result = runHook(command, { agentType });
+    expect(result.status, result.stderr).toBe(2);
+    expect(result.stderr).toContain("sdlc safety");
+  });
+
+  it.each([
+    ["reviewer", "pnpm sdlc review --task VISP-2/VISP-3 --round 1"],
+    ["clerk", "pnpm sdlc jira transition VISP-3 Ready"],
+    ["clerk", "node scripts/sdlc/sdlc.mjs jira comment VISP-3 --body x"],
+    ["coder", "pnpm sdlc jira show VISP-3"],
+    ["manager", "pnpm sdlc pull VISP-2"],
+  ])("allows %s to run %s", (agentType, command) => {
+    const result = runHook(command, { agentType });
+    expect(result.status, result.stderr).toBe(0);
+  });
+
+  it("leaves codex, review and Jira writes to the owner's own session", () => {
+    for (const command of [
+      "codex exec hi",
+      "pnpm sdlc review --task VISP-2/VISP-3 --round 1",
+      "pnpm sdlc jira transition VISP-3 Ready",
+    ]) {
+      expect(runHook(command).status, command).toBe(0);
+    }
   });
 
   it("blocks a bare push from develop and allows it from a topic branch", () => {
