@@ -12,6 +12,11 @@ const envelope = z.object({
   agent_id: z.string().min(1).optional(),
   model: z.string().min(1).optional(),
   effort: z.string().min(1).optional(),
+  // The commit the report covers: the coder's head at handoff, the head the reviewer saw.
+  commit: z
+    .string()
+    .regex(/^[0-9a-f]{40}$/)
+    .optional(),
   created_at: z.string().datetime({ offset: true }),
   intent_hash: z
     .string()

@@ -2,14 +2,14 @@
 // merges, releases, publishing, branch and worktree deletion, `git clean -x`, credential reads,
 // changing the GitHub identity agents run under, overriding the models agents run on, and
 // editing or deleting issues (the spec and the owner's approval live there). Inside a subagent
-// it also refuses direct `codex` calls, `sdlc review` from any agent but the reviewer and Jira
-// writes from any agent but the clerk. Each rule gets the words of one simple command and
+// it also refuses direct `codex` calls, `sdlc review` from any agent but the reviewer, Jira
+// writes from any agent but the clerk, and a pull request whose task may not ship yet. Each rule gets the words of one simple command and
 // returns what the command would do that is refused, or undefined. It catches mistakes; a
 // determined script can still get past it.
 
 import { execFileSync } from "node:child_process";
 import { basename, resolve } from "node:path";
-import { sdlcCommandRefusal } from "./sdlc-command-rules.mjs";
+import { agentCommandRefusal } from "./sdlc-command-rules.mjs";
 import { splitCommands } from "./shell-words.mjs";
 
 const PROTECTED_BRANCHES = new Set(["main", "develop"]);
@@ -72,9 +72,8 @@ function refuseCommand(words, cwd, agentType) {
     return args.includes("-c") && script ? refusal(script, cwd, agentType) : undefined;
   }
   if (name === "eval") return refusal(args.join(" "), cwd, agentType);
-  if (agentType && name === "codex") return "runs Codex outside `sdlc review`";
   return (
-    (agentType ? sdlcCommandRefusal(words, agentType) : undefined) ??
+    (agentType ? agentCommandRefusal(words, cwd, agentType) : undefined) ??
     COMMAND_RULES[name]?.(args, cwd)
   );
 }

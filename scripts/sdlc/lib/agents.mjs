@@ -1,13 +1,12 @@
 // The SDLC's stage agents (.claude/agents/), which of them work on one task, and which report
 // type each hands back.
 
-export const CODERS = new Set(["coder-s", "coder-m", "coder-l"]);
+export const CODERS = new Set(["coder"]);
 
 export const TASK_REPORTS = {
-  "coder-s": "handoff",
-  "coder-m": "handoff",
-  "coder-l": "handoff",
+  coder: "handoff",
   reviewer: "review",
+  "reviewer-fallback": "review",
   "qe-verify": "qe-report",
 };
 

@@ -8,8 +8,6 @@
 import { loadConfig } from "../lib/config.mjs";
 import { denyTool, readEvent } from "../lib/hook-io.mjs";
 
-const LEGACY_CODERS = new Set(["coder-s", "coder-m", "coder-l"]);
-
 const event = await readEvent();
 const type = event.agent_type;
 if (!type) process.exit(0);
@@ -21,7 +19,7 @@ try {
   denyTool(`SDLC MCP guard: the config cannot be read, so MCP stays closed: ${error.message}`);
   process.exit(0);
 }
-const allowed = agents[type]?.mcp ?? (LEGACY_CODERS.has(type) ? [] : undefined);
+const allowed = agents[type]?.mcp;
 if (allowed && !allowed.some((prefix) => String(event.tool_name).startsWith(prefix))) {
   denyTool(
     `SDLC MCP guard: ${type} may not call ${event.tool_name}. Its MCP tools are set in ` +

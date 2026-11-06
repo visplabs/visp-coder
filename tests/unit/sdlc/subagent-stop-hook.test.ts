@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -47,7 +48,9 @@ function stop(agentType: string, lastMessage: string | undefined) {
 
 function filed(dir: string) {
   const path = join(fixture.repo, ".sdlc/features/F-12", dir);
-  return existsSync(path) ? readdirSync(path).filter((name) => name !== "task.yml") : [];
+  return existsSync(path)
+    ? readdirSync(path).filter((name) => name !== "task.yml" && name !== "ticket.yml")
+    : [];
 }
 
 function worklog() {
@@ -76,7 +79,7 @@ describe("subagent stop hook", () => {
   afterEach(() => fixture.cleanup());
 
   it("files a valid handoff with an envelope taken from the hook input and transcript", () => {
-    const result = stop("coder-m", HANDOFF);
+    const result = stop("coder", HANDOFF);
     expect(result.status, result.stderr).toBe(0);
     expect(blockReason(result)).toBe("");
     const [file] = filed("tasks/T-13");
@@ -88,7 +91,7 @@ describe("subagent stop hook", () => {
       schema: "handoff@1",
       feature: "F-12",
       task: "T-13",
-      agent: "coder-m",
+      agent: "coder",
       agent_id: "a1",
       model: "claude-sonnet-5-5",
       effort: "high",
@@ -96,31 +99,53 @@ describe("subagent stop hook", () => {
       usage: { input_tokens: 400, output_tokens: 100 },
     });
     expect(worklog()).toEqual([
-      expect.objectContaining({ schema: "worklog@1", task: "T-13", agent: "coder-m" }),
+      expect.objectContaining({ schema: "worklog@1", task: "T-13", agent: "coder" }),
     ]);
   });
 
   it("keeps the agent working when the report is missing or invalid", () => {
-    expect(blockReason(stop("coder-m", "All done, no yaml."))).toContain("yaml");
+    expect(blockReason(stop("coder", "All done, no yaml."))).toContain("yaml");
     const invalid = HANDOFF.replace("criterion: AC-01", "criterion: 1");
-    expect(blockReason(stop("coder-m", invalid))).toContain("body.tests.0.criterion");
+    expect(blockReason(stop("coder", invalid))).toContain("body.tests.0.criterion");
     expect(filed("tasks/T-13")).toEqual([]);
   });
 
   it("keeps the coder working when it changed files outside its scope", () => {
     fixture.write("src/other.ts", "export {};\n");
-    expect(blockReason(stop("coder-m", HANDOFF))).toContain("src/other.ts");
+    expect(blockReason(stop("coder", HANDOFF))).toContain("src/other.ts");
   });
 
   it("lets the agent stop after five rejected reports and logs the failure", () => {
     for (let attempt = 0; attempt < 5; attempt += 1) {
-      expect(blockReason(stop("coder-m", "no report"))).not.toBe("");
+      expect(blockReason(stop("coder", "no report"))).not.toBe("");
     }
-    expect(blockReason(stop("coder-m", "no report"))).toBe("");
+    expect(blockReason(stop("coder", "no report"))).toBe("");
     expect(worklog().at(-1)).toMatchObject({ status: "failed" });
   });
 
-  it("reads a reviewer's report from its SubagentHandback call", () => {
+  function handback(model: string, message: string) {
+    fixture.transcript("a1", [
+      promptEntry("Review it.\nSDLC-Task: F-12/T-13"),
+      {
+        type: "assistant",
+        message: {
+          id: "m9",
+          model,
+          content: [{ type: "tool_use", name: "SubagentHandback", input: { message } }],
+          usage: { input_tokens: 10, output_tokens: 5 },
+        },
+      },
+    ]);
+  }
+
+  function filedReport() {
+    const [file] = filed("tasks/T-13");
+    expect(file).toMatch(/^review-/);
+    const dir = join(fixture.repo, ".sdlc/features/F-12/tasks/T-13");
+    return parse(readFileSync(join(dir, file ?? ""), "utf8"));
+  }
+
+  it("files the fallback reviewer's report from its SubagentHandback call", () => {
     const review = [
       "```yaml",
       "status: done",
@@ -128,22 +153,38 @@ describe("subagent stop hook", () => {
       "  verdict: approve",
       "  findings: []",
       "```",
-    ].join("\n");
-    fixture.transcript("a1", [
-      promptEntry("Review it.\nSDLC-Task: F-12/T-13"),
-      {
-        type: "assistant",
-        message: {
-          id: "m9",
-          model: "claude-opus-5-5",
-          content: [{ type: "tool_use", name: "SubagentHandback", input: { message: review } }],
-          usage: { input_tokens: 10, output_tokens: 5 },
-        },
-      },
-    ]);
-    const result = stop("reviewer", "Handed back.");
+    ];
+    handback("claude-opus-5-5", review.join("\n"));
+    expect(blockReason(stop("reviewer-fallback", "Handed back."))).toBe("");
+    expect(filedReport().commit).toBe(fixture.git("rev-parse", "HEAD"));
+  });
+
+  it("files the Codex review from the file sdlc review wrote, checked by its sha256", () => {
+    const commit = "a".repeat(40);
+    const text = `status: done\ncommit: ${commit}\nbody:\n  verdict: approve\n  findings: []\n`;
+    fixture.write(".sdlc/run/reviews/T-13-1.yml", text);
+    const path = join(fixture.repo, ".sdlc/run/reviews/T-13-1.yml");
+    const sha = createHash("sha256").update(text).digest("hex");
+    handback(
+      "claude-haiku-5-5",
+      `\`\`\`yaml\nreview_file: ${path}\nsha256: ${"0".repeat(64)}\n\`\`\``,
+    );
+    expect(blockReason(stop("reviewer", "Handed back."))).toContain("sha256 does not match");
+    handback("claude-haiku-5-5", `\`\`\`yaml\nreview_file: /etc/passwd\nsha256: ${sha}\n\`\`\``);
+    expect(blockReason(stop("reviewer", "Handed back."))).toContain("review_file");
+    handback("claude-haiku-5-5", `\`\`\`yaml\nreview_file: ${path}\nsha256: ${sha}\n\`\`\``);
+    expect(blockReason(stop("reviewer", "Handed back."))).toBe("");
+    expect(filedReport()).toMatchObject({ commit, body: { verdict: "approve" } });
+  });
+
+  it("files nothing from an agent that ran on another model than the config sets", () => {
+    const result = stop("qe-verify", HANDOFF);
     expect(blockReason(result)).toBe("");
-    expect(filed("tasks/T-13")[0]).toMatch(/^review-/);
+    expect(filed("tasks/T-13")).toEqual([]);
+    expect(worklog().at(-1)).toMatchObject({ status: "failed" });
+    expect(worklog().at(-1)?.body.summary).toContain(
+      "ran on claude-sonnet-5-5, but sdlc.config.json sets claude-opus-5-5",
+    );
   });
 
   it("ignores agents outside the SDLC", () => {

@@ -1,8 +1,8 @@
 ---
 name: qe-spec
 description: 'Turns the owner''s request for a feature into intent clauses, acceptance criteria, a test mind map and test cases, as intent@1, acceptance@1 and test-cases@1 yaml blocks for the owner to approve. Started by the manager when a feature issue has the owner''s words but no approved spec.'
-model: sonnet
-effort: high
+model: claude-opus-5-5
+effort: xhigh
 tools: Read, Grep, Glob, Bash
 disallowedTools: Agent, Edit, Write, MultiEdit, NotebookEdit
 skills:

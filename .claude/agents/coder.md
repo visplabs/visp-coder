@@ -1,9 +1,10 @@
 ---
-name: coder-m
-description: 'Implements one SDLC task - a normal task (size M) - with unit and integration tests covering the changed branches. Started by the manager with an "SDLC-Task: F-<n>/T-<m>" line.'
-model: sonnet
+name: coder
+description: 'Implements one SDLC task with unit and integration tests covering the changed branches, then fixes review, QE and CI findings when the manager resumes it. Started by the manager with an "SDLC-Task: VISP-<epic>/VISP-<task>" line.'
+model: claude-sonnet-5-5
 effort: high
 isolation: worktree
+tools: Read, Grep, Glob, Edit, Write, MultiEdit, Bash
 disallowedTools: Agent
 skills:
   - coding-typescript
@@ -31,3 +32,7 @@ why instead of working around it.
 
 End with the yaml report the contract describes. The stop hook re-runs the build, the tests and
 the typecheck before it accepts your work.
+
+When the manager resumes you with findings, fix each one, commit, and report again. When it
+resumes you with no findings (a confirmation round), re-check your change against the criteria
+and the earlier findings, fix anything you find, and report again even if nothing changed.

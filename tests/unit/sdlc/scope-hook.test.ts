@@ -4,7 +4,7 @@ import { promptEntry, runHook, type SdlcRepo, sdlcRepo } from "./support/sdlc-re
 
 let fixture: SdlcRepo;
 
-function toolCall(toolName: string, toolInput: Record<string, unknown>, agentType = "coder-m") {
+function toolCall(toolName: string, toolInput: Record<string, unknown>, agentType = "coder") {
   return runHook("scope.mjs", {
     hook_event_name: "PreToolUse",
     tool_name: toolName,

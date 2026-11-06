@@ -26,7 +26,7 @@ if (!CODERS.has(event.agent_type)) {
 const task = taskOf(event);
 if (!task?.task) {
   denyTool(
-    'No SDLC task is known for this agent; the manager must start it with "SDLC-Task: F-12/T-13".',
+    'No SDLC task is known for this agent; the manager must start it with "SDLC-Task: VISP-12/VISP-13".',
   );
   process.exit(0);
 }

@@ -26,7 +26,7 @@ describe("MCP guard hook", () => {
 
   it("refuses an SDLC agent an MCP tool its config entry does not list", () => {
     const jira = "mcp__6465b1b8__addOrEditJiraIssueComment";
-    for (const agent of ["coder", "coder-m", "clerk", "manager", "reviewer", "qe-verify"]) {
+    for (const agent of ["coder", "clerk", "manager", "reviewer", "qe-verify"]) {
       expect(decision(mcpCall(jira, agent)), agent).toBe("deny");
     }
   });

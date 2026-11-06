@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 // Claude Code PreToolUse hook for the Agent tool. A task agent (coder, reviewer, QE verify) must
-// be started with an "SDLC-Task: F-12/T-13" line and gets the task contract appended: the
-// owner's words, the clauses and criteria, the role's rules and the report format. qe-spec must
-// be started with "SDLC-Feature: F-12" and gets the owner's words and its report format. Any
+// be started with an "SDLC-Task: VISP-12/VISP-13" line, only once the owner approved the spec and
+// the task's ticket is Ready, and within the loop bounds and the epic's run budget; it gets the
+// task contract appended: the owner's words, the clauses and criteria, the role's rules and the
+// report format. qe-spec must be started with "SDLC-Feature: VISP-12" and gets the owner's words
+// and its report format. Any
 // SDLC agent loses a `model` or `effort` given on the call, which would outrank its definition
 // (sdlc.config.json decides both). Other agents pass untouched.
 
@@ -13,8 +15,10 @@ import { FEATURE_LINE, SPEC_AGENT, TASK_LINE, TASK_REPORTS } from "../lib/agents
 import { loadConfig } from "../lib/config.mjs";
 import { renderContract, renderSpecContract } from "../lib/contract.mjs";
 import { denyTool, readEvent, respond } from "../lib/hook-io.mjs";
+import { recordTurn, turnRefusal } from "../lib/loops.mjs";
 import { featureDir } from "../lib/paths.mjs";
 import { loadSpec } from "../lib/spec-store.mjs";
+import { gateRefusal } from "../lib/ticket-gate.mjs";
 
 const event = await readEvent();
 const input = event.tool_input ?? {};
@@ -43,29 +47,40 @@ function taskContract() {
   const marker = prompt.match(TASK_LINE);
   if (!marker) {
     denyTool(
-      `Start ${agentType} with a line "SDLC-Task: F-12/T-13" in its prompt (the feature and task ` +
-        `issue numbers), after "pnpm sdlc pull F-12".`,
+      `Start ${agentType} with a line "SDLC-Task: VISP-12/VISP-13" in its prompt (the epic's and ` +
+        `the task's Jira keys), after "pnpm sdlc pull VISP-12".`,
     );
     return undefined;
   }
   const [, feature, taskId] = marker;
+  let spec;
+  let task;
+  let config;
   try {
-    const spec = loadSpec(join(featureDir(feature, event.cwd), "spec"));
-    const task = loadTask(event.cwd, { feature, task: taskId });
-    return { feature: `${feature}/${taskId}`, text: renderContract(agentType, spec, task) };
+    spec = loadSpec(join(featureDir(feature, event.cwd), "spec"));
+    task = loadTask(event.cwd, { feature, task: taskId });
+    config = loadConfig(event.cwd);
   } catch (error) {
     denyTool(
       `${feature}/${taskId} is not pulled or not valid: run "pnpm sdlc pull ${feature}". ${error.message}`,
     );
     return undefined;
   }
+  const work = { feature, task: taskId, agentType, spec };
+  const refused = gateRefusal(event.cwd, config, work) ?? turnRefusal(event.cwd, config, work);
+  if (refused) {
+    denyTool(`SDLC: ${refused}.`);
+    return undefined;
+  }
+  recordTurn(event.cwd, work);
+  return { feature: `${feature}/${taskId}`, text: renderContract(agentType, spec, task) };
 }
 
 function specContract() {
   const marker = prompt.match(FEATURE_LINE);
   if (!marker) {
     denyTool(
-      'Start qe-spec with a line "SDLC-Feature: F-12" in its prompt (the feature issue number).',
+      'Start qe-spec with a line "SDLC-Feature: VISP-12" in its prompt (the epic\'s Jira key).',
     );
     return undefined;
   }

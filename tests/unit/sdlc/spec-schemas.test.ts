@@ -104,7 +104,7 @@ describe("sdlc schemas", () => {
     const handoff = {
       ...envelope,
       schema: "handoff@1",
-      agent: "coder-m",
+      agent: "coder",
       body: {
         summary: "Adds the worklog writer",
         changed_files: ["scripts/sdlc/lib/worklog.mjs"],

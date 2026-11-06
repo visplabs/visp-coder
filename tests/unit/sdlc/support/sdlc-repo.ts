@@ -2,9 +2,16 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { parse } from "yaml";
+
+const { specHash } = (await import(
+  pathToFileURL(join(process.cwd(), "scripts/sdlc/lib/hash.mjs")).href
+)) as { specHash(intent: unknown, acceptance: unknown): string };
 
 // A temporary git repository with feature F-12's spec and task T-13's contract already pulled,
-// plus a place for Claude Code transcripts, for running SDLC hooks against.
+// the spec approved by the owner and the task's ticket Ready, plus a place for Claude Code
+// transcripts, for running SDLC hooks against.
 
 export const SPEC: Record<string, string> = {
   "spec/intent.yml": `schema: intent@1
@@ -41,6 +48,7 @@ export type SdlcRepo = {
   sessions: string;
   git(...args: string[]): string;
   write(path: string, content: string): void;
+  read(path: string): string;
   transcript(agentId: string, entries: unknown[]): string;
   cleanup(): void;
 };
@@ -68,6 +76,8 @@ export function sdlcRepo(): SdlcRepo {
   git("add", ".");
   git("commit", "-q", "-m", "base");
   for (const [path, content] of Object.entries(SPEC)) write(`.sdlc/features/F-12/${path}`, content);
+  write(".sdlc/features/F-12/spec/approval.yml", `approved: true\nhash: ${approvedHash()}\n`);
+  write(".sdlc/features/F-12/tasks/T-13/ticket.yml", 'key: T-13\nstatus: "10022"\n');
   const transcript = (agentId: string, entries: unknown[]) => {
     const path = join(sessions, "session-1", "subagents", `agent-${agentId}.jsonl`);
     mkdirSync(dirname(path), { recursive: true });
@@ -79,9 +89,32 @@ export function sdlcRepo(): SdlcRepo {
     sessions,
     git,
     write,
+    read: (path: string) => readFileSync(join(repo, path), "utf8"),
     transcript,
     cleanup: () => rmSync(root, { recursive: true, force: true }),
   };
+}
+
+// A filed review report of T-13, as subagent-stop writes it.
+export function reviewReport(round: number, verdict: string, commit?: string) {
+  return [
+    "schema: review@1",
+    `id: T-13-review-${round}`,
+    "feature: F-12",
+    "task: T-13",
+    "agent: reviewer",
+    ...(commit ? [`commit: ${commit}`] : []),
+    `created_at: 2026-11-07T10:${String(round).padStart(2, "0")}:00Z`,
+    "status: done",
+    "body:",
+    `  verdict: ${verdict}`,
+    "  findings: []",
+  ].join("\n");
+}
+
+// The hash of SPEC's intent and acceptance, as the owner approved them.
+export function approvedHash(): string {
+  return specHash(parse(SPEC["spec/intent.yml"] ?? ""), parse(SPEC["spec/acceptance.yml"] ?? ""));
 }
 
 export function runHook(hook: string, input: unknown, env: Record<string, string> = {}) {

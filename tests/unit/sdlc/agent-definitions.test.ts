@@ -24,15 +24,28 @@ const agents = readdirSync(agentsDir).map((file) => ({
   meta: frontmatter(join(agentsDir, file)),
 }));
 const skills = readdirSync(skillsDir);
+const config = JSON.parse(readFileSync(join(root, "sdlc.config.json"), "utf8")) as {
+  agents: Record<string, { model: string; effort: string }>;
+};
 
 describe("SDLC agent and skill definitions", () => {
-  it("names every agent after its file and gives it a model and effort Claude Code accepts", () => {
+  it("names every agent after its file and pins the model and effort sdlc.config.json sets", () => {
     for (const { file, meta } of agents) {
       expect(meta.name, file).toBe(file.replace(/\.md$/, ""));
       expect(meta.description.length, file).toBeGreaterThan(40);
-      expect(["haiku", "sonnet", "opus"], file).toContain(meta.model);
-      expect(["low", "medium", "high", "xhigh", "max"], file).toContain(meta.effort);
+      expect(meta.model, file).toBe(config.agents[meta.name]?.model);
+      expect(meta.effort, file).toBe(config.agents[meta.name]?.effort);
     }
+    expect(Object.keys(config.agents).sort()).toEqual(agents.map(({ meta }) => meta.name).sort());
+  });
+
+  it("gives every agent a tool list, so none reaches MCP tools, and lets the manager resume", () => {
+    for (const { file, meta } of agents) {
+      expect(typeof meta.tools, file).toBe("string");
+      expect(String(meta.tools), file).not.toMatch(/mcp__/);
+    }
+    const manager = agents.find(({ meta }) => meta.name === "manager")?.meta;
+    expect(String(manager?.tools)).toContain("SendMessage");
   });
 
   it("defines every agent the hooks and the manager rely on", () => {
@@ -50,7 +63,7 @@ describe("SDLC agent and skill definitions", () => {
     for (const { file, meta } of agents.filter(({ meta }) => meta.name !== "manager")) {
       expect(String(meta.disallowedTools), file).toContain("Agent");
     }
-    for (const { file, meta } of agents.filter(({ meta }) => meta.name.startsWith("coder-"))) {
+    for (const { file, meta } of agents.filter(({ meta }) => meta.name === "coder")) {
       expect(meta.isolation, file).toBe("worktree");
     }
   });
