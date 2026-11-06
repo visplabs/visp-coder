@@ -100,6 +100,19 @@ describe("opening a task's pull request", () => {
     expect(result.status, result.stderr).toBe(0);
   });
 
+  it("logs each refusal to the mistake log with a signature that groups repeats", () => {
+    bash(`${PR} 'One.'`, "manager");
+    bash(`${PR} 'Two.'`, "clerk");
+    const entries = fixture
+      .read(".sdlc/mistakes.jsonl")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    expect(entries).toHaveLength(2);
+    expect(entries[0]).toMatchObject({ hook: "safety", agent_type: "manager", tool: "Bash" });
+    expect(entries[0].signature).toBe(entries[1].signature);
+  });
+
   it("leaves the owner's own PRs alone", () => {
     expect(bash(`${PR} 'Owner change.'`).status).toBe(0);
   });

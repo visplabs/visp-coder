@@ -31,6 +31,13 @@ describe("MCP guard hook", () => {
     }
   });
 
+  it("logs the refusal to the mistake log", () => {
+    mcpCall("mcp__x__createJiraIssue", "coder");
+    const entry = JSON.parse(fixture.read(".sdlc/mistakes.jsonl").trim());
+    expect(entry).toMatchObject({ hook: "mcp-guard", agent_type: "coder" });
+    expect(entry.reason).toContain("mcp__x__createJiraIssue");
+  });
+
   it("allows a tool the agent's entry lists by prefix", () => {
     const config = JSON.parse(fixture.git("show", "HEAD:sdlc.config.json"));
     config.agents["qe-verify"].mcp = ["mcp__sentry__search_"];

@@ -16,12 +16,16 @@ let agents;
 try {
   agents = loadConfig(event.cwd).agents;
 } catch (error) {
-  denyTool(`SDLC MCP guard: the config cannot be read, so MCP stays closed: ${error.message}`);
+  denyTool(
+    event,
+    `SDLC MCP guard: the config cannot be read, so MCP stays closed: ${error.message}`,
+  );
   process.exit(0);
 }
 const allowed = agents[type]?.mcp;
 if (allowed && !allowed.some((prefix) => String(event.tool_name).startsWith(prefix))) {
   denyTool(
+    event,
     `SDLC MCP guard: ${type} may not call ${event.tool_name}. Its MCP tools are set in ` +
       "sdlc.config.json, and only the owner changes them.",
   );

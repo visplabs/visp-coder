@@ -10,6 +10,7 @@ old one and set the old one's status to `Superseded by NNNN`.
 | Record | Status |
 | --- | --- |
 | [0001 Agent SDLC](0001-agent-sdlc.md) | Accepted |
+| [0002 Agent SDLC on Jira](0002-sdlc-on-jira.md) | Accepted |
 
 ## Template
 

@@ -6,11 +6,13 @@
 // pipeline to pick up a change.
 
 import { readEvent, respond } from "../lib/hook-io.mjs";
+import { logMistake } from "../lib/mistakes.mjs";
 
 const BLOCKED = new Set(["user_settings", "project_settings", "local_settings", "skills"]);
 
 const event = await readEvent();
 if (event.agent_type && BLOCKED.has(event.source)) {
+  logMistake(event, "config-guard", `${event.source} changed during a pipeline run`);
   respond({
     decision: "block",
     reason: `SDLC: ${event.source} changed during a pipeline run; restart the session to apply it`,

@@ -26,6 +26,7 @@ if (!CODERS.has(event.agent_type)) {
 const task = taskOf(event);
 if (!task?.task) {
   denyTool(
+    event,
     'No SDLC task is known for this agent; the manager must start it with "SDLC-Task: VISP-12/VISP-13".',
   );
   process.exit(0);
@@ -35,7 +36,7 @@ let scope;
 try {
   scope = loadTask(event.cwd, task).scope.paths;
 } catch (error) {
-  denyTool(`The contract of ${task.feature}/${task.task} cannot be read: ${error.message}`);
+  denyTool(event, `The contract of ${task.feature}/${task.task} cannot be read: ${error.message}`);
   process.exit(0);
 }
 
@@ -45,7 +46,7 @@ function refuseFirst(check) {
   for (const path of paths) {
     const reason = check(path);
     if (reason) {
-      denyTool(`SDLC scope: ${reason}.`);
+      denyTool(event, `SDLC scope: ${reason}.`);
       return;
     }
   }

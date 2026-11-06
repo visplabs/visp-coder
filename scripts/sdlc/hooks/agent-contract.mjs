@@ -47,6 +47,7 @@ function taskContract() {
   const marker = prompt.match(TASK_LINE);
   if (!marker) {
     denyTool(
+      event,
       `Start ${agentType} with a line "SDLC-Task: VISP-12/VISP-13" in its prompt (the epic's and ` +
         `the task's Jira keys), after "pnpm sdlc pull VISP-12".`,
     );
@@ -62,6 +63,7 @@ function taskContract() {
     config = loadConfig(event.cwd);
   } catch (error) {
     denyTool(
+      event,
       `${feature}/${taskId} is not pulled or not valid: run "pnpm sdlc pull ${feature}". ${error.message}`,
     );
     return undefined;
@@ -69,7 +71,7 @@ function taskContract() {
   const work = { feature, task: taskId, agentType, spec };
   const refused = gateRefusal(event.cwd, config, work) ?? turnRefusal(event.cwd, config, work);
   if (refused) {
-    denyTool(`SDLC: ${refused}.`);
+    denyTool(event, `SDLC: ${refused}.`);
     return undefined;
   }
   recordTurn(event.cwd, work);
@@ -80,6 +82,7 @@ function specContract() {
   const marker = prompt.match(FEATURE_LINE);
   if (!marker) {
     denyTool(
+      event,
       'Start qe-spec with a line "SDLC-Feature: VISP-12" in its prompt (the epic\'s Jira key).',
     );
     return undefined;
@@ -88,6 +91,7 @@ function specContract() {
   const path = join(featureDir(feature, event.cwd), "owner-text.md");
   if (!existsSync(path)) {
     denyTool(
+      event,
       `No owner's words are recorded for ${feature}: open the feature with /feature, or run ` +
         `"pnpm sdlc pull ${feature}" if its issue already has them.`,
     );

@@ -16,7 +16,10 @@ const target = String(event.tool_input?.to ?? "");
 const state = agentState(event.cwd, target);
 if (!state) {
   if (event.agent_type === "manager") {
-    denyTool(`SDLC: ${target} is not a known SDLC agent; resume task agents by their agent id.`);
+    denyTool(
+      event,
+      `SDLC: ${target} is not a known SDLC agent; resume task agents by their agent id.`,
+    );
   }
   process.exit(0);
 }
@@ -30,7 +33,7 @@ try {
   refused = `the SDLC config cannot be read: ${error.message}`;
 }
 if (refused) {
-  denyTool(`SDLC: ${refused}.`);
+  denyTool(event, `SDLC: ${refused}.`);
 } else {
   recordTurn(event.cwd, work);
   startRound(event.cwd, target);

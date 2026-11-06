@@ -28,6 +28,7 @@ import {
   writeWorklog,
 } from "../lib/filing.mjs";
 import { readEvent, respond } from "../lib/hook-io.mjs";
+import { logMistake } from "../lib/mistakes.mjs";
 import { repoRoot, sdlcRoot } from "../lib/paths.mjs";
 import { pathRefusal } from "../lib/scope-rules.mjs";
 import { fileSpec } from "../lib/spec-filing.mjs";
@@ -66,6 +67,7 @@ const envelope = {
 const expected = expectedModel();
 if (model && expected && !model.startsWith(expected)) {
   const summary = `ran on ${model}, but sdlc.config.json sets ${expected}; report not filed`;
+  logMistake(event, "subagent-stop", summary);
   writeWorklog(event.cwd, envelope, { status: "failed", summary, now });
   process.exit(0);
 }
@@ -79,6 +81,7 @@ if (outcome.spec) {
   const summary = body.summary ?? `verdict: ${body.verdict}`;
   writeWorklog(event.cwd, envelope, { status: outcome.artifact.status, summary, now });
 } else if (countBlock(event) <= MAX_BLOCKS) {
+  logMistake(event, "subagent-stop", outcome.reason);
   respond({
     decision: "block",
     reason: `SDLC stop hook: ${outcome.reason}\nFix this, then end with a corrected yaml report.`,
@@ -145,7 +148,8 @@ function reviewFile(doc) {
 function checkHandoff(artifact) {
   const root = repoRoot(event.cwd);
   const contract = loadTask(event.cwd, task);
-  const changed = changedFiles(root, process.env.SDLC_BASE_REF ?? "origin/develop");
+  const base = process.env.SDLC_BASE_REF ?? `origin/${loadConfig(event.cwd).baseBranch}`;
+  const changed = changedFiles(root, base);
   const outside = changed
     .map((file) => pathRefusal(root, root, file, contract.scope.paths))
     .filter(Boolean);
