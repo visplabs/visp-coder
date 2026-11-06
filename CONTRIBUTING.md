@@ -28,8 +28,12 @@ pnpm build
 | `pnpm release:check` | `check` plus browser, qualification, trust coverage and package tests |
 
 `pnpm release:check` is the release gate and runs before publishing (`prepublishOnly`). CI
-(`.github/workflows/ci.yml`) runs the same scripts as parallel jobs, with `pnpm test` in four
-shards; keep the two in step when a script changes.
+(`.github/workflows/ci.yml`) runs the same scripts as parallel jobs; keep the two in step when a
+script changes. `pnpm test` runs in six shards, split by the per-file durations in
+`tests/shard-timings.json`. When the `test` shards of a develop run differ by more than a minute,
+refresh the durations from that run's `test-timings-*` artifacts with `scripts/ci/shard-timings.mjs`.
+The `check` job fails if any job or matrix leg did not pass, including one cancelled before a runner
+picked it up.
 
 ## Releasing
 

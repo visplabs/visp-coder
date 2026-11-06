@@ -6,7 +6,8 @@
       "tests/**/*.ts",
       "ui/src/**/*.ts",
       "src/**/*.script.mjs",
-      "scripts/sdlc/**/*.mjs"
+      "scripts/sdlc/**/*.mjs",
+      "scripts/ci/**/*.mjs"
     ]
   },
   "formatter": {
@@ -45,7 +46,7 @@
   },
   "overrides": [
     {
-      "includes": ["src/**", "scripts/sdlc/**"],
+      "includes": ["src/**", "scripts/sdlc/**", "scripts/ci/**"],
       "linter": {
         "rules": {
           "complexity": {

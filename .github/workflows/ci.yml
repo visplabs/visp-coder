@@ -66,7 +66,8 @@ jobs:
       - run: pnpm lint
       - run: pnpm knip
 
-  # `pnpm test` in four parts. A shard runs whole test files, so every test still runs once.
+  # `pnpm test` in six parts. A shard runs whole test files, so every test still runs once;
+  # tests/shard-sequencer.ts splits them by the durations in tests/shard-timings.json.
   test:
     runs-on: ubuntu-latest
     env:
@@ -74,12 +75,21 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6]
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
       - run: pnpm build
-      - run: pnpm exec vitest run --shard=${{ matrix.shard }}/4
+      - run: >-
+          pnpm exec vitest run --shard=${{ matrix.shard }}/6
+          --reporter=default --reporter=json --outputFile.json=test-results/shard-${{ matrix.shard }}.json
+      # Input for scripts/ci/shard-timings.mjs when the shards drift apart.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-timings-${{ matrix.shard }}
+          path: test-results/
+          retention-days: 14
 
   browser:
     runs-on: ubuntu-latest
@@ -122,11 +132,23 @@ jobs:
       - run: pnpm build
       - run: pnpm test:package
 
+  # `needs.<job>.result` reports a matrix as passed when one leg was cancelled before a runner
+  # picked it up (runs 41901525300 and 41887831047), so the result of every job is read back.
   check:
     if: always()
-    needs: [trust-boundary, static, test, browser, qualification, trust-coverage, package]
+    needs:
+      [trust-boundary, static, test, browser, qualification, trust-coverage, package]
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
     steps:
       - name: Every part passed
         run: |
           [ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}" = false ]
+      - name: Every matrix leg passed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          failed=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?filter=latest" \
+            --jq '.jobs[] | select(.name != "check" and .conclusion != "success") | "\(.name): \(.conclusion // .status)"')
+          if [ -n "$failed" ]; then echo "$failed"; exit 1; fi
