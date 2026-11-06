@@ -217,6 +217,49 @@ describe("sdlc command line", () => {
     expect(a).not.toBe(specHash({ a: [{ x: 1, y: 3 }], b: 1 }, { c: "z" }));
   });
 
+  it("lets the clerk create a task under the epic, move it and comment on it", () => {
+    writeFileSync(
+      join(repo, "task.yml"),
+      "criteria: [AC-01]\nscope:\n  paths: [docs/x.md]\ntrack: standard\nsize: S\n",
+    );
+    const created = sdlc(
+      "jira",
+      "create-task",
+      "VISP-12",
+      "--title",
+      "Docs",
+      "--task-file",
+      "task.yml",
+    );
+    expect(created.status, created.stderr).toBe(0);
+    expect(created.stdout).toContain("created VISP-20 under VISP-12");
+    expect(sdlc("jira", "move", "VISP-20", "ready").status).toBe(0);
+    writeFileSync(join(repo, "note.md"), "Coder started.");
+    expect(sdlc("jira", "comment", "VISP-20", "--body-file", "note.md").status).toBe(0);
+    const pulled = sdlc("pull", "VISP-12");
+    expect(pulled.status, pulled.stderr).toBe(0);
+    const dir = join(repo, ".sdlc/features/VISP-12/tasks/VISP-20");
+    expect(readFileSync(join(dir, "task.yml"), "utf8")).toContain("task: VISP-20");
+    expect(readFileSync(join(dir, "ticket.yml"), "utf8")).toContain('status: "10022"');
+    expect(sdlc("jira", "show", "VISP-20").stdout).toContain("VISP-20 Docs");
+  });
+
+  it("refuses a task contract that does not validate, naming the field", () => {
+    writeFileSync(join(repo, "task.yml"), "criteria: []\n");
+    const result = sdlc(
+      "jira",
+      "create-task",
+      "VISP-12",
+      "--title",
+      "Docs",
+      "--task-file",
+      "task.yml",
+    );
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("scope");
+    expect(jira.calls().some((call) => call.method === "POST")).toBe(false);
+  });
+
   it("explains its usage for an unknown command", () => {
     const result = sdlc("deploy");
     expect(result.status).toBe(2);
