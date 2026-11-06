@@ -64,7 +64,7 @@ function readTask(number) {
   const issue = ghJson(["issue", "view", number, "--json", "title,body,updatedAt,url"]);
   const block = yamlBlocks(issue.body ?? "").find((doc) => doc.schema === "task@1");
   if (!block) throw new Error(`task issue #${number} has no task@1 block`);
-  return taskDocument(issue.body, block.feature, Number(number));
+  return taskDocument(issue.body, block.feature, `T-${number}`);
 }
 
 function readFeature(feature) {

@@ -4,8 +4,11 @@
 
 import { z } from "zod";
 
-export const featureId = z.string().regex(/^F-\d+$/, "expected F-<feature issue number>");
-export const taskId = z.string().regex(/^T-\d+$/, "expected T-<task issue number>");
+// A Jira issue key (VISP-12). F-12 and T-13, the GitHub issue form, still match until CI reads
+// Jira.
+export const workKey = /^[A-Z][A-Z0-9]*-\d+$/;
+export const featureId = z.string().regex(workKey, "expected the epic's Jira key, like VISP-12");
+export const taskId = z.string().regex(workKey, "expected the task's Jira key, like VISP-13");
 export const clauseId = z.string().regex(/^I-\d{2,}$/, "expected I-01 style id");
 export const criterionId = z.string().regex(/^AC-\d{2,}$/, "expected AC-01 style id");
 export const testCaseId = z.string().regex(/^TC-\d{2,}$/, "expected TC-01 style id");

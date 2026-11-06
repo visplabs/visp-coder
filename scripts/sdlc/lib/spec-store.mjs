@@ -1,5 +1,6 @@
-// Moves a feature spec between its GitHub issue and the local read-only cache, and reads the
-// stage reports filed for the feature. Everything read is validated against its schema.
+// Reads a feature spec out of an issue body (the epic's in Jira, or a GitHub issue's for the CI
+// check) and out of the local read-only cache, and reads the stage reports filed for the
+// feature. Everything read is validated against its schema.
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -46,8 +47,10 @@ export function loadSpec(dir) {
   };
 }
 
-// Stage reports under tasks/<task>/*.yml, oldest first; task.yml is the task's contract, not a
-// report. Invalid files are returned apart.
+// Stage reports under tasks/<task>/*.yml, oldest first; task.yml (the task's contract) and
+// ticket.yml (its Jira ticket) are not reports. Invalid files are returned apart.
+const NOT_REPORTS = new Set(["task.yml", "ticket.yml"]);
+
 export function loadArtifacts(featurePath) {
   const tasks = join(featurePath, "tasks");
   if (!existsSync(tasks)) return { artifacts: [], invalid: [] };
@@ -55,7 +58,7 @@ export function loadArtifacts(featurePath) {
   const invalid = [];
   for (const task of readdirSync(tasks)) {
     const reports = readdirSync(join(tasks, task)).filter(
-      (name) => name.endsWith(".yml") && name !== "task.yml",
+      (name) => name.endsWith(".yml") && !NOT_REPORTS.has(name),
     );
     for (const file of reports) {
       const path = join(tasks, task, file);
@@ -72,14 +75,15 @@ function readYaml(path) {
   return parse(readFileSync(path, "utf8"));
 }
 
-// The task@1 block of a task sub-issue, or undefined when it has none.
-export function taskDocument(body, feature, number) {
+// The task@1 block of a task issue, or undefined when it has none. Its `task` must be the
+// issue's own key.
+export function taskDocument(body, feature, key) {
   const block = yamlBlocks(body).find((doc) => doc.schema === "task@1");
   if (!block) return undefined;
   const result = validateDocument(block);
-  if (!result.ok) throw new Error(`#${number} task@1 block: ${result.errors.join("; ")}`);
-  if (result.value.feature !== feature || result.value.task !== `T-${number}`) {
-    throw new Error(`#${number} task@1 block names ${result.value.feature}/${result.value.task}`);
+  if (!result.ok) throw new Error(`${key} task@1 block: ${result.errors.join("; ")}`);
+  if (result.value.feature !== feature || result.value.task !== key) {
+    throw new Error(`${key} task@1 block names ${result.value.feature}/${result.value.task}`);
   }
   return result.value;
 }

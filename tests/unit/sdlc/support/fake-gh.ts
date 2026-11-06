@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 // A stand-in `gh` for hook tests. Issues live as issue-<n>.json in `dir`; every call is logged
@@ -52,22 +52,6 @@ export function installFakeGh(dir: string): string {
 export function setFakeIssue(dir: string, number: number, body: string, title = "Work log") {
   const issue = { title, body, updatedAt: "2026-11-05T10:00:00Z", url: `https://x/${number}` };
   writeFileSync(join(dir, `issue-${number}.json`), JSON.stringify(issue));
-}
-
-export function fakeIssueBody(dir: string, number: number): string {
-  return (JSON.parse(readFileSync(join(dir, `issue-${number}.json`), "utf8")) as { body: string })
-    .body;
-}
-
-export type GhCall = { args: string[]; config: string | null; body: string | null };
-
-export function ghCalls(dir: string): GhCall[] {
-  const path = join(dir, "calls.jsonl");
-  if (!existsSync(path)) return [];
-  return readFileSync(path, "utf8")
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => JSON.parse(line) as GhCall);
 }
 
 const block = (text: string) => `\`\`\`yaml\n${text}\n\`\`\``;

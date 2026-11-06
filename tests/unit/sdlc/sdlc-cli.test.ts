@@ -1,6 +1,5 @@
 import { spawnSync } from "node:child_process";
 import {
-  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -13,6 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { type FakeJira, startFakeJira } from "./support/fake-jira.js";
 
 const cli = join(process.cwd(), "scripts/sdlc/sdlc.mjs");
 const { specHash } = (await import(
@@ -20,14 +20,14 @@ const { specHash } = (await import(
 )) as { specHash(intent: unknown, acceptance: unknown): string };
 
 const INTENT = `schema: intent@1
-feature: F-12
+feature: VISP-12
 owner_text: Work log entries are separate timestamped files.
 clauses:
   - id: I-01
     text: Work log entries are separate files
     kind: must`;
 const ACCEPTANCE = `schema: acceptance@1
-feature: F-12
+feature: VISP-12
 criteria:
   - id: AC-01
     clauses: [I-01]
@@ -36,7 +36,7 @@ criteria:
     expect: one new worklog file exists
     level: unit`;
 const TEST_CASES = `schema: test-cases@1
-feature: F-12
+feature: VISP-12
 cases:
   - id: TC-01
     title: stop hook writes one file
@@ -44,8 +44,8 @@ cases:
     test: tests/worklog.test.ts > worklog > writes one file`;
 
 const TASK = `schema: task@1
-feature: F-12
-task: T-13
+feature: VISP-12
+task: VISP-13
 criteria: [AC-01]
 scope:
   paths: [scripts/sdlc/lib/worklog.mjs, "tests/unit/sdlc/**"]
@@ -53,85 +53,97 @@ track: standard
 size: M`;
 
 let repo = "";
+let jira: FakeJira;
 
 function issueBody(...blocks: string[]) {
   return ["Owner request.", ...blocks.map((block) => `\`\`\`yaml\n${block}\n\`\`\``)].join("\n\n");
 }
 
-function setIssue(body: string, number = 12, title = "Work log") {
-  const issue = { title, body, updatedAt: "2026-11-02T10:00:00Z", url: `https://x/${number}` };
-  writeFileSync(join(repo, `issue-${number}.json`), JSON.stringify(issue));
+function setEpic(body: string) {
+  jira.setIssue("VISP-12", { summary: "Work log", body, type: "10000" });
 }
 
-function setSubIssues(numbers: number[]) {
-  writeFileSync(
-    join(repo, "sub-issues.json"),
-    JSON.stringify(numbers.map((number) => ({ number }))),
-  );
+function setTask(key: string, body: string, summary: string) {
+  jira.setIssue(key, { summary, body, parent: "VISP-12", status: "10022" });
 }
 
 function sdlc(...args: string[]) {
   return spawnSync(process.execPath, [cli, ...args], {
     cwd: repo,
     encoding: "utf8",
-    env: { ...process.env, SDLC_GH: join(repo, "fake-gh"), FAKE_DIR: repo },
+    env: { ...process.env, ...jira.env },
   });
 }
 
 describe("sdlc command line", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     repo = mkdtempSync(join(tmpdir(), "sdlc-cli-"));
     spawnSync("git", ["init", "-q", repo]);
     writeFileSync(
-      join(repo, "fake-gh"),
-      '#!/bin/sh\nif [ "$1" = api ]; then cat "$FAKE_DIR/sub-issues.json"; else cat "$FAKE_DIR/issue-$3.json"; fi\n',
+      join(repo, "sdlc.config.json"),
+      readFileSync(join(process.cwd(), "sdlc.config.json"), "utf8"),
     );
-    chmodSync(join(repo, "fake-gh"), 0o755);
-    setIssue(issueBody(INTENT, ACCEPTANCE, TEST_CASES));
-    setSubIssues([]);
+    mkdirSync(join(repo, "jira"));
+    jira = await startFakeJira(join(repo, "jira"));
+    setEpic(issueBody(INTENT, ACCEPTANCE, TEST_CASES));
   });
-  afterEach(() => rmSync(repo, { recursive: true, force: true }));
+  afterEach(() => {
+    jira.stop();
+    rmSync(repo, { recursive: true, force: true });
+  });
 
   it("pulls the spec into a read-only cache, and pulls again over it", () => {
-    expect(sdlc("pull", "F-12").status).toBe(0);
-    const spec = join(repo, ".sdlc/features/F-12/spec");
-    for (const file of ["intent.yml", "acceptance.yml", "test-cases.yml", "source.yml"]) {
+    expect(sdlc("pull", "VISP-12").status).toBe(0);
+    const spec = join(repo, ".sdlc/features/VISP-12/spec");
+    for (const file of [
+      "intent.yml",
+      "acceptance.yml",
+      "test-cases.yml",
+      "source.yml",
+      "approval.yml",
+    ]) {
       expect(existsSync(join(spec, file)), file).toBe(true);
     }
     expect(statSync(join(spec, "intent.yml")).mode & 0o222).toBe(0);
-    expect(sdlc("pull", "F-12").status).toBe(0);
+    expect(sdlc("pull", "VISP-12").status).toBe(0);
   });
 
-  it("pulls each task sub-issue's contract next to the spec", () => {
-    setSubIssues([13, 14]);
-    setIssue(issueBody(TASK), 13, "Write worklog files");
-    setIssue("A sub-issue without a task block.", 14, "Notes");
-    const result = sdlc("pull", "F-12");
+  it("pulls each task's contract and ticket next to the spec", () => {
+    setTask("VISP-13", issueBody(TASK), "Write worklog files");
+    setTask("VISP-14", "A task without a task block.", "Notes");
+    const result = sdlc("pull", "VISP-12");
     expect(result.status, result.stderr).toBe(0);
-    const task = readFileSync(join(repo, ".sdlc/features/F-12/tasks/T-13/task.yml"), "utf8");
-    expect(task).toContain("scripts/sdlc/lib/worklog.mjs");
-    expect(result.stdout).toContain("#14 has no task@1 block");
+    const dir = join(repo, ".sdlc/features/VISP-12/tasks/VISP-13");
+    expect(readFileSync(join(dir, "task.yml"), "utf8")).toContain("scripts/sdlc/lib/worklog.mjs");
+    expect(readFileSync(join(dir, "ticket.yml"), "utf8")).toContain('status: "10022"');
+    expect(result.stdout).toContain("VISP-14 has no task@1 block");
+    const auth = jira.calls()[0]?.auth ?? "";
+    expect(Buffer.from(auth.replace("Basic ", ""), "base64").toString()).toBe(
+      "visp-agent@example.com:test-token",
+    );
   });
 
   it("pulls a feature that has the owner's words but no spec yet", () => {
-    setIssue("<!-- sdlc:owner-text -->\nKeep a work log.\n<!-- /sdlc:owner-text -->");
-    const result = sdlc("pull", "F-12");
+    setEpic(
+      "## The owner's words\n\n<!-- sdlc:owner-text -->\nKeep a work log.\n<!-- /sdlc:owner-text -->",
+    );
+    const result = sdlc("pull", "VISP-12");
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toContain("no spec yet");
-    const words = readFileSync(join(repo, ".sdlc/features/F-12/owner-text.md"), "utf8");
+    const words = readFileSync(join(repo, ".sdlc/features/VISP-12/owner-text.md"), "utf8");
     expect(words).toBe("Keep a work log.");
   });
 
   it("refuses an issue with a missing block or another feature's block", () => {
-    setIssue(issueBody(INTENT, ACCEPTANCE));
-    const missing = sdlc("pull", "F-12");
+    setEpic(issueBody(INTENT, ACCEPTANCE));
+    const missing = sdlc("pull", "VISP-12");
     expect(missing.status).toBe(1);
     expect(missing.stderr).toContain("test-cases@1");
 
-    setIssue(issueBody(INTENT.replace("F-12", "F-99"), ACCEPTANCE, TEST_CASES));
-    const other = sdlc("pull", "F-12");
+    setEpic(issueBody(INTENT.replace("VISP-12", "VISP-99"), ACCEPTANCE, TEST_CASES));
+    const other = sdlc("pull", "VISP-12");
     expect(other.status).toBe(1);
-    expect(other.stderr).toContain("F-99");
+    expect(other.stderr).toContain("VISP-99");
   });
 
   it("validates files and names the bad field", () => {
@@ -144,8 +156,8 @@ describe("sdlc command line", () => {
   });
 
   it("traces planned clauses, then fails on a failing linked test", () => {
-    sdlc("pull", "F-12");
-    const planned = sdlc("trace", "F-12");
+    sdlc("pull", "VISP-12");
+    const planned = sdlc("trace", "VISP-12");
     expect(planned.status, planned.stderr).toBe(0);
     expect(planned.stdout).toMatch(/I-01\s+must\s+planned/);
 
@@ -160,24 +172,23 @@ describe("sdlc command line", () => {
       ],
     };
     writeFileSync(join(repo, "report.json"), JSON.stringify(report));
-    const failing = sdlc("trace", "F-12", "--results", "report.json");
+    const failing = sdlc("trace", "VISP-12", "--results", "report.json");
     expect(failing.status).toBe(1);
     expect(failing.stdout).toContain("failing");
   });
 
   it("writes an owner packet with the clause table, the spec hash and stage reports", () => {
-    setSubIssues([13]);
-    setIssue(issueBody(TASK), 13, "Write worklog files");
-    sdlc("pull", "F-12");
-    const task = join(repo, ".sdlc/features/F-12/tasks/T-13");
+    setTask("VISP-13", issueBody(TASK), "Write worklog files");
+    sdlc("pull", "VISP-12");
+    const task = join(repo, ".sdlc/features/VISP-12/tasks/VISP-13");
     mkdirSync(task, { recursive: true });
     writeFileSync(
       join(task, "review-20261102T101530Z.yml"),
       [
         "schema: review@1",
-        "id: T-13-review-20261102T101530Z",
-        "feature: F-12",
-        "task: T-13",
+        "id: VISP-13-review-20261102T101530Z",
+        "feature: VISP-12",
+        "task: VISP-13",
         "agent: reviewer",
         "created_at: 2026-11-02T10:15:30Z",
         "status: done",
@@ -188,7 +199,7 @@ describe("sdlc command line", () => {
         "    - { id: R-1, severity: advisory, text: Consider a shorter name }",
       ].join("\n"),
     );
-    const result = sdlc("packet", "F-12");
+    const result = sdlc("packet", "VISP-12");
     expect(result.status, result.stderr).toBe(0);
     const packet = readFileSync(result.stdout.trim(), "utf8");
     expect(packet).toContain("| I-01 | must | planned | AC-01 |");

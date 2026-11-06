@@ -1,17 +1,11 @@
-import { existsSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import {
-  fakeIssueBody,
-  featureBody,
-  ghCalls,
-  installFakeGh,
-  setFakeIssue,
-} from "./support/fake-gh.js";
+import { epicBody, type FakeJira, startFakeJira } from "./support/fake-jira.js";
 import { promptEntry, runHook, type SdlcRepo, SPEC, sdlcRepo } from "./support/sdlc-repo.js";
 
 let fixture: SdlcRepo;
-let gh = "";
+let jira: FakeJira;
 const OWNER_TEXT = "Work log entries are separate timestamped files.";
 const yaml = (text: string) => `\`\`\`yaml\n${text}\n\`\`\``;
 const REPORT = [
@@ -34,34 +28,44 @@ function stop(lastMessage: string) {
       last_assistant_message: lastMessage,
       cwd: fixture.repo,
     },
-    { SDLC_GH: gh, FAKE_DIR: fixture.repo, GH_CONFIG_DIR: "/bot-config" },
+    jira.env,
   );
 }
 
 const reason = (result: ReturnType<typeof stop>) =>
   result.json?.decision === "block" ? String(result.json.reason) : "";
 
-describe("qe-spec stop", () => {
-  beforeEach(() => {
-    fixture = sdlcRepo();
-    gh = installFakeGh(fixture.repo);
-    setFakeIssue(fixture.repo, 12, featureBody(OWNER_TEXT));
-  });
-  afterEach(() => fixture.cleanup());
+const description = () => JSON.stringify(jira.issue("F-12").fields.description);
 
-  it("writes the validated spec and a generated mind map into the feature issue", () => {
+describe("qe-spec stop", () => {
+  beforeEach(async () => {
+    fixture = sdlcRepo();
+    const dir = join(fixture.repo, "..", "jira");
+    mkdirSync(dir);
+    jira = await startFakeJira(dir);
+    jira.setIssue("F-12", {
+      summary: "Work log",
+      body: epicBody(OWNER_TEXT, false),
+      type: "10000",
+    });
+  });
+  afterEach(() => {
+    jira.stop();
+    fixture.cleanup();
+  });
+
+  it("writes the validated spec and a generated mind map into the epic", () => {
     const result = stop(REPORT);
     expect(result.status, result.stderr).toBe(0);
     expect(reason(result)).toBe("");
-    const body = fakeIssueBody(fixture.repo, 12);
-    expect(body).toContain(`<!-- sdlc:owner-text -->\n${OWNER_TEXT}\n<!-- /sdlc:owner-text -->`);
-    expect(body).toContain("schema: intent@1");
-    expect(body).toContain("schema: acceptance@1");
-    expect(body).toContain("schema: test-cases@1");
-    expect(body).toMatch(/```mermaid\nmindmap\n {2}root\(\(F-12/);
-    expect(body).not.toContain("agent's own map");
-    const edit = ghCalls(fixture.repo).find((call) => call.args[1] === "edit");
-    expect(edit?.config).toBe("/bot-config");
+    expect(description()).toContain(OWNER_TEXT);
+    expect(description()).toContain("schema: intent@1");
+    expect(description()).toContain("schema: acceptance@1");
+    expect(description()).toContain("schema: test-cases@1");
+    expect(description()).toContain("root((F-12");
+    expect(description()).not.toContain("agent's own map");
+    const put = jira.calls().find((call) => call.method === "PUT");
+    expect(put?.auth).toMatch(/^Basic /);
     const worklog = join(fixture.repo, ".sdlc/worklog");
     expect(existsSync(worklog) && readdirSync(worklog).length).toBe(1);
   });
@@ -69,7 +73,7 @@ describe("qe-spec stop", () => {
   it("keeps the agent working when it changed the owner's words", () => {
     const altered = REPORT.replace(OWNER_TEXT, "Work log entries may share one file.");
     expect(reason(stop(altered))).toContain("owner_text");
-    expect(fakeIssueBody(fixture.repo, 12)).not.toContain("schema: intent@1");
+    expect(description()).not.toContain("schema: intent@1");
   });
 
   it("keeps the agent working when a spec block is missing", () => {

@@ -15,5 +15,5 @@ export const TASK_REPORTS = {
 export const SPEC_AGENT = "qe-spec";
 
 // The lines the manager puts in an agent's prompt; hooks find the work through them.
-export const TASK_LINE = /SDLC-Task: (F-\d+)\/(T-\d+)/;
-export const FEATURE_LINE = /SDLC-Feature: (F-\d+)/;
+export const TASK_LINE = /SDLC-Task: ([A-Z][A-Z0-9]*-\d+)\/([A-Z][A-Z0-9]*-\d+)/;
+export const FEATURE_LINE = /SDLC-Feature: ([A-Z][A-Z0-9]*-\d+)/;

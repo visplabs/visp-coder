@@ -50,7 +50,7 @@ const envelope = {
   usage,
 };
 
-const outcome = isSpec ? examineSpec() : examine();
+const outcome = isSpec ? await examineSpec() : examine();
 if (outcome.spec) {
   writeWorklog(event.cwd, envelope, { status: "done", summary: outcome.spec, now });
 } else if (outcome.artifact) {
@@ -68,8 +68,8 @@ if (outcome.spec) {
   writeWorklog(event.cwd, envelope, { status: "failed", summary, now });
 }
 
-function examineSpec() {
-  const reason = fileSpec(
+async function examineSpec() {
+  const reason = await fileSpec(
     event.cwd,
     task.feature,
     finalReport(entries, event.last_assistant_message),

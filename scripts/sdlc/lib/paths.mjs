@@ -3,6 +3,7 @@
 
 import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
+import { workKey } from "../schemas/spec.mjs";
 
 const git = (cwd, ...args) => execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
 
@@ -22,8 +23,8 @@ export function featureDir(feature, cwd = process.cwd()) {
 }
 
 export function parseFeature(value) {
-  if (!/^F-\d+$/.test(value ?? "")) {
-    throw new Error(`expected a feature id like F-12 (its issue number), got "${value ?? ""}"`);
+  if (!workKey.test(value ?? "")) {
+    throw new Error(`expected the epic's Jira key, like VISP-12, got "${value ?? ""}"`);
   }
   return value;
 }
