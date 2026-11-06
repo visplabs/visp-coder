@@ -22,6 +22,7 @@ pnpm build
 | `pnpm test:unit`, `test:integration`, `test:functional` | One suite |
 | `pnpm test:browser` | Real-browser journeys (`tests/browser`); set `CHROME_BIN` to choose the browser |
 | `pnpm test:qualification` | Node tests for the qualification helpers |
+| `pnpm test:coverage` | Coverage of `src/`, including code reached only through the CLI, in `coverage/merged/` |
 | `pnpm test:coverage:trust` | Coverage for the trust-boundary modules |
 | `pnpm test:package` | Pack and install the package into a disposable consumer |
 | `pnpm check` | typecheck, lint, knip, build and test |
@@ -34,6 +35,15 @@ script changes. `pnpm test` runs in six shards, split by the per-file durations 
 refresh the durations from that run's `test-timings-*` artifacts with `scripts/ci/shard-timings.mjs`.
 The `check` job fails if any job or matrix leg did not pass, including one cancelled before a runner
 picked it up.
+
+Coverage counts the CLI processes tests start. With `VISP_CHILD_COVERAGE` set, `tests/child-coverage.ts`
+points `NODE_V8_COVERAGE` at a directory for each test file and keeps the merged profile of this
+repository's `dist/` scripts. `scripts/ci/coverage-merge.mjs` converts those through the source
+maps and adds them to vitest's own coverage, pairing branches, statements and functions by type and
+line because the bundle and vitest's transform place some columns differently; anything unpaired is
+dropped and reported, never added. Each `test` shard records coverage; the advisory `coverage` job
+merges them into the `coverage-report` artifact (`lcov.info`). Processes a test kills write no
+coverage, and hooks installed from `.script.mjs` templates are not counted.
 
 ## Releasing
 

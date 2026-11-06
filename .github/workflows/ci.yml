@@ -68,10 +68,13 @@ jobs:
 
   # `pnpm test` in six parts. A shard runs whole test files, so every test still runs once;
   # tests/shard-sequencer.ts splits them by the durations in tests/shard-timings.json.
+  # Each shard also records coverage, counting code reached only through the CLI
+  # (tests/child-coverage.ts); the `coverage` job merges the shards.
   test:
     runs-on: ubuntu-latest
     env:
       CHROME_BIN: /usr/bin/google-chrome
+      VISP_CHILD_COVERAGE: coverage/children
     strategy:
       fail-fast: false
       matrix:
@@ -83,12 +86,53 @@ jobs:
       - run: >-
           pnpm exec vitest run --shard=${{ matrix.shard }}/6
           --reporter=default --reporter=json --outputFile.json=test-results/shard-${{ matrix.shard }}.json
+          --coverage --coverage.reporter=json
       # Input for scripts/ci/shard-timings.mjs when the shards drift apart.
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: test-timings-${{ matrix.shard }}
           path: test-results/
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.shard }}
+          path: |
+            coverage/coverage-final.json
+            coverage/children/*.json
+          retention-days: 7
+      # The child profiles name byte offsets in this build, so the merge uses it as is.
+      - uses: actions/upload-artifact@v4
+        if: matrix.shard == 1
+        with:
+          name: coverage-dist
+          path: dist/
+          retention-days: 7
+
+  # Advisory: one coverage report of src/ (coverage/merged/lcov.info) for review and, later, Sonar.
+  # Not part of `check`.
+  coverage:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - uses: actions/download-artifact@v4
+        with:
+          name: coverage-dist
+          path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-[1-9]
+          path: coverage-parts
+      - name: Merge
+        run: |
+          node scripts/ci/coverage-merge.mjs coverage/merged coverage-parts/* | tee coverage-summary.txt
+          { echo '### Coverage of src/'; echo '```'; cat coverage-summary.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/merged/
           retention-days: 14
 
   browser:
@@ -133,7 +177,8 @@ jobs:
       - run: pnpm test:package
 
   # `needs.<job>.result` reports a matrix as passed when one leg was cancelled before a runner
-  # picked it up (runs 41901525300 and 41887831047), so the result of every job is read back.
+  # picked it up (runs 41901525300 and 41887831047), so the result of every job is read back,
+  # except the advisory `coverage` job, which may still be running.
   check:
     if: always()
     needs:
@@ -150,5 +195,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           failed=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?filter=latest" \
-            --jq '.jobs[] | select(.name != "check" and .conclusion != "success") | "\(.name): \(.conclusion // .status)"')
+            --jq '.jobs[] | select(.name != "check" and .name != "coverage" and .conclusion != "success") | "\(.name): \(.conclusion // .status)"')
           if [ -n "$failed" ]; then echo "$failed"; exit 1; fi
