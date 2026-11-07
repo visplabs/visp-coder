@@ -50,12 +50,16 @@ function shellSyntax(message: string) {
 }
 
 describe("parseCommand whitespace", () => {
-  it.each([["a b"], ["  a   b  "], ["a\tb"], ["a\nb"], ["a\r\nb"], ["a b"]])(
-    "splits %j into two words",
-    (input) => {
-      expectWords(parseCommand(input), ["a", "b"]);
-    },
-  );
+  it.each([
+    ["a space", "a b"],
+    ["repeated spaces", "  a   b  "],
+    ["a tab", "a\tb"],
+    ["a newline", "a\nb"],
+    ["a carriage return and newline", "a\r\nb"],
+    ["a no-break space (U+00A0)", "a\u00a0b"],
+  ])("splits on %s", (_name, input) => {
+    expectWords(parseCommand(input), ["a", "b"]);
+  });
 });
 
 describe("parseCommand quoting", () => {
@@ -101,7 +105,7 @@ describe("parseCommand shell syntax", () => {
 });
 
 describe("parseCommand unterminated quotes", () => {
-  it.each([["a 'b"], ["'a \"b"], ["'"], ['"']])("refuses %j", (input) => {
+  it.each([["a 'b"], ['a "b'], ["'"], ['"']])("refuses %j", (input) => {
     expect(parseCommand(input)).toEqual(shellSyntax("Command has an unterminated quote"));
   });
 
