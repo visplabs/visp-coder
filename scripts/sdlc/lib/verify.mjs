@@ -9,6 +9,7 @@ import { dirname, join } from "node:path";
 import { tail } from "./hook-io.mjs";
 import { withLock } from "./lock.mjs";
 import { sdlcRoot } from "./paths.mjs";
+import { resultsIndex } from "./trace.mjs";
 
 export function verificationPlan(changed, handoffTests, directTests) {
   const sources = changed.filter((file) => file.startsWith("src/") && file.endsWith(".ts"));
@@ -22,8 +23,8 @@ export function verificationPlan(changed, handoffTests, directTests) {
   return [["pnpm", "build:fast"], ...run, ["pnpm", "typecheck"]];
 }
 
-// Runs the plan in the worktree; returns { ran } when every step passes, else { failed } with
-// why. Tests run with VISP_CHILD_COVERAGE set, as in CI, because child coverage changes the
+// Runs the plan in the worktree; returns { ran, results } when every step passes (results: each
+// test's status by its "<path> > <describe> > <title>" name), else { failed } with why. Tests run with VISP_CHILD_COVERAGE set, as in CI, because child coverage changes the
 // environment the code under test sees (NODE_V8_COVERAGE): pilot 1 shipped a test that passed
 // here and failed in CI for that reason.
 export function runVerification(cwd, changed, handoffTests) {
@@ -37,10 +38,13 @@ export function runVerification(cwd, changed, handoffTests) {
   const plan = verificationPlan(changed, handoffTests, directTests);
   const coverage = mkdtempSync(join(tmpdir(), "sdlc-child-coverage-"));
   const env = { ...process.env, VISP_CHILD_COVERAGE: coverage };
+  const report = join(coverage, "results.json");
+  const json = ["--reporter=default", "--reporter=json", `--outputFile.json=${report}`];
   try {
     return withLock(join(sdlcRoot(cwd), "run", "heavy.lock"), () => {
       for (const command of plan) {
-        const result = spawnSync(command[0], command.slice(1), {
+        const args = command[2] === "vitest" ? [...command.slice(1), ...json] : command.slice(1);
+        const result = spawnSync(command[0], args, {
           cwd,
           env,
           encoding: "utf8",
@@ -51,7 +55,10 @@ export function runVerification(cwd, changed, handoffTests) {
           return { failed: `\`${command.join(" ")}\` failed:\n${output}` };
         }
       }
-      return { ran: plan.map((command) => command.join(" ")) };
+      const results = existsSync(report)
+        ? resultsIndex(JSON.parse(readFileSync(report, "utf8")), cwd)
+        : new Map();
+      return { ran: plan.map((command) => command.join(" ")), results };
     });
   } finally {
     rmSync(coverage, { recursive: true, force: true });

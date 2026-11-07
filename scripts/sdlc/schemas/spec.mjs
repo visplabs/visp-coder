@@ -84,3 +84,15 @@ export const taskSchema = z
     size: z.enum(["S", "M", "L"]),
   })
   .strict();
+
+// The tests that cover a task's test cases, kept in the task's Jira issue (never the epic, whose
+// edits would void the owner's approval). The stop hook writes them from the coder's handoff and
+// qe-verify's report; the CI gate and the trace read them over the spec's own links.
+export const testLinksSchema = z
+  .object({
+    schema: z.literal("test-links@1"),
+    feature: featureId,
+    task: taskId,
+    links: z.array(z.object({ case: testCaseId, test: z.string().min(1) }).strict()),
+  })
+  .strict();

@@ -4,9 +4,11 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { type FakeJira, startFakeJira } from "./support/fake-jira.js";
 import { promptEntry, type SdlcRepo, SPEC, sdlcRepo } from "./support/sdlc-repo.js";
 
 let fixture: SdlcRepo;
+let jira: FakeJira;
 let sentry: Server;
 let sentryUrl = "";
 let answer = { status: 200, count: 0 };
@@ -35,7 +37,7 @@ function qeReport(verdict: string, events?: number) {
     "status: done",
     "body:",
     `  verdict: ${verdict}`,
-    "  cases: [{ id: TC-01, result: pass, evidence: 'pnpm test:browser' }]",
+    "  cases: [{ id: TC-01, result: pass, evidence: 'pnpm test:browser', test: 'tests/browser/worklog.test.ts > worklog > journey' }]",
     ...(events === undefined ? [] : [`  sentry_events: ${events}`]),
     "```",
   ];
@@ -77,6 +79,7 @@ function stopQe() {
         SDLC_SENTRY_URL: sentryUrl,
         SENTRY_READ_TOKEN: "read-token",
         SDLC_MISTAKE_LOG: join(fixture.repo, "..", "mistakes.jsonl"),
+        ...jira.env,
       },
     },
   );
@@ -104,6 +107,9 @@ function journeyTask() {
 describe("the Sentry zero-events check on a qe-verify report", () => {
   beforeEach(async () => {
     fixture = sdlcRepo();
+    jira = await startFakeJira(join(fixture.repo, ".."));
+    const task = `\`\`\`yaml\n${SPEC["tasks/T-13/task.yml"]}\n\`\`\``;
+    jira.setIssue("T-13", { summary: "Worklog", body: task, parent: "F-12" });
     answer = { status: 200, count: 0 };
     requests = [];
     await startSentry();
@@ -111,6 +117,7 @@ describe("the Sentry zero-events check on a qe-verify report", () => {
   });
   afterEach(() => {
     sentry.close();
+    jira.stop();
     fixture.cleanup();
   });
 
@@ -118,6 +125,7 @@ describe("the Sentry zero-events check on a qe-verify report", () => {
     qeReport("pass", 0);
     expect(blockReason(await stopQe())).toBe("");
     expect(filed()).toHaveLength(1);
+    expect(JSON.stringify(jira.issue("T-13").fields.description)).toContain("journey");
     const query = new URL(requests[0]?.url ?? "", sentryUrl).searchParams;
     expect(query.get("query")).toBe("project:visp-coder environment:qe task:T-13");
     expect(query.get("start")).toBe("2026-11-08T10:00:00.000Z");

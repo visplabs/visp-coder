@@ -80,8 +80,10 @@ function coderRules(task) {
     "### Your job",
     "",
     `You may change only: ${task.scope.paths.join(", ")}. Hooks refuse other paths.`,
-    "Write unit and integration tests that cover the branches of the code you change, and link",
-    "each criterion to a test as `<path> > <describe titles> > <test title>`.",
+    "Write unit and integration tests that cover the branches of the code you change. In your",
+    "report, link every unit and integration test case above to the test that checks it, as",
+    "`<path> > <describe titles> > <test title>`. The stop hook runs each linked test and refuses",
+    "a name it cannot find or a test that does not pass.",
     "",
     ...reportRules("handoff@1", [
       "status: done",
@@ -89,7 +91,7 @@ function coderRules(task) {
       "  summary: What changed and why, in one or two sentences",
       "  changed_files: [src/x.ts, tests/unit/x.test.ts]",
       "  tests:",
-      "    - { criterion: AC-01, test: 'tests/unit/x.test.ts > x > does y' }",
+      "    - { case: TC-01, test: 'tests/unit/x.test.ts > x > does y' }",
       "  notes: Anything the reviewer should know (optional)",
     ]),
   ];
@@ -128,12 +130,13 @@ function qeVerifyRules() {
     "### Your job",
     "",
     "Run every test case above, including journeys, and record each result with its evidence.",
+    "Give each journey and performance case the test that runs it in `test`.",
     "",
     ...reportRules("qe-report@1", [
       "status: done",
       "body:",
       "  verdict: pass",
-      "  cases: [{ id: TC-01, result: pass, evidence: 'pnpm exec vitest run ...' }]",
+      "  cases: [{ id: TC-01, result: pass, evidence: 'pnpm exec vitest run ...', test: 'tests/x.test.ts > x > y' }]",
       "  sentry_events: 0",
     ]),
   ];

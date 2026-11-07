@@ -2,11 +2,16 @@ import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parse } from "yaml";
-import { promptEntry, runHook, type SdlcRepo, sdlcRepo } from "./support/sdlc-repo.js";
+import { type FakeJira, startFakeJira } from "./support/fake-jira.js";
+import { promptEntry, runHook, type SdlcRepo, SPEC, sdlcRepo } from "./support/sdlc-repo.js";
 
 let fixture: SdlcRepo;
+const { adfToBody } = (await import(
+  pathToFileURL(join(process.cwd(), "scripts/sdlc/lib/adf.mjs")).href
+)) as { adfToBody(adf: unknown): string };
 let base = "";
 
 const HANDOFF = [
@@ -17,7 +22,7 @@ const HANDOFF = [
   "  summary: Adds the worklog writer",
   "  changed_files: [src/worklog.ts]",
   "  tests:",
-  "    - { criterion: AC-01, test: 'tests/worklog.test.ts > worklog > writes one file' }",
+  "    - { case: TC-01, test: 'tests/worklog.test.ts > worklog > writes one file' }",
   "```",
 ].join("\n");
 
@@ -43,10 +48,12 @@ function stopEvent(agentType: string, lastMessage: string | undefined) {
 }
 
 const HOOK_ENV = { SDLC_VERIFY: "off", SDLC_TRANSCRIPT_WAIT_MS: "0" };
+let jira: FakeJira;
 
 function stop(agentType: string, lastMessage: string | undefined) {
   return runHook("subagent-stop.mjs", stopEvent(agentType, lastMessage), {
     ...HOOK_ENV,
+    ...jira.env,
     SDLC_BASE_REF: base,
   });
 }
@@ -61,6 +68,7 @@ function stopWhileWriting(agentType: string, write: () => void) {
         ...process.env,
         SDLC_OWNER: "1",
         ...HOOK_ENV,
+        ...jira.env,
         SDLC_BASE_REF: base,
         SDLC_TRANSCRIPT_WAIT_MS: "3000",
       },
@@ -94,8 +102,11 @@ const blockReason = (result: ReturnType<typeof runHook>) =>
   result.json?.decision === "block" ? String(result.json.reason) : "";
 
 describe("subagent stop hook", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     fixture = sdlcRepo();
+    jira = await startFakeJira(join(fixture.repo, ".."));
+    const task = `\`\`\`yaml\n${SPEC["tasks/T-13/task.yml"]}\n\`\`\``;
+    jira.setIssue("T-13", { summary: "Worklog", body: task, parent: "F-12" });
     base = fixture.git("rev-parse", "HEAD");
     fixture.write("src/worklog.ts", "export const worklog = 1;\n");
     fixture.transcript("a1", [
@@ -105,7 +116,10 @@ describe("subagent stop hook", () => {
       assistant("m2", HANDOFF, { input_tokens: 300, output_tokens: 80 }),
     ]);
   });
-  afterEach(() => fixture.cleanup());
+  afterEach(() => {
+    jira.stop();
+    fixture.cleanup();
+  });
 
   it("files a valid handoff with an envelope taken from the hook input and transcript", () => {
     const result = stop("coder", HANDOFF);
@@ -134,9 +148,23 @@ describe("subagent stop hook", () => {
 
   it("keeps the agent working when the report is missing or invalid", () => {
     expect(blockReason(stop("coder", "All done, no yaml."))).toContain("yaml");
-    const invalid = HANDOFF.replace("criterion: AC-01", "criterion: 1");
-    expect(blockReason(stop("coder", invalid))).toContain("body.tests.0.criterion");
+    const invalid = HANDOFF.replace("case: TC-01", "case: 1");
+    expect(blockReason(stop("coder", invalid))).toContain("body.tests.0.case");
     expect(filed("tasks/T-13")).toEqual([]);
+  });
+
+  it("keeps the coder working until every unit and integration test case is linked", () => {
+    const unlinked = HANDOFF.replace(/ {2}tests:\n.*\n/, "  tests: []\n");
+    expect(blockReason(stop("coder", unlinked))).toContain("link a test for TC-01");
+  });
+
+  it("writes the coder's test links into the task's Jira issue, not the epic", () => {
+    expect(blockReason(stop("coder", HANDOFF))).toBe("");
+    const body = adfToBody(jira.issue("T-13").fields.description);
+    expect(body).toContain("schema: task@1");
+    expect(body).toContain("schema: test-links@1");
+    expect(body).toContain("case: TC-01");
+    expect(body).toContain("test: tests/worklog.test.ts > worklog > writes one file");
   });
 
   it("keeps the coder working when it changed files outside its scope", () => {

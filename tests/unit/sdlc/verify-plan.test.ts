@@ -11,7 +11,7 @@ const { runVerification, verificationPlan } = (await import(
     cwd: string,
     changed: string[],
     handoffTests: string[],
-  ): { failed?: string; ran?: string[] };
+  ): { failed?: string; ran?: string[]; results?: Map<string, string> };
   verificationPlan(
     changed: string[],
     handoffTests: string[],
@@ -85,6 +85,22 @@ describe("running the verification", () => {
       .split("\n")
       .find((line) => line.includes("vitest"));
     expect(vitest).not.toMatch(/\| none$/);
+  });
+
+  it("returns each test's status from the vitest JSON report", () => {
+    const { repo } = fakePnpm();
+    const report = JSON.stringify({
+      testResults: [
+        {
+          name: join(repo, "tests/unit/x.test.ts"),
+          assertionResults: [{ ancestorTitles: ["x"], title: "does y", status: "passed" }],
+        },
+      ],
+    });
+    const stub = `#!/bin/sh\nfor a in "$@"; do case "$a" in --outputFile.json=*) printf '%s' '${report}' > "\${a#--outputFile.json=}";; esac; done\n`;
+    fixture?.write("../bin/pnpm", stub);
+    const result = runVerification(repo, ["tests/unit/x.test.ts"], []);
+    expect(result.results?.get("tests/unit/x.test.ts > x > does y")).toBe("passed");
   });
 
   it("says which command failed", () => {

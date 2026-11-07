@@ -32,12 +32,14 @@ import {
   writeWorklog,
 } from "../lib/filing.mjs";
 import { readEvent, respond } from "../lib/hook-io.mjs";
+import { jiraClient } from "../lib/jira.mjs";
 import { logMistake } from "../lib/mistakes.mjs";
 import { featureDir, repoRoot, sdlcRoot } from "../lib/paths.mjs";
 import { pathRefusal } from "../lib/scope-rules.mjs";
 import { qeSentryRefusal } from "../lib/sentry.mjs";
 import { fileSpec } from "../lib/spec-filing.mjs";
 import { loadSpec } from "../lib/spec-store.mjs";
+import { CODER_LEVELS, casesToLink, QE_LEVELS, withLinks } from "../lib/test-links.mjs";
 import { finalReport, modelAndUsage, settledTranscript } from "../lib/transcript.mjs";
 import { recordVerified, runVerification } from "../lib/verify.mjs";
 
@@ -132,21 +134,28 @@ async function examine() {
   const built = buildArtifact(type, withCommit, report.doc, now);
   if (built.reason) return built;
   let reason;
-  if (CODERS.has(event.agent_type)) reason = checkHandoff(built.artifact);
+  if (CODERS.has(event.agent_type)) reason = await checkHandoff(built.artifact);
   if (event.agent_type === "qe-verify") reason = await checkQeReport(built.artifact);
   return reason ? { reason } : built;
 }
 
-// The Sentry zero-events check (D8), counted from Sentry since the agent's first transcript entry.
-function checkQeReport(artifact) {
+// The Sentry zero-events check (D8), counted from Sentry since the agent's first transcript entry,
+// then the journey and performance test cases' links.
+async function checkQeReport(artifact) {
   const spec = loadSpec(join(featureDir(task.feature, event.cwd), "spec"));
-  return qeSentryRefusal({
+  const contract = loadTask(event.cwd, task);
+  const sentry = await qeSentryRefusal({
     sentry: loadConfig(event.cwd).sentry,
     acceptance: spec.acceptance,
-    task: loadTask(event.cwd, task),
+    task: contract,
     body: artifact.body,
     since: new Date(entries.find((entry) => entry.timestamp)?.timestamp ?? now),
   });
+  if (sentry) return sentry;
+  const links = artifact.body.cases
+    .filter((c) => c.test)
+    .map((c) => ({ case: c.id, test: c.test }));
+  return unlinkedCases(contract, links, QE_LEVELS) ?? (await writeLinks(contract, links));
 }
 
 // The report `sdlc review` wrote, checked against the sha256 the reviewer handed back.
@@ -166,7 +175,7 @@ function reviewFile(doc) {
   return { doc: { status: file.status, body: file.body }, commit: file.commit };
 }
 
-function checkHandoff(artifact) {
+async function checkHandoff(artifact) {
   const root = repoRoot(event.cwd);
   const contract = loadTask(event.cwd, task);
   const base = process.env.SDLC_BASE_REF ?? `origin/${loadConfig(event.cwd).baseBranch}`;
@@ -177,10 +186,44 @@ function checkHandoff(artifact) {
   if (outside.length > 0) {
     return `changed files the task may not change; revert them:\n- ${outside.join("\n- ")}`;
   }
-  if (process.env.SDLC_VERIFY === "off") return undefined;
-  const tests = artifact.body.tests.map((test) => test.test);
-  const result = runVerification(root, changed, tests);
-  if (result.failed) return result.failed;
-  recordVerified(event.cwd, task, artifact.commit, result.ran);
-  return undefined;
+  const links = artifact.body.tests;
+  const unlinked = unlinkedCases(contract, links, CODER_LEVELS);
+  if (unlinked) return unlinked;
+  if (process.env.SDLC_VERIFY !== "off") {
+    const result = runVerification(
+      root,
+      changed,
+      links.map((link) => link.test),
+    );
+    if (result.failed) return result.failed;
+    const failing = links.filter((link) => result.results.get(link.test) !== "passed");
+    if (failing.length > 0) {
+      const names = failing.map((link) => `${link.case}: ${link.test}`).join("\n- ");
+      return `these linked tests were not found or did not pass; fix the names or the tests:\n- ${names}`;
+    }
+    recordVerified(event.cwd, task, artifact.commit, result.ran);
+  }
+  return writeLinks(contract, links);
+}
+
+// Why some test cases this stage must link have no test, or undefined.
+function unlinkedCases(contract, links, levels) {
+  const spec = loadSpec(join(featureDir(task.feature, event.cwd), "spec"));
+  const linked = new Set(links.map((link) => link.case));
+  const missing = casesToLink(spec, contract, levels).filter((tc) => !linked.has(tc.id));
+  if (missing.length === 0) return undefined;
+  return missing.map((tc) => `link a test for ${tc.id} (${tc.title}) in the report`).join("\n");
+}
+
+// Keeps the links in the task's Jira issue, where the CI gate and the trace read them.
+async function writeLinks(contract, links) {
+  if (links.length === 0) return undefined;
+  try {
+    const jira = jiraClient(event.cwd);
+    const issue = await jira.readIssue(contract.task);
+    await jira.writeBody(contract.task, withLinks(issue.body, task.feature, contract.task, links));
+    return undefined;
+  } catch (error) {
+    return `could not write the test links to ${contract.task} in Jira (${error.message}); stop again to retry`;
+  }
 }

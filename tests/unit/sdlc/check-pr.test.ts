@@ -215,6 +215,18 @@ describe("sdlc check-pr", () => {
     expect(result.stdout).toContain("failing");
   });
 
+  it("passes with the links the stop hook keeps in the task issue, over an unlinked spec", async () => {
+    setEpic({ linked: false });
+    const links = `\`\`\`yaml\nschema: test-links@1\nfeature: F-12\ntask: T-13\nlinks:\n  - { case: TC-01, test: '${TEST}' }\n\`\`\``;
+    jira.setIssue("T-13", {
+      summary: "Write worklog files",
+      body: `${TASK_BODY}\n\n${links}`,
+      parent: "F-12",
+    });
+    const result = await checkPr();
+    expect(result.status, result.stdout).toBe(0);
+  });
+
   it("fails when a criterion of the task has no linked test", async () => {
     setEpic({ linked: false });
     const result = await checkPr();

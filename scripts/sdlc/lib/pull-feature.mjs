@@ -12,6 +12,7 @@ import { ownerTextOf } from "./issue-body.mjs";
 import { jiraClient } from "./jira.mjs";
 import { featureDir } from "./paths.mjs";
 import { SPEC_FILES, specDocuments, taskDocument } from "./spec-store.mjs";
+import { linksOf } from "./test-links.mjs";
 import { yamlBlocks } from "./yaml-blocks.mjs";
 
 export async function pullFeature(feature, cwd = process.cwd()) {
@@ -66,6 +67,7 @@ async function pullTasks(jira, feature, root) {
     writeReadOnly(join(dir, "task.yml"), stringify(task));
     const ticket = { key: issue.key, title: issue.title, status: issue.status, url: issue.url };
     writeReadOnly(join(dir, "ticket.yml"), stringify(ticket));
+    writeReadOnly(join(dir, "links.yml"), stringify(linksOf(issue.body, feature, issue.key)));
     lines.push(`pulled ${task.task} into ${dir}`);
   }
   return lines;

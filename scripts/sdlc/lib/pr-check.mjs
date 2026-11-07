@@ -1,5 +1,6 @@
 // The CI gate for a task pull request. The PR names its Jira task with a "Task: VISP-<n>" line;
-// the task's task@1 block names its epic. The gate passes only when the owner approved the epic's
+// the task's task@1 block names its epic, and its test-links@1 block the tests the stop hook
+// checked for its test cases. The gate passes only when the owner approved the epic's
 // spec as it stands (approval.mjs: the owner's own unedited comment, newer than the last
 // description change, carrying the current hash) and every test case of the task links a test
 // that passed. The owner's account id comes from the environment (a repository variable in CI),
@@ -20,6 +21,7 @@ import { jiraClient } from "./jira.mjs";
 import { repoRoot } from "./paths.mjs";
 import { hasJourneyCriteria, sentryEventCount } from "./sentry.mjs";
 import { specDocuments, taskDocument } from "./spec-store.mjs";
+import { applyLinks, linksOf } from "./test-links.mjs";
 import { resultsIndex, traceTask } from "./trace.mjs";
 import { yamlBlocks } from "./yaml-blocks.mjs";
 
@@ -39,7 +41,7 @@ export async function checkPr(number, { resultsFile, ownerId, cwd = process.cwd(
     throw new Error("set SDLC_OWNER_ACCOUNT_ID (a repository variable in CI) to the owner's id");
   }
   const jira = jiraClient(cwd);
-  const task = await readTask(jira, key);
+  const { task, links } = await readTask(jira, key);
   const epic = await jira.readIssue(task.feature);
   const docs = specDocuments(epic.body ?? "", task.feature);
   const lines = [`PR #${number} delivers ${task.feature}/${task.task}`];
@@ -47,7 +49,7 @@ export async function checkPr(number, { resultsFile, ownerId, cwd = process.cwd(
   const spec = {
     intent: docs["intent@1"],
     acceptance: docs["acceptance@1"],
-    testCases: docs["test-cases@1"],
+    testCases: { ...docs["test-cases@1"], cases: applyLinks(docs["test-cases@1"].cases, links) },
   };
   const report = traceTask(spec, task, linkedResults(spec, task, resultsFile, cwd));
   problems.push(
@@ -92,7 +94,8 @@ async function readTask(jira, key) {
   const issue = await jira.readIssue(key);
   const block = yamlBlocks(issue.body ?? "").find((doc) => doc.schema === "task@1");
   if (!block) throw new Error(`task ${key} has no task@1 block`);
-  return taskDocument(issue.body, block.feature, key);
+  const task = taskDocument(issue.body, block.feature, key);
+  return { task, links: linksOf(issue.body, task.feature, key).links };
 }
 
 async function specProblems(jira, epic, docs, ownerId, feature) {

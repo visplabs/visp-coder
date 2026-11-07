@@ -6,6 +6,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parse } from "yaml";
 import { validateDocument } from "../schemas/index.mjs";
+import { applyLinks } from "./test-links.mjs";
 import { yamlBlocks } from "./yaml-blocks.mjs";
 
 export const SPEC_FILES = {
@@ -39,17 +40,35 @@ export function loadSpec(dir) {
     if (!result.ok) throw new Error(`${file}: ${result.errors.join("; ")}`);
     docs[schema] = result.value;
   }
+  const links = taskLinks(join(dir, "..", "tasks"));
+  const testCases = {
+    ...docs["test-cases@1"],
+    cases: applyLinks(docs["test-cases@1"].cases, links),
+  };
   return {
     intent: docs["intent@1"],
     acceptance: docs["acceptance@1"],
-    testCases: docs["test-cases@1"],
+    testCases,
     source: readYaml(join(dir, "source.yml")),
   };
 }
 
-// Stage reports under tasks/<task>/*.yml, oldest first; task.yml (the task's contract) and
-// ticket.yml (its Jira ticket) are not reports. Invalid files are returned apart.
-const NOT_REPORTS = new Set(["task.yml", "ticket.yml"]);
+// The test links each task's issue holds (tasks/<task>/links.yml), laid over the spec's own.
+function taskLinks(tasks) {
+  if (!existsSync(tasks)) return [];
+  return readdirSync(tasks)
+    .map((task) => join(tasks, task, "links.yml"))
+    .filter((path) => existsSync(path))
+    .flatMap((path) => {
+      const result = validateDocument(readYaml(path));
+      if (!result.ok) throw new Error(`${path}: ${result.errors.join("; ")}`);
+      return result.value.links;
+    });
+}
+
+// Stage reports under tasks/<task>/*.yml, oldest first; task.yml (the task's contract),
+// ticket.yml (its Jira ticket) and links.yml (its test links) are not reports. Invalid files are returned apart.
+const NOT_REPORTS = new Set(["task.yml", "ticket.yml", "links.yml"]);
 
 export function loadArtifacts(featurePath) {
   const tasks = join(featurePath, "tasks");

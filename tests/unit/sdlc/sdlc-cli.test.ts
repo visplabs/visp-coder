@@ -15,6 +15,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { type FakeJira, startFakeJira } from "./support/fake-jira.js";
 
 const cli = join(process.cwd(), "scripts/sdlc/sdlc.mjs");
+const { adfToBody } = (await import(
+  pathToFileURL(join(process.cwd(), "scripts/sdlc/lib/adf.mjs")).href
+)) as { adfToBody(adf: unknown): string };
 const { specHash } = (await import(
   pathToFileURL(join(process.cwd(), "scripts/sdlc/lib/hash.mjs")).href
 )) as { specHash(intent: unknown, acceptance: unknown): string };
@@ -255,6 +258,24 @@ describe("sdlc command line", () => {
     config.jira.secret.expires = "2099-01-01";
     writeFileSync(join(repo, "sdlc.config.json"), JSON.stringify(config));
     expect(sdlc("pull", "VISP-12").stderr).not.toContain("expires");
+  });
+
+  it("pulls a task's test links and traces with them over the spec's", () => {
+    writeFileSync(
+      join(repo, "task.yml"),
+      "criteria: [AC-01]\nscope:\n  paths: [docs/x.md]\ntrack: standard\nsize: S\n",
+    );
+    sdlc("jira", "create-task", "VISP-12", "--title", "Docs", "--task-file", "task.yml");
+    const issue = jira.issue("VISP-20");
+    const body = `${adfToBody(issue.fields.description)}\n\n\`\`\`yaml\nschema: test-links@1\nfeature: VISP-12\ntask: VISP-20\nlinks:\n  - { case: TC-01, test: 'tests/linked.test.ts > linked > works' }\n\`\`\``;
+    jira.setIssue("VISP-20", { summary: "Docs", body, parent: "VISP-12", status: "10022" });
+    expect(sdlc("pull", "VISP-12").status).toBe(0);
+    const links = readFileSync(
+      join(repo, ".sdlc/features/VISP-12/tasks/VISP-20/links.yml"),
+      "utf8",
+    );
+    expect(links).toContain("tests/linked.test.ts > linked > works");
+    expect(sdlc("trace", "VISP-12").stdout).not.toContain("TC-01 has no test");
   });
 
   it("refuses a task contract that does not validate, naming the field", () => {
