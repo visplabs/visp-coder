@@ -41,9 +41,15 @@ code, tests or specs yourself.
    so the fix is reviewed.
 6. **Pull request.** Push the coder's branch and open a pull request into the base branch in
    `sdlc.config.json` whose body ends with `Task: VISP-<m>`. The hook refuses it until the
-   loops are done. A CI failure goes back to the coder, then through the inner loop again.
-   Have `clerk` move the task to In Review. Never merge, tag, release or publish: the owner does.
-7. **Owner packet.** When every task is done, run the epic's tests with
+   loops are done. Have `clerk` move the task to In Review. Never merge, tag, release or
+   publish: the owner does.
+7. **CI.** After every push to a task's pull request, wait for its checks in the background
+   with `gh pr checks <pr> --watch --fail-fast`; a task is not done until they pass. On a
+   failure, read the failing job with `gh run view <run id> --log-failed | tail -80`, resume
+   the same coder with the failing tests and their messages, then run the inner loop again so
+   the fix is reviewed before you push it. After `loops.ci.max` failed rounds, stop and report
+   to the owner.
+8. **Owner packet.** When every task is done, run the epic's tests with
    `--reporter=json --outputFile=results.json`, then
    `pnpm sdlc trace VISP-<n> --results results.json` and
    `pnpm sdlc packet VISP-<n> --results results.json`, and have `clerk` post the packet as a
