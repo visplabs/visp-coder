@@ -244,6 +244,19 @@ describe("sdlc command line", () => {
     expect(sdlc("jira", "show", "VISP-20").stdout).toContain("VISP-20 Docs");
   });
 
+  it("warns when the agent's Jira token expires within 30 days, and not before", () => {
+    const config = JSON.parse(readFileSync(join(repo, "sdlc.config.json"), "utf8"));
+    const soon = new Date(Date.now() + 10 * 86_400_000).toISOString().slice(0, 10);
+    config.jira.secret.expires = soon;
+    writeFileSync(join(repo, "sdlc.config.json"), JSON.stringify(config));
+    const shown = sdlc("pull", "VISP-12");
+    expect(shown.status, shown.stderr).toBe(0);
+    expect(shown.stderr).toContain(`the Jira token for visp-agent expires on ${soon}`);
+    config.jira.secret.expires = "2099-01-01";
+    writeFileSync(join(repo, "sdlc.config.json"), JSON.stringify(config));
+    expect(sdlc("pull", "VISP-12").stderr).not.toContain("expires");
+  });
+
   it("refuses a task contract that does not validate, naming the field", () => {
     writeFileSync(join(repo, "task.yml"), "criteria: []\n");
     const result = sdlc(

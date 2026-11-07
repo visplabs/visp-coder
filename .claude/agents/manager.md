@@ -45,7 +45,8 @@ code, tests or specs yourself.
    publish: the owner does.
 7. **CI.** After every push to a task's pull request, wait for its checks in the background
    with `gh pr checks <pr> --watch --fail-fast`; a task is not done until they pass. On a
-   failure, read the failing job with `gh run view <run id> --log-failed | tail -80`, resume
+   failure, run `pnpm sdlc ci-failures <pr> --task VISP-<m>` (it logs each failed check for the
+   retro), read the failing job with `gh run view <run id> --log-failed | tail -80`, resume
    the same coder with the failing tests and their messages, then run the inner loop again so
    the fix is reviewed before you push it. After `loops.ci.max` failed rounds, stop and report
    to the owner.

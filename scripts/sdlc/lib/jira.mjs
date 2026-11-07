@@ -14,6 +14,7 @@ const ISSUE_FIELDS = ["summary", "description", "status", "parent", "issuetype",
 
 export function jiraClient(cwd = process.cwd()) {
   const config = loadConfig(cwd);
+  warnIfExpiring(config.jira.secret);
   const request = requester(config);
   const browse = (key) => `https://${config.jira.site}/browse/${key}`;
   const issue = (raw) => ({
@@ -131,6 +132,15 @@ function adf(body) {
     throw new Error(`the issue body would be ${size} characters (Jira allows ${MAX_FIELD})`);
   }
   return doc;
+}
+
+// API tokens last at most a year; jira.secret.expires (the date the owner chose) gives a month's
+// warning on every Jira call before the pipeline stops.
+function warnIfExpiring({ account, expires }) {
+  if (!expires) return;
+  const days = (Date.parse(expires) - Date.now()) / 86_400_000;
+  if (days > 30) return;
+  console.error(`sdlc: the Jira token for ${account} expires on ${expires}; make a new one`);
 }
 
 function secret({ service, account }) {

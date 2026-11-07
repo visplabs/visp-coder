@@ -230,6 +230,33 @@ describe("subagent stop hook", () => {
     expect(filed("tasks/T-13")).toHaveLength(2);
   });
 
+  it("logs each blocking finding of a filed review to the mistake log", () => {
+    const review = [
+      "```yaml",
+      "status: done",
+      "body:",
+      "  verdict: changes_requested",
+      "  findings:",
+      "    - { id: R-1, severity: blocking, cites: AC-01, text: Writes two files, evidence: { command: 'pnpm exec vitest run x' } }",
+      "    - { id: R-2, severity: advisory, text: Shorter name }",
+      "```",
+    ];
+    handback("claude-opus-5-5", review.join("\n"));
+    expect(blockReason(stop("reviewer-fallback", "Handed back."))).toBe("");
+    const entries = fixture
+      .read(".sdlc/mistakes.jsonl")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    expect(entries).toEqual([
+      expect.objectContaining({
+        hook: "review",
+        agent_type: "reviewer-fallback",
+        reason: "T-13 blocking finding on AC-01: Writes two files",
+      }),
+    ]);
+  });
+
   it("files the Codex review from the file sdlc review wrote, checked by its sha256", () => {
     const commit = "a".repeat(40);
     const text = `status: done\ncommit: ${commit}\nbody:\n  verdict: approve\n  findings: []\n`;
