@@ -29,6 +29,8 @@ approval, and that rounds resumed by `SendMessage` escape a hook on the Agent to
 ## Consequences
 
 - Pilots need the `visp-agent` bot user's token in the keyring.
-- The CI gate reads Jira with a read-only `visp-ci` key and Sentry with a read-only token,
-  both repository secrets the owner adds.
+- The CI gate reads Jira with a read-only `visp-ci` key, a repository secret the owner adds.
+- Nov 8 owner decision: the Sentry zero-events check became a local crash log (`VISP_CRASH_LOG`),
+  checked by the stop hook; Sentry moved to bench and dogfood runs and a release check, and
+  SonarQube Cloud gates new code on every pull request in CI.
 - More rounds cost more: the budget caps an epic at 40 agent runs.

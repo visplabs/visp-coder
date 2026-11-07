@@ -41,13 +41,14 @@ points `NODE_V8_COVERAGE` at a directory for each test file and keeps the merged
 repository's `dist/` scripts. `scripts/ci/coverage-merge.mjs` converts those through the source
 maps and adds them to vitest's own coverage, pairing branches, statements and functions by type and
 line because the bundle and vitest's transform place some columns differently; anything unpaired is
-dropped and reported, never added. Each `test` shard records coverage; the advisory `coverage` job
-merges them into the `coverage-report` artifact (`lcov.info`). Processes a test kills write no
+dropped and reported, never added. Each `test` shard records coverage; the `coverage` job
+merges them into the `coverage-report` artifact (`lcov.info`), which the `sonar` job sends to SonarQube Cloud. Processes a test kills write no
 coverage, and hooks installed from `.script.mjs` templates are not counted.
 
 ## Releasing
 
 1. On `develop`, set `version` in `package.json` and give `CHANGELOG.md` a `## <version> - <date>` section.
+   Run a bench batch and use the build yourself for a while, then `pnpm sdlc release-check <version>`: it fails when Sentry holds an unresolved issue first seen in that version.
 2. Merge `develop` into `main`.
 3. Tag the merge on `main` and push the tag: `git tag v<version> && git push origin v<version>`.
 
@@ -82,14 +83,14 @@ The maintainer's agent workflow is recorded in [docs/adr/0001-agent-sdlc.md](doc
 | `pnpm sdlc packet VISP-12 [--results <vitest json>]` | Write the owner packet to `.sdlc/features/VISP-12/` |
 | `pnpm sdlc jira show\|create-task\|move\|comment ...` | Jira as the agent bot user; only the `clerk` agent may write |
 | `pnpm sdlc review --task VISP-12/VISP-13 --worktree <dir>` | One inner-loop review round on Codex; only the `reviewer` agent runs it |
-| `pnpm sdlc sentry-events --task VISP-13 --since <ISO time>` | How many `qe` events Sentry holds for a task since a time; the token stays inside the command |
 | `pnpm sdlc sync-status VISP-12` | Move the epic's task tickets forward to match their PRs (In Review while open, Done once merged) and the epic to Done when every task is |
-| `pnpm sdlc ci-failures <n> --task VISP-13` | Print a task PR's failed checks and log each to the mistake log; the manager runs it when CI fails |
+| `pnpm sdlc ci-failures <n> --task VISP-13` | Print a task PR's failed checks and new SonarQube Cloud issues, and log each to the mistake log; the manager runs it when CI fails |
+| `pnpm sdlc release-check <version>` | Fail when Sentry holds an unresolved issue first seen in that release in bench, dogfood or QE runs |
 | `pnpm sdlc check-pr <n> [--results <vitest json>]` | The CI gate for a task PR (below) |
 
 A test case links its test as `<path> > <describe titles> > <test title>`. Produce results with `pnpm exec vitest run <files> --reporter=json --outputFile=results.json`. `.sdlc/` sits in the main checkout and is shared by every worktree.
 
-**Credentials.** `sdlc` calls Jira as the agent bot user, `visp-agent`: an ordinary Jira user (not an admin) with a scoped API token (`read:jira-work`, `write:jira-work`, `read:jira-user`), since the free plan has no service accounts. Store its `email:token` once in the keyring: `secret-tool store --label "visp-sdlc" service visp-sdlc account visp-agent` (package `libsecret-tools`), and put the date the token expires in `jira.secret.expires`; every Jira call warns in the last 30 days. Treat that token as readable by agents. Sentry checks read a read-only Sentry token (`event:read`, `project:read`) from `SENTRY_READ_TOKEN` or the keyring entry `visp-sdlc`/`sentry-read`. Your own Jira token is never stored. The Codex reviewer uses its own home, `~/.codex-visp`, which you log in to once with `CODEX_HOME=~/.codex-visp codex login`; its `config.toml` turns off apps, plugins, browser, computer use, hooks and sub-agents.
+**Credentials.** `sdlc` calls Jira as the agent bot user, `visp-agent`: an ordinary Jira user (not an admin) with a scoped API token (`read:jira-work`, `write:jira-work`, `read:jira-user`), since the free plan has no service accounts. Store its `email:token` once in the keyring: `secret-tool store --label "visp-sdlc" service visp-sdlc account visp-agent` (package `libsecret-tools`), and put the date the token expires in `jira.secret.expires`; every Jira call warns in the last 30 days. Treat that token as readable by agents. `sdlc release-check` reads a read-only Sentry token (`event:read`, `project:read`) from `SENTRY_READ_TOKEN` or the keyring entry `visp-sdlc`/`sentry-read`. Your own Jira token is never stored. The Codex reviewer uses its own home, `~/.codex-visp`, which you log in to once with `CODEX_HOME=~/.codex-visp codex login`; its `config.toml` turns off apps, plugins, browser, computer use, hooks and sub-agents.
 
 A feature starts with two owner-only commands. They have `disable-model-invocation`, so no agent can run them; the `owner-commands.mjs` hook (UserPromptExpansion) does the work:
 
@@ -123,9 +124,11 @@ The manager starts each task agent with a line `SDLC-Task: VISP-12/VISP-13` in i
 
 **Test links.** The spec's test cases are written before the code, so their `test` fields are mostly empty. The coder's report links every unit and integration test case to a test (`case: TC-01, test: <path> > <describe> > <title>`), and qe-verify's report gives each journey and performance case its test. The stop hook refuses a report that leaves such a case unlinked or names a test it cannot find passing, then keeps the links as a `test-links@1` block in the task's Jira issue, never the epic, whose edits would void your approval. `sdlc pull` caches them as `links.yml`, and the trace, the packet and the CI gate lay them over the spec's own links.
 
-**CI gate.** `.github/workflows/sdlc-trace.yml` runs `pnpm sdlc check-pr` on every pull request. A PR names its task with a line `Task: VISP-13`. The gate reads Jira with the read-only `visp-ci` key (repository secret `SDLC_JIRA_CI`, `email:token`) and passes only when your approval comment on the epic counts by the rules of `/approve`, with your account id taken from the repository variable `SDLC_OWNER_ACCOUNT_ID`, never from the PR, and every test case of the task's criteria links a test that passes. For a task with journey criteria it also asks Sentry (secret `SENTRY_READ_TOKEN`) for `qe` events tagged with the task since the head commit; if Sentry cannot be asked the gate fails, unless the PR has the label `sdlc-sentry-override`. A PR from an agent branch (`sdlc/...`) without a task line fails; any other PR without one is skipped.
+**CI gate.** `.github/workflows/sdlc-trace.yml` runs `pnpm sdlc check-pr` on every pull request. A PR names its task with a line `Task: VISP-13`. The gate reads Jira with the read-only `visp-ci` key (repository secret `SDLC_JIRA_CI`, `email:token`) and passes only when your approval comment on the epic counts by the rules of `/approve`, with your account id taken from the repository variable `SDLC_OWNER_ACCOUNT_ID`, never from the PR, and every test case of the task's criteria links a test that passes. A PR from an agent branch (`sdlc/...`) without a task line fails; any other PR without one is skipped.
 
-**Sentry zero-events check.** For a task with journey criteria, `qe-verify` runs its journeys with `VISP_SENTRY_ENVIRONMENT=qe` and `VISP_SENTRY_TAGS=task=VISP-13` (put the `qe` DSN in `VISP_SENTRY_DSN` in your `settings.local.json`) and reports `sentry_events` from `pnpm sdlc sentry-events`. The stop hook asks Sentry for the same count since the agent started and refuses a report that does not match it, or that passes with events. CI asks again, above.
+**Crash check for journeys.** For a task with journey criteria, the contract tells `qe-verify` to run its journeys with `VISP_CRASH_LOG=<main checkout>/.sdlc/run/crashes.jsonl` and `VISP_SENTRY_TAGS=task=VISP-13`, and to report the crashes VISP logged as `crashes`. The stop hook counts the log itself since the agent started (crashes tagged with the task, or untagged) and refuses a report that does not match, or that passes with crashes. A journey that passed while a hook crashed underneath, which hosts often ignore, still fails.
+
+**Sentry and SonarQube Cloud.** Sentry is for real runs, not one task's gate: bench runs report to the `bench` environment (set `VISP_BENCH_SENTRY_DSN` for the driver; every run also writes `crashes.jsonl` and the report counts `vispCrashes`), your own sessions to `dogfood` (`VISP_SENTRY_DSN` and `VISP_SENTRY_ENVIRONMENT=dogfood` in your shell), each tagged with the release, command and host. Turn on Sentry's Jira integration so a new issue opens a ticket labelled `from-sentry`. SonarQube Cloud analyses every push and pull request in CI (job `sonar`, `sonar-project.properties`) with the merged coverage, and fails a pull request whose new code fails the quality gate; `pnpm sdlc ci-failures` lists the pull request's Sonar issues with file and line and logs each rule to the mistake log. The job needs the `SONAR_TOKEN` secret, and automatic analysis turned off in SonarQube Cloud first.
 
 The stage agents are in `.claude/agents/`, their models and efforts pinned in `sdlc.config.json` (a test keeps the two equal), and their skills in `.claude/skills/`:
 
