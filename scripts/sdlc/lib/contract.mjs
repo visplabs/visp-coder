@@ -3,7 +3,7 @@
 
 import { CODERS } from "./agents.mjs";
 
-export function renderContract(agentType, spec, task) {
+export function renderContract(agentType, spec, task, context = {}) {
   const criteria = spec.acceptance.criteria.filter((c) => task.criteria.includes(c.id));
   const clauseIds = new Set(criteria.flatMap((criterion) => criterion.clauses));
   const clauses = spec.intent.clauses.filter((clause) => clauseIds.has(clause.id));
@@ -36,7 +36,7 @@ export function renderContract(agentType, spec, task) {
       (tc) => `- ${tc.id} [${tc.criteria.join(", ")}] ${tc.title}${tc.test ? ` (${tc.test})` : ""}`,
     ),
     "",
-    ...roleRules(agentType, task),
+    ...roleRules(agentType, task, context),
   ].join("\n");
 }
 
@@ -69,10 +69,10 @@ function quote(text) {
     .map((line) => `> ${line}`);
 }
 
-function roleRules(agentType, task) {
+function roleRules(agentType, task, context) {
   if (CODERS.has(agentType)) return coderRules(task);
   if (agentType === "reviewer") return reviewerRules();
-  return qeVerifyRules();
+  return qeVerifyRules(task, context);
 }
 
 function coderRules(task) {
@@ -125,19 +125,26 @@ function reviewerRules() {
   ];
 }
 
-function qeVerifyRules() {
+function qeVerifyRules(task, { crashLog } = {}) {
   return [
     "### Your job",
     "",
     "Run every test case above, including journeys, and record each result with its evidence.",
     "Give each journey and performance case the test that runs it in `test`.",
+    ...(crashLog
+      ? [
+          `Run journeys with \`VISP_CRASH_LOG=${crashLog} VISP_SENTRY_TAGS=task=${task.task}\`, then`,
+          "count the lines added to that file since you started and report them as `crashes`. Any",
+          "crash is a failure: report `verdict: fail`. The stop hook counts them itself.",
+        ]
+      : []),
     "",
     ...reportRules("qe-report@1", [
       "status: done",
       "body:",
       "  verdict: pass",
       "  cases: [{ id: TC-01, result: pass, evidence: 'pnpm exec vitest run ...', test: 'tests/x.test.ts > x > y' }]",
-      "  sentry_events: 0",
+      "  crashes: 0",
     ]),
   ];
 }

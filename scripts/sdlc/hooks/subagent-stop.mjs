@@ -7,13 +7,13 @@
 // keeps the agent working with the reason; after five refusals in a round the agent may stop and
 // the failure is logged. A report from an agent that ran on another model than sdlc.config.json
 // sets is not filed: the run is logged as failed. Coder and reviewer reports record the commit they
-// cover. A qe-verify report for a task with journey criteria must count the Sentry events its runs
-// raised, and the hook checks that count with Sentry (D8). One report is filed per round: a stop
-// after it (an agent woken by a background task after its handback) is let through. The reviewer
-// hands back the path and sha256 of the report `sdlc review` wrote, and the report is filed from
-// that file, so the wrapper never retypes it. Every accepted report is logged in the worklog, and
-// each blocking review finding in the mistake log, so the retro sees what the coder got wrong as
-// well as what the hooks refused.
+// cover. A qe-verify report for a task with journey criteria must count the crashes VISP logged
+// during its runs, and the hook checks that count against the crash log. One report is filed per
+// round: a stop after it (an agent woken by a background task after its handback) is let through.
+// The reviewer hands back the path and sha256 of the report `sdlc review` wrote, and the report is
+// filed from that file, so the wrapper never retypes it. Every accepted report is logged in the
+// worklog, and each blocking review finding in the mistake log, so the retro sees what the coder
+// got wrong as well as what the hooks refused.
 
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -24,6 +24,7 @@ import { parse } from "yaml";
 import { countBlock, loadTask, markFiled, taskOf } from "../lib/agent-task.mjs";
 import { CODERS, SPEC_AGENT, TASK_REPORTS } from "../lib/agents.mjs";
 import { loadConfig } from "../lib/config.mjs";
+import { qeCrashRefusal } from "../lib/crash-log.mjs";
 import {
   buildArtifact,
   changedFiles,
@@ -36,7 +37,6 @@ import { jiraClient } from "../lib/jira.mjs";
 import { logMistake } from "../lib/mistakes.mjs";
 import { featureDir, repoRoot, sdlcRoot } from "../lib/paths.mjs";
 import { pathRefusal } from "../lib/scope-rules.mjs";
-import { qeSentryRefusal } from "../lib/sentry.mjs";
 import { fileSpec } from "../lib/spec-filing.mjs";
 import { loadSpec } from "../lib/spec-store.mjs";
 import { CODER_LEVELS, casesToLink, QE_LEVELS, withLinks } from "../lib/test-links.mjs";
@@ -139,19 +139,19 @@ async function examine() {
   return reason ? { reason } : built;
 }
 
-// The Sentry zero-events check (D8), counted from Sentry since the agent's first transcript entry,
-// then the journey and performance test cases' links.
+// The crash check for journey runs, counted from VISP's crash log since the agent's first
+// transcript entry, then the journey and performance test cases' links.
 async function checkQeReport(artifact) {
   const spec = loadSpec(join(featureDir(task.feature, event.cwd), "spec"));
   const contract = loadTask(event.cwd, task);
-  const sentry = await qeSentryRefusal({
-    sentry: loadConfig(event.cwd).sentry,
+  const crashes = qeCrashRefusal({
+    cwd: event.cwd,
     acceptance: spec.acceptance,
     task: contract,
     body: artifact.body,
     since: new Date(entries.find((entry) => entry.timestamp)?.timestamp ?? now),
   });
-  if (sentry) return sentry;
+  if (crashes) return crashes;
   const links = artifact.body.cases
     .filter((c) => c.test)
     .map((c) => ({ case: c.id, test: c.test }));

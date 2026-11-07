@@ -1,7 +1,5 @@
 import { spawn } from "node:child_process";
 import { writeFileSync } from "node:fs";
-import { createServer, type Server } from "node:http";
-import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -33,10 +31,8 @@ const HASH = specHash(
 const LINKED = CASES.replace("criteria: [AC-01] }", `criteria: [AC-01], test: '${TEST}' }`);
 const TASK_BODY = `\`\`\`yaml\n${SPEC["tasks/T-13/task.yml"]}\n\`\`\``;
 
-function setEpic({ linked = true, journey = false } = {}) {
-  const body = epicBody(OWNER_TEXT)
-    .replace(CASES, linked ? LINKED : CASES)
-    .replace("level: unit", journey ? "level: journey" : "level: unit");
+function setEpic({ linked = true } = {}) {
+  const body = epicBody(OWNER_TEXT).replace(CASES, linked ? LINKED : CASES);
   jira.setIssue("F-12", { summary: "Work log", body, type: "10000" });
   jira.setChangelog("F-12", ["2026-11-05T11:00:00.000+0000"]);
 }
@@ -54,21 +50,11 @@ function approve({ author = OWNER, hash = HASH, edited = false } = {}) {
   ]);
 }
 
-const COMMITTED = "2026-11-08T09:00:00Z";
-
-function setPr(
-  body: string,
-  { branch = "sdlc/agent-a1", commits = [] as string[], labels = [] as string[] } = {},
-) {
+function setPr(body: string, { branch = "sdlc/agent-a1", commits = [] as string[] } = {}) {
   const pr = {
     body,
     headRefName: branch,
-    labels: labels.map((name) => ({ name })),
-    commits: [...commits, "last"].map((message) => ({
-      messageHeadline: message,
-      messageBody: "",
-      committedDate: COMMITTED,
-    })),
+    commits: commits.map((message) => ({ messageHeadline: message, messageBody: "" })),
   };
   writeFileSync(join(fixture.repo, "pr-104.json"), JSON.stringify(pr));
 }
@@ -95,8 +81,6 @@ function checkPr(env: Record<string, string> = {}) {
       SDLC_GH: gh,
       FAKE_DIR: fixture.repo,
       SDLC_OWNER_ACCOUNT_ID: OWNER,
-      SDLC_SENTRY_URL: sentryUrl,
-      SENTRY_READ_TOKEN: "read-token",
       ...env,
     },
   });
@@ -112,32 +96,9 @@ function checkPr(env: Record<string, string> = {}) {
   );
 }
 
-let sentry: Server;
-let sentryUrl = "";
-let sentryAnswer = { status: 200, count: 0 };
-let sentryQueries: URLSearchParams[] = [];
-
-function startSentry() {
-  sentry = createServer((request, response) => {
-    sentryQueries.push(new URL(request.url ?? "", "http://x").searchParams);
-    response.writeHead(sentryAnswer.status, { "Content-Type": "application/json" });
-    const count = { data: [{ "count()": sentryAnswer.count }] };
-    response.end(JSON.stringify(sentryAnswer.status === 200 ? count : {}));
-  });
-  return new Promise<void>((resolve) =>
-    sentry.listen(0, "127.0.0.1", () => {
-      sentryUrl = `http://127.0.0.1:${(sentry.address() as AddressInfo).port}`;
-      resolve();
-    }),
-  );
-}
-
 describe("sdlc check-pr", () => {
   beforeEach(async () => {
     fixture = sdlcRepo();
-    sentryAnswer = { status: 200, count: 0 };
-    sentryQueries = [];
-    await startSentry();
     jira = await startFakeJira(fixture.repo);
     gh = installFakeGh(fixture.repo);
     jira.setIssue("T-13", { summary: "Write worklog files", body: TASK_BODY, parent: "F-12" });
@@ -147,7 +108,6 @@ describe("sdlc check-pr", () => {
     setResults("passed");
   });
   afterEach(() => {
-    sentry.close();
     jira.stop();
     fixture.cleanup();
   });
@@ -232,46 +192,5 @@ describe("sdlc check-pr", () => {
     const result = await checkPr();
     expect(result.status).toBe(1);
     expect(result.stdout).toContain("TC-01");
-  });
-
-  describe("for a task with journey criteria", () => {
-    const journeyHash = specHash(
-      parse(SPEC["spec/intent.yml"] ?? ""),
-      parse((SPEC["spec/acceptance.yml"] ?? "").replace("level: unit", "level: journey")),
-    );
-    beforeEach(() => {
-      setEpic({ journey: true });
-      approve({ hash: journeyHash });
-    });
-
-    it("passes when Sentry holds no qe event for the task since the head commit", async () => {
-      const result = await checkPr();
-      expect(result.status, result.stdout).toBe(0);
-      expect(sentryQueries[0]?.get("query")).toBe("project:visp-coder environment:qe task:T-13");
-      expect(sentryQueries[0]?.get("start")).toBe("2026-11-08T09:00:00.000Z");
-    });
-
-    it("fails when Sentry holds qe events for the task", async () => {
-      sentryAnswer = { status: 200, count: 1 };
-      const result = await checkPr();
-      expect(result.status).toBe(1);
-      expect(result.stdout).toContain("Sentry holds 1 qe event");
-    });
-
-    it("fails closed when Sentry cannot be asked, unless the owner overrides by label", async () => {
-      sentryAnswer = { status: 500, count: 0 };
-      const result = await checkPr();
-      expect(result.status).toBe(1);
-      expect(result.stdout).toContain("cannot ask Sentry");
-      setPr("Adds the worklog.\n\nTask: T-13", { labels: ["sdlc-sentry-override"] });
-      const overridden = await checkPr();
-      expect(overridden.status, overridden.stdout).toBe(0);
-      expect(overridden.stdout).toContain("overridden by the sdlc-sentry-override label");
-    });
-  });
-
-  it("does not ask Sentry for a task without journey criteria", async () => {
-    expect((await checkPr()).status).toBe(0);
-    expect(sentryQueries).toEqual([]);
   });
 });

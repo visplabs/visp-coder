@@ -14,6 +14,7 @@ import { loadTask } from "../lib/agent-task.mjs";
 import { CODERS, FEATURE_LINE, SPEC_AGENT, TASK_LINE, TASK_REPORTS } from "../lib/agents.mjs";
 import { loadConfig } from "../lib/config.mjs";
 import { renderContract, renderSpecContract } from "../lib/contract.mjs";
+import { crashLogPath } from "../lib/crash-log.mjs";
 import { denyTool, readEvent, respond } from "../lib/hook-io.mjs";
 import { jiraClient } from "../lib/jira.mjs";
 import { recordTurn, turnRefusal } from "../lib/loops.mjs";
@@ -81,7 +82,8 @@ function taskContract() {
     return undefined;
   }
   recordTurn(event.cwd, work);
-  return { feature: `${feature}/${taskId}`, text: renderContract(agentType, spec, task), work };
+  const text = renderContract(agentType, spec, task, { crashLog: crashLogPath(event.cwd) });
+  return { feature: `${feature}/${taskId}`, text, work };
 }
 
 // The task's ticket moves to In Progress when its coder starts; a Jira failure never stops it.

@@ -112,7 +112,7 @@ export const qeReportSchema = artifact(
           })
           .strict(),
       ),
-      sentry_events: z.number().int().nonnegative().optional(),
+      crashes: z.number().int().nonnegative().optional(),
     })
     .strict(),
 );

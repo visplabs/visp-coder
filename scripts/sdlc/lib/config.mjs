@@ -1,6 +1,6 @@
 // sdlc.config.json at the repository root: the Jira and Confluence ids, the owner's account,
-// loop bounds, the run budget, the Codex reviewer, the Sentry project QE runs report to and each
-// agent's model, effort and MCP tools.
+// loop bounds, the run budget, the Codex reviewer, the Sentry project the release check reads,
+// the SonarQube Cloud project and each agent's model, effort and MCP tools.
 // Read fresh on every call, because hooks are short-lived processes.
 
 import { existsSync, readFileSync } from "node:fs";
@@ -61,9 +61,10 @@ const configSchema = z.object({
     url: z.string().url(),
     org: z.string().min(1),
     project: z.string().min(1),
-    environment: z.string().min(1),
+    environments: z.array(z.string().min(1)).min(1),
     secret: z.object({ service: z.string(), account: z.string() }),
   }),
+  sonar: z.object({ url: z.string().url(), projectKey: z.string().min(1) }),
   agents: z.record(z.string(), agent),
 });
 

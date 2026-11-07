@@ -5,9 +5,7 @@ name: sdlc-trace
 # stands and every test case of the task links a test that passes. A PR from an agent branch
 # (sdlc/...) must name its task; other PRs that name none are skipped. Jira is read with the
 # read-only visp-ci key (secret SDLC_JIRA_CI, "email:token"); the owner's account id comes from
-# the repository variable SDLC_OWNER_ACCOUNT_ID, never from the PR. For a task with journey
-# criteria it asks Sentry (secret SENTRY_READ_TOKEN, read-only) for qe events; if Sentry cannot be
-# asked it fails unless the PR has the sdlc-sentry-override label. It runs on `pull_request`,
+# the repository variable SDLC_OWNER_ACCOUNT_ID, never from the PR. It runs on `pull_request`,
 # never `pull_request_target`, so a fork's code never sees a write token or the Jira key.
 on:
   pull_request:
@@ -34,5 +32,4 @@ jobs:
           SDLC_OWNER_ACCOUNT_ID: ${{ vars.SDLC_OWNER_ACCOUNT_ID }}
           SDLC_JIRA_CI: ${{ secrets.SDLC_JIRA_CI }}
           SDLC_SECRET_CMD: printf %s "$SDLC_JIRA_CI"
-          SENTRY_READ_TOKEN: ${{ secrets.SENTRY_READ_TOKEN }}
         run: pnpm sdlc check-pr ${{ github.event.pull_request.number }}

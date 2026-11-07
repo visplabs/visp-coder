@@ -6,20 +6,17 @@
 // that passed. The owner's account id comes from the environment (a repository variable in CI),
 // never from the PR's sdlc.config.json. A PR from an agent branch (sdlc/...) must name a task;
 // any other PR that names none is skipped, so dependency bumps and outside contributions pass.
-// For a task with journey criteria the gate also asks Sentry for qe events (D8).
 
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { checkApproval } from "./approval.mjs";
-import { loadConfig } from "./config.mjs";
 import { ghJson } from "./gh.mjs";
 import { specHash } from "./hash.mjs";
 import { ownerTextOf } from "./issue-body.mjs";
 import { jiraClient } from "./jira.mjs";
 import { repoRoot } from "./paths.mjs";
-import { hasJourneyCriteria, sentryEventCount } from "./sentry.mjs";
 import { specDocuments, taskDocument } from "./spec-store.mjs";
 import { applyLinks, linksOf } from "./test-links.mjs";
 import { resultsIndex, traceTask } from "./trace.mjs";
@@ -27,10 +24,9 @@ import { yamlBlocks } from "./yaml-blocks.mjs";
 
 const TASK_TRAILER = /^Task: ([A-Z][A-Z0-9]*-\d+)\s*$/m;
 const AGENT_BRANCH = "sdlc/";
-const SENTRY_OVERRIDE = "sdlc-sentry-override";
 
 export async function checkPr(number, { resultsFile, ownerId, cwd = process.cwd() }) {
-  const pr = ghJson(["pr", "view", String(number), "--json", "body,commits,headRefName,labels"]);
+  const pr = ghJson(["pr", "view", String(number), "--json", "body,commits,headRefName"]);
   const texts = [
     pr.body ?? "",
     ...(pr.commits ?? []).map((c) => `${c.messageHeadline ?? ""}\n${c.messageBody ?? ""}`),
@@ -58,9 +54,6 @@ export async function checkPr(number, { resultsFile, ownerId, cwd = process.cwd(
       .map((problem) => `${problem.kind}: ${problem.message}`),
   );
   for (const criterion of report.criteria) lines.push(`${criterion.id} ${criterion.status}`);
-  const sentry = await sentryProblem(pr, spec.acceptance, task, cwd);
-  if (sentry?.overridden) lines.push(sentry.overridden);
-  else if (sentry) problems.push(sentry);
   if (problems.length === 0) return { status: "pass", lines: [...lines, "pass"] };
   return { status: "fail", lines: [...lines, ...problems.map((problem) => `error ${problem}`)] };
 }
@@ -71,23 +64,6 @@ function untracked(number, branch) {
     return { status: "fail", lines: [`PR #${number}: ${why}`] };
   }
   return { status: "skipped", lines: [`PR #${number} names no task ("Task: VISP-<n>"); skipped`] };
-}
-
-// D8 in CI: for a task with journey criteria, Sentry must hold no qe event tagged with the task
-// since the head commit, so a wrong qe-verify count cannot pass. If Sentry cannot be asked the
-// gate fails, unless the PR carries the override label.
-async function sentryProblem(pr, acceptance, task, cwd) {
-  if (!hasJourneyCriteria(acceptance, task)) return undefined;
-  const since = new Date(pr.commits?.at(-1)?.committedDate ?? 0);
-  try {
-    const count = await sentryEventCount(loadConfig(cwd).sentry, { task: task.task, since });
-    if (count === 0) return undefined;
-    return `Sentry holds ${count} qe event(s) tagged task:${task.task} since the head commit`;
-  } catch (error) {
-    const problem = `cannot ask Sentry (${error.message})`;
-    if (!(pr.labels ?? []).some((label) => label.name === SENTRY_OVERRIDE)) return problem;
-    return { overridden: `${problem}; overridden by the ${SENTRY_OVERRIDE} label` };
-  }
 }
 
 async function readTask(jira, key) {
