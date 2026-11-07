@@ -29,5 +29,6 @@ approval, and that rounds resumed by `SendMessage` escape a hook on the Agent to
 ## Consequences
 
 - Pilots need the `visp-agent` bot user's token in the keyring.
-- The CI gate keeps reading GitHub issues until it moves to Jira with a read-only `visp-ci` key.
+- The CI gate reads Jira with a read-only `visp-ci` key and Sentry with a read-only token,
+  both repository secrets the owner adds.
 - More rounds cost more: the budget caps an epic at 40 agent runs.

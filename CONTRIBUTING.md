@@ -82,11 +82,13 @@ The maintainer's agent workflow is recorded in [docs/adr/0001-agent-sdlc.md](doc
 | `pnpm sdlc packet VISP-12 [--results <vitest json>]` | Write the owner packet to `.sdlc/features/VISP-12/` |
 | `pnpm sdlc jira show\|create-task\|move\|comment ...` | Jira as the agent bot user; only the `clerk` agent may write |
 | `pnpm sdlc review --task VISP-12/VISP-13 --worktree <dir>` | One inner-loop review round on Codex; only the `reviewer` agent runs it |
-| `pnpm sdlc check-pr <n> [--results <vitest json>]` | The CI gate for a task PR (below); still reads GitHub issues until CI moves to Jira |
+| `pnpm sdlc sentry-events --task VISP-13 --since <ISO time>` | How many `qe` events Sentry holds for a task since a time; the token stays inside the command |
+| `pnpm sdlc ci-failures <n> --task VISP-13` | Print a task PR's failed checks and log each to the mistake log; the manager runs it when CI fails |
+| `pnpm sdlc check-pr <n> [--results <vitest json>]` | The CI gate for a task PR (below) |
 
 A test case links its test as `<path> > <describe titles> > <test title>`. Produce results with `pnpm exec vitest run <files> --reporter=json --outputFile=results.json`. `.sdlc/` sits in the main checkout and is shared by every worktree.
 
-**Credentials.** `sdlc` calls Jira as the agent bot user, `visp-agent`: an ordinary Jira user (not an admin) with a scoped API token (`read:jira-work`, `write:jira-work`, `read:jira-user`), since the free plan has no service accounts. Store its `email:token` once in the keyring: `secret-tool store --label "visp-sdlc" service visp-sdlc account visp-agent` (package `libsecret-tools`). Treat that token as readable by agents. Your own Jira token is never stored. The Codex reviewer uses its own home, `~/.codex-visp`, which you log in to once with `CODEX_HOME=~/.codex-visp codex login`; its `config.toml` turns off apps, plugins, browser, computer use, hooks and sub-agents.
+**Credentials.** `sdlc` calls Jira as the agent bot user, `visp-agent`: an ordinary Jira user (not an admin) with a scoped API token (`read:jira-work`, `write:jira-work`, `read:jira-user`), since the free plan has no service accounts. Store its `email:token` once in the keyring: `secret-tool store --label "visp-sdlc" service visp-sdlc account visp-agent` (package `libsecret-tools`), and put the date the token expires in `jira.secret.expires`; every Jira call warns in the last 30 days. Treat that token as readable by agents. Sentry checks read a read-only Sentry token (`event:read`, `project:read`) from `SENTRY_READ_TOKEN` or the keyring entry `visp-sdlc`/`sentry-read`. Your own Jira token is never stored. The Codex reviewer uses its own home, `~/.codex-visp`, which you log in to once with `CODEX_HOME=~/.codex-visp codex login`; its `config.toml` turns off apps, plugins, browser, computer use, hooks and sub-agents.
 
 A feature starts with two owner-only commands. They have `disable-model-invocation`, so no agent can run them; the `owner-commands.mjs` hook (UserPromptExpansion) does the work:
 
@@ -99,7 +101,7 @@ Start the pipeline from a terminal with the pipeline settings, which turn off cl
 claude --agent manager --settings scripts/sdlc/pipeline-settings.json
 ```
 
-The manager starts each task agent with a line `SDLC-Task: VISP-12/VISP-13` in its prompt. These hooks in `.claude/settings.json` hold the agents to the contract; they do nothing unless `SDLC_OWNER=1`, and every refusal is appended to `.sdlc/mistakes.jsonl` for the retro:
+The manager starts each task agent with a line `SDLC-Task: VISP-12/VISP-13` in its prompt. These hooks in `.claude/settings.json` hold the agents to the contract; they do nothing unless `SDLC_OWNER=1`, and every refusal is appended to `.sdlc/mistakes.jsonl` for the retro, as are blocking review findings and CI failures:
 
 | Hook | Event | What it does |
 | --- | --- | --- |
@@ -117,7 +119,9 @@ The manager starts each task agent with a line `SDLC-Task: VISP-12/VISP-13` in i
 
 **Inner-loop review.** The `reviewer` agent is a thin Haiku wrapper around `sdlc review`, which runs Codex (`gpt-6.1-sol`, effort `max`) read-only in the coder's worktree on a blind packet: your words, the clauses, criteria and test cases, which criteria the epic's other tasks carry, the commands the stop hook ran and passed at this head, the commits since the last review and earlier findings, but not the coder's report. Codex does not run tests: its sandbox loses child-process output, so they would fail falsely. Codex answers in a strict JSON schema. If Codex fails, the command exits 3 and the manager runs `reviewer-fallback` (Opus) instead; two failures in one epic stop it.
 
-**CI gate.** `.github/workflows/sdlc-trace.yml` runs `pnpm sdlc check-pr` on every pull request into `develop`. Until it moves to Jira it reads GitHub issues: a PR names its task with a line `Task: #<n>`, and the gate passes only when the newest unedited approval comment by `SDLC_OWNER_LOGIN` (a repository variable) is newer than the issue's last body edit and carries the hash of the spec as it is now, and every test case of the task's criteria links a test that passes. A PR without a task line is skipped.
+**CI gate.** `.github/workflows/sdlc-trace.yml` runs `pnpm sdlc check-pr` on every pull request. A PR names its task with a line `Task: VISP-13`. The gate reads Jira with the read-only `visp-ci` key (repository secret `SDLC_JIRA_CI`, `email:token`) and passes only when your approval comment on the epic counts by the rules of `/approve`, with your account id taken from the repository variable `SDLC_OWNER_ACCOUNT_ID`, never from the PR, and every test case of the task's criteria links a test that passes. For a task with journey criteria it also asks Sentry (secret `SENTRY_READ_TOKEN`) for `qe` events tagged with the task since the head commit; if Sentry cannot be asked the gate fails, unless the PR has the label `sdlc-sentry-override`. A PR from an agent branch (`sdlc/...`) without a task line fails; any other PR without one is skipped.
+
+**Sentry zero-events check.** For a task with journey criteria, `qe-verify` runs its journeys with `VISP_SENTRY_ENVIRONMENT=qe` and `VISP_SENTRY_TAGS=task=VISP-13` (put the `qe` DSN in `VISP_SENTRY_DSN` in your `settings.local.json`) and reports `sentry_events` from `pnpm sdlc sentry-events`. The stop hook asks Sentry for the same count since the agent started and refuses a report that does not match it, or that passes with events. CI asks again, above.
 
 The stage agents are in `.claude/agents/`, their models and efforts pinned in `sdlc.config.json` (a test keeps the two equal), and their skills in `.claude/skills/`:
 
