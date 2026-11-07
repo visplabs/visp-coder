@@ -90,6 +90,17 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/sdlc/hooks/ticket-status.mjs\"",
+            "timeout": 120
+          }
+        ]
+      }
     ]
   }
 }

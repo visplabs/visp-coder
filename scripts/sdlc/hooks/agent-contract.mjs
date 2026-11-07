@@ -3,7 +3,7 @@
 // be started with an "SDLC-Task: VISP-12/VISP-13" line, only once the owner approved the spec and
 // the task's ticket is Ready, and within the loop bounds and the epic's run budget; it gets the
 // task contract appended: the owner's words, the clauses and criteria, the role's rules and the
-// report format. qe-spec must be started with "SDLC-Feature: VISP-12" and gets the owner's words
+// report format. A coder's start moves its ticket to In Progress. qe-spec must be started with "SDLC-Feature: VISP-12" and gets the owner's words
 // and its report format. Any
 // SDLC agent loses a `model` or `effort` given on the call, which would outrank its definition
 // (sdlc.config.json decides both). Other agents pass untouched.
@@ -11,14 +11,17 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { loadTask } from "../lib/agent-task.mjs";
-import { FEATURE_LINE, SPEC_AGENT, TASK_LINE, TASK_REPORTS } from "../lib/agents.mjs";
+import { CODERS, FEATURE_LINE, SPEC_AGENT, TASK_LINE, TASK_REPORTS } from "../lib/agents.mjs";
 import { loadConfig } from "../lib/config.mjs";
 import { renderContract, renderSpecContract } from "../lib/contract.mjs";
 import { denyTool, readEvent, respond } from "../lib/hook-io.mjs";
+import { jiraClient } from "../lib/jira.mjs";
 import { recordTurn, turnRefusal } from "../lib/loops.mjs";
+import { logMistake } from "../lib/mistakes.mjs";
 import { featureDir } from "../lib/paths.mjs";
 import { loadSpec } from "../lib/spec-store.mjs";
 import { gateRefusal } from "../lib/ticket-gate.mjs";
+import { advance } from "../lib/ticket-status.mjs";
 
 const event = await readEvent();
 const input = event.tool_input ?? {};
@@ -27,7 +30,10 @@ const prompt = String(input.prompt ?? "");
 
 if (TASK_REPORTS[agentType]) {
   const contract = taskContract();
-  if (contract) allow(contract.feature, contract.text);
+  if (contract) {
+    if (CODERS.has(agentType)) await startWork(contract.work);
+    allow(contract.feature, contract.text);
+  }
 } else if (agentType === SPEC_AGENT) {
   const contract = specContract();
   if (contract) allow(contract.feature, contract.text);
@@ -75,7 +81,23 @@ function taskContract() {
     return undefined;
   }
   recordTurn(event.cwd, work);
-  return { feature: `${feature}/${taskId}`, text: renderContract(agentType, spec, task) };
+  return { feature: `${feature}/${taskId}`, text: renderContract(agentType, spec, task), work };
+}
+
+// The task's ticket moves to In Progress when its coder starts; a Jira failure never stops it.
+async function startWork({ task }) {
+  try {
+    const line = await advance(
+      jiraClient(event.cwd),
+      loadConfig(event.cwd).jira.statuses,
+      task,
+      "inProgress",
+      "coder started",
+    );
+    if (line) console.error(`sdlc: ${line}`);
+  } catch (error) {
+    logMistake(event, "agent-contract", `could not move ${task} to In Progress: ${error.message}`);
+  }
 }
 
 function specContract() {

@@ -120,7 +120,15 @@ export function approvedHash(): string {
 export function runHook(hook: string, input: unknown, env: Record<string, string> = {}) {
   const result = spawnSync(process.execPath, [join(process.cwd(), "scripts/sdlc/hooks", hook)], {
     input: JSON.stringify(input),
-    env: { ...process.env, SDLC_OWNER: "1", ...env },
+    // A hook that reaches Jira gets a closed port unless the test starts a fake one, so no test
+    // talks to the real site with the keyring's token.
+    env: {
+      ...process.env,
+      SDLC_OWNER: "1",
+      SDLC_JIRA_URL: "http://127.0.0.1:9",
+      SDLC_SECRET_CMD: "printf %s test@example.com:test",
+      ...env,
+    },
     encoding: "utf8",
   });
   const json = result.stdout.trim() ? safeJson(result.stdout) : undefined;
