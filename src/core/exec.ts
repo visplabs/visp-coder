@@ -33,87 +33,145 @@ export function run(
   const started = Date.now();
   const timeoutMs = options.timeoutMs ?? LIMITS.commandTimeoutMs;
   return new Promise((resolve) => {
-    let child: ChildProcess;
-    try {
-      options.signal?.throwIfAborted();
-      if (!Number.isFinite(timeoutMs) || timeoutMs < 0) throw new Error("Invalid command timeout");
-      const env = options.replaceEnv ? (options.env ?? {}) : { ...process.env, ...options.env };
-      const prepared = prepareCommand(file, args, env);
-      child = spawn(prepared.file, prepared.args, {
+    const child = startChild(file, args, options, timeoutMs);
+    if (!child.ok) {
+      resolve(child);
+      return;
+    }
+    new RunningCommand(child.value, { file, args, options, timeoutMs, started }, resolve).watch();
+  });
+}
+
+/** Checks the abort signal and the timeout, then spawns; a refusal never starts a process. */
+function startChild(
+  file: string,
+  args: readonly string[],
+  options: RunOptions,
+  timeoutMs: number,
+): Result<ChildProcess> {
+  try {
+    options.signal?.throwIfAborted();
+    if (!Number.isFinite(timeoutMs) || timeoutMs < 0) throw new Error("Invalid command timeout");
+    const env = options.replaceEnv ? (options.env ?? {}) : { ...process.env, ...options.env };
+    const prepared = prepareCommand(file, args, env);
+    return ok(
+      spawn(prepared.file, prepared.args, {
         cwd: options.cwd,
         detached: process.platform !== "win32",
         stdio: [options.input === undefined ? "ignore" : "pipe", "pipe", "pipe"],
         env,
         windowsVerbatimArguments: prepared.windowsVerbatimArguments,
-      });
-    } catch (cause) {
-      resolve(err(fromUnknown(cause, "COMMAND_FAILED")));
-      return;
+      }),
+    );
+  } catch (cause) {
+    return err(fromUnknown(cause, "COMMAND_FAILED"));
+  }
+}
+
+interface CommandRequest {
+  readonly file: string;
+  readonly args: readonly string[];
+  readonly options: RunOptions;
+  readonly timeoutMs: number;
+  readonly started: number;
+}
+
+type SpawnFailure = Error & { code?: string };
+
+/** Watches one spawned command until it exits, times out, is aborted or fails, then resolves. */
+class RunningCommand {
+  private readonly child: ChildProcess;
+  private readonly request: CommandRequest;
+  private readonly resolve: (result: Result<CommandOutput>) => void;
+  private readonly stdout = new BoundedOutput();
+  private readonly stderr = new BoundedOutput();
+  private timedOut = false;
+  private aborted = false;
+  private finished = false;
+  private exitCode = 1;
+  private timer: ReturnType<typeof setTimeout> | undefined;
+  private grace: ReturnType<typeof setTimeout> | undefined;
+
+  constructor(
+    child: ChildProcess,
+    request: CommandRequest,
+    resolve: (result: Result<CommandOutput>) => void,
+  ) {
+    this.child = child;
+    this.request = request;
+    this.resolve = resolve;
+  }
+
+  watch() {
+    const { child, request } = this;
+    if (request.timeoutMs > 0) {
+      this.timer = setTimeout(() => {
+        this.timedOut = true;
+        this.stop();
+      }, request.timeoutMs);
     }
-    const stdout = new BoundedOutput();
-    const stderr = new BoundedOutput();
-    let timedOut = false;
-    let aborted = false;
-    let finished = false;
-    let exitCode = 1;
-    let grace: ReturnType<typeof setTimeout> | undefined;
-    const timer =
-      timeoutMs > 0
-        ? setTimeout(() => {
-            timedOut = true;
-            stop();
-          }, timeoutMs)
-        : undefined;
-    const finish = (failure?: Error & { code?: string }) => {
-      if (finished) return;
-      finished = true;
-      clearTimeout(timer);
-      clearTimeout(grace);
-      options.signal?.removeEventListener("abort", cancel);
-      killCommandGroup(child, "SIGKILL");
-      child.stdout?.destroy();
-      child.stderr?.destroy();
-      if (failure) {
-        const error = fromUnknown(failure, "COMMAND_FAILED");
-        resolve(err({ ...error, details: { ...error.details, errno: failure.code } }));
-      } else
-        resolve(
-          ok({
-            command: [file, ...args].join(" "),
-            exitCode: timedOut || aborted ? 1 : exitCode,
-            stdout: stdout.text(),
-            stderr: stderr.text(),
-            timedOut,
-            aborted,
-            durationMs: Date.now() - started,
-          }),
-        );
-    };
-    const stop = () => {
-      killCommandGroup(child, "SIGTERM");
-      grace ??= setTimeout(() => finish(), 200);
-    };
-    const cancel = () => {
-      aborted = true;
-      stop();
-    };
-    child.stdout?.on("data", (chunk: Buffer) => stdout.add(chunk));
-    child.stderr?.on("data", (chunk: Buffer) => stderr.add(chunk));
-    child.once("error", finish);
+    child.stdout?.on("data", (chunk: Buffer) => this.stdout.add(chunk));
+    child.stderr?.on("data", (chunk: Buffer) => this.stderr.add(chunk));
+    child.once("error", (failure: SpawnFailure) => this.finish(failure));
     child.once("exit", (code) => {
-      exitCode = code ?? 1;
-      clearTimeout(timer);
+      this.exitCode = code ?? 1;
+      clearTimeout(this.timer);
       // A descendant may retain stdout after its parent exits. Drain briefly, then reap it.
-      stop();
+      this.stop();
     });
-    child.once("close", () => finish());
-    if (options.input !== undefined) {
-      child.stdin?.on("error", () => undefined);
-      child.stdin?.end(options.input);
-    }
-    options.signal?.addEventListener("abort", cancel, { once: true });
-    if (options.signal?.aborted) cancel();
-  });
+    child.once("close", () => this.finish());
+    this.sendInput();
+    const { signal } = request.options;
+    signal?.addEventListener("abort", this.cancel, { once: true });
+    if (signal?.aborted) this.cancel();
+  }
+
+  private sendInput() {
+    const { input } = this.request.options;
+    if (input === undefined) return;
+    this.child.stdin?.on("error", () => undefined);
+    this.child.stdin?.end(input);
+  }
+
+  private readonly cancel = () => {
+    this.aborted = true;
+    this.stop();
+  };
+
+  private stop() {
+    killCommandGroup(this.child, "SIGTERM");
+    this.grace ??= setTimeout(() => this.finish(), 200);
+  }
+
+  private finish(failure?: SpawnFailure) {
+    if (this.finished) return;
+    this.finished = true;
+    clearTimeout(this.timer);
+    clearTimeout(this.grace);
+    this.request.options.signal?.removeEventListener("abort", this.cancel);
+    killCommandGroup(this.child, "SIGKILL");
+    this.child.stdout?.destroy();
+    this.child.stderr?.destroy();
+    this.resolve(failure ? this.failure(failure) : ok(this.output()));
+  }
+
+  private failure(failure: SpawnFailure): Result<CommandOutput> {
+    const error = fromUnknown(failure, "COMMAND_FAILED");
+    return err({ ...error, details: { ...error.details, errno: failure.code } });
+  }
+
+  private output(): CommandOutput {
+    const { file, args, started } = this.request;
+    return {
+      command: [file, ...args].join(" "),
+      exitCode: this.timedOut || this.aborted ? 1 : this.exitCode,
+      stdout: this.stdout.text(),
+      stderr: this.stderr.text(),
+      timedOut: this.timedOut,
+      aborted: this.aborted,
+      durationMs: Date.now() - started,
+    };
+  }
 }
 
 /** Signals a spawned command's whole process group (its tree on Windows). */
@@ -203,43 +261,57 @@ export function parseCommand(input: string): Result<string[], ShellSyntaxError> 
   return splitCommandWords(input);
 }
 
+const SHELL_METACHARACTERS = /[|&;<>$`(){}[\]!*?~]/;
+
+interface WordScan {
+  readonly argv: string[];
+  word: string;
+  quote: string | undefined;
+  /** True once the current word has a character or a quote, so `""` is an empty word. */
+  started: boolean;
+}
+
 function splitCommandWords(input: string): Result<string[], ShellSyntaxError> {
-  const argv: string[] = [];
-  let word = "";
-  let quote: string | undefined;
-  let started = false;
+  const scan: WordScan = { argv: [], word: "", quote: undefined, started: false };
   for (const character of input) {
-    if (quote) {
-      if (character === quote) quote = undefined;
-      else word += character;
-    } else if (character === '"' || character === "'") {
-      quote = character;
-      started = true;
-    } else if (/\s/.test(character)) {
-      if (started) argv.push(word);
-      word = "";
-      started = false;
-    } else if (/[|&;<>$`(){}[\]!*?~]/.test(character)) {
-      return {
-        ok: false,
-        error: {
-          kind: "shell-syntax",
-          message: `Command contains shell syntax (${character}) and cannot run without a shell: ${input}`,
-        },
-      };
-    } else {
-      word += character;
-      started = true;
+    if (!scanCharacter(scan, character)) {
+      return shellSyntaxFailure(
+        `Command contains shell syntax (${character}) and cannot run without a shell: ${input}`,
+      );
     }
   }
-  if (quote) {
-    return {
-      ok: false,
-      error: { kind: "shell-syntax", message: "Command has an unterminated quote" },
-    };
+  if (scan.quote) return shellSyntaxFailure("Command has an unterminated quote");
+  endWord(scan);
+  return resolveCommand(scan.argv);
+}
+
+function shellSyntaxFailure(message: string): Result<never, ShellSyntaxError> {
+  return { ok: false, error: { kind: "shell-syntax", message } };
+}
+
+/** Feeds one character to the scan; false when it is an unquoted shell metacharacter. */
+function scanCharacter(scan: WordScan, character: string): boolean {
+  if (scan.quote) {
+    if (character === scan.quote) scan.quote = undefined;
+    else scan.word += character;
+  } else if (character === '"' || character === "'") {
+    scan.quote = character;
+    scan.started = true;
+  } else if (/\s/.test(character)) {
+    endWord(scan);
+  } else if (SHELL_METACHARACTERS.test(character)) {
+    return false;
+  } else {
+    scan.word += character;
+    scan.started = true;
   }
-  if (started) argv.push(word);
-  return resolveCommand(argv);
+  return true;
+}
+
+function endWord(scan: WordScan) {
+  if (scan.started) scan.argv.push(scan.word);
+  scan.word = "";
+  scan.started = false;
 }
 
 /**
