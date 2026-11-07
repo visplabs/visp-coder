@@ -335,7 +335,9 @@ describe("run environment", () => {
     "console.log(JSON.stringify({parent: process.env.VISP_PARENT, x: process.env.VISP_X, keys: Object.keys(process.env)}))";
   const seen = async (options: Partial<RunOptions>) => {
     vi.stubEnv("VISP_PARENT", "p");
-    return JSON.parse((await runValue(printEnv, options)).stdout);
+    const env = JSON.parse((await runValue(printEnv, options)).stdout);
+    // Node adds NODE_V8_COVERAGE to a child's environment under coverage; exec.ts does not.
+    return { ...env, keys: env.keys.filter((key: string) => key !== "NODE_V8_COVERAGE") };
   };
 
   it("passes the caller's environment when env is omitted", async () => {
