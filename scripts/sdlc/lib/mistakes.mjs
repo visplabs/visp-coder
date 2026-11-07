@@ -1,15 +1,17 @@
 // The mistake log for the outer loop: every hook refusal (a denied tool call, a refused report,
 // a blocked settings change) appends one JSON line to .sdlc/mistakes.jsonl, with a signature
 // that groups repeats of the same mistake for the retro. Logging never fails the hook.
+// SDLC_MISTAKE_LOG names another file, so tests that run hooks in this repository keep its log
+// clean.
 
 import { appendFileSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { sdlcRoot } from "./paths.mjs";
 
 export function logMistake(event, hook, reason) {
   try {
-    const root = sdlcRoot(event.cwd);
-    mkdirSync(root, { recursive: true });
+    const file = process.env.SDLC_MISTAKE_LOG ?? join(sdlcRoot(event.cwd), "mistakes.jsonl");
+    mkdirSync(dirname(file), { recursive: true });
     const entry = {
       at: new Date().toISOString(),
       hook,
@@ -19,7 +21,7 @@ export function logMistake(event, hook, reason) {
       reason,
       signature: `${hook}:${signature(reason)}`,
     };
-    appendFileSync(join(root, "mistakes.jsonl"), `${JSON.stringify(entry)}\n`);
+    appendFileSync(file, `${JSON.stringify(entry)}\n`);
   } catch {
     // The refusal still stands; only its record is lost.
   }

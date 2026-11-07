@@ -1,16 +1,20 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 
 const hook = join(process.cwd(), "scripts/sdlc/hooks/safety.mjs");
+const scratch = mkdtempSync(join(tmpdir(), "sdlc-safety-log-"));
 
 function runHook(
   command: string,
   options: { owner?: boolean; cwd?: string; agentType?: string } = {},
 ) {
-  const env = { ...process.env };
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    SDLC_MISTAKE_LOG: join(scratch, "mistakes.jsonl"),
+  };
   delete env.SDLC_OWNER;
   if (options.owner !== false) env.SDLC_OWNER = "1";
   const input = {
@@ -26,6 +30,25 @@ function runHook(
     encoding: "utf8",
   });
 }
+
+// The repository's own mistake log, which a test run must leave alone.
+function realLogLines(): number {
+  const common = spawnSync("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], {
+    encoding: "utf8",
+  }).stdout.trim();
+  const log = join(common, "..", ".sdlc", "mistakes.jsonl");
+  return existsSync(log) ? readFileSync(log, "utf8").split("\n").length : 0;
+}
+
+describe("the mistake log in tests", () => {
+  afterAll(() => rmSync(scratch, { recursive: true, force: true }));
+
+  it("keeps refusals out of the repository's own log", () => {
+    const before = realLogLines();
+    expect(runHook("git push --force origin topic").status).toBe(2);
+    expect(realLogLines()).toBe(before);
+  });
+});
 
 function repoOnBranch(branch: string): string {
   const dir = mkdtempSync(join(tmpdir(), "sdlc-safety-"));
