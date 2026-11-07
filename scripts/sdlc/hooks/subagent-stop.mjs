@@ -32,12 +32,7 @@ import { logMistake } from "../lib/mistakes.mjs";
 import { repoRoot, sdlcRoot } from "../lib/paths.mjs";
 import { pathRefusal } from "../lib/scope-rules.mjs";
 import { fileSpec } from "../lib/spec-filing.mjs";
-import {
-  finalReport,
-  findAgentTranscript,
-  modelAndUsage,
-  readTranscript,
-} from "../lib/transcript.mjs";
+import { finalReport, modelAndUsage, settledTranscript } from "../lib/transcript.mjs";
 import { runVerification } from "../lib/verify.mjs";
 
 const MAX_BLOCKS = 5;
@@ -48,7 +43,7 @@ const isSpec = event.agent_type === SPEC_AGENT;
 const task = type || isSpec ? taskOf(event) : undefined;
 if (!task || (type && !task.task)) process.exit(0);
 
-const entries = readTranscript(findAgentTranscript(event));
+const entries = await settledTranscript(event);
 const { model, usage } = modelAndUsage(entries);
 const now = new Date();
 const envelope = {

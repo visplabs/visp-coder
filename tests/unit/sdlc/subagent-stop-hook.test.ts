@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -27,23 +28,51 @@ function assistant(id: string, text: string, usage = { input_tokens: 100, output
   };
 }
 
+function stopEvent(agentType: string, lastMessage: string | undefined) {
+  return {
+    hook_event_name: "SubagentStop",
+    stop_hook_active: false,
+    agent_id: "a1",
+    agent_type: agentType,
+    agent_transcript_path: join(fixture.sessions, "session-1", "subagents", "agent-a1.jsonl"),
+    transcript_path: join(fixture.sessions, "session-1.jsonl"),
+    last_assistant_message: lastMessage,
+    effort: { level: "high" },
+    cwd: fixture.repo,
+  };
+}
+
+const HOOK_ENV = { SDLC_VERIFY: "off", SDLC_TRANSCRIPT_WAIT_MS: "0" };
+
 function stop(agentType: string, lastMessage: string | undefined) {
-  const transcript = join(fixture.sessions, "session-1", "subagents", "agent-a1.jsonl");
-  return runHook(
-    "subagent-stop.mjs",
+  return runHook("subagent-stop.mjs", stopEvent(agentType, lastMessage), {
+    ...HOOK_ENV,
+    SDLC_BASE_REF: base,
+  });
+}
+
+// The hook as Claude Code runs it: started while the transcript may still lack the last lines.
+function stopWhileWriting(agentType: string, write: () => void) {
+  const child = spawn(
+    process.execPath,
+    [join(process.cwd(), "scripts/sdlc/hooks/subagent-stop.mjs")],
     {
-      hook_event_name: "SubagentStop",
-      stop_hook_active: false,
-      agent_id: "a1",
-      agent_type: agentType,
-      agent_transcript_path: transcript,
-      transcript_path: join(fixture.sessions, "session-1.jsonl"),
-      last_assistant_message: lastMessage,
-      effort: { level: "high" },
-      cwd: fixture.repo,
+      env: {
+        ...process.env,
+        SDLC_OWNER: "1",
+        ...HOOK_ENV,
+        SDLC_BASE_REF: base,
+        SDLC_TRANSCRIPT_WAIT_MS: "3000",
+      },
     },
-    { SDLC_BASE_REF: base, SDLC_VERIFY: "off" },
   );
+  let stdout = "";
+  child.stdout.on("data", (chunk) => {
+    stdout += chunk;
+  });
+  child.stdin.end(JSON.stringify(stopEvent(agentType, undefined)));
+  setTimeout(write, 400);
+  return new Promise<string>((resolve) => child.on("close", () => resolve(stdout)));
 }
 
 function filed(dir: string) {
@@ -157,6 +186,16 @@ describe("subagent stop hook", () => {
     handback("claude-opus-5-5", review.join("\n"));
     expect(blockReason(stop("reviewer-fallback", "Handed back."))).toBe("");
     expect(filedReport().commit).toBe(fixture.git("rev-parse", "HEAD"));
+  });
+
+  it("waits for a SubagentHandback the transcript has not written yet", async () => {
+    fixture.transcript("a1", [promptEntry("Review it.\nSDLC-Task: F-12/T-13")]);
+    const review = "```yaml\nstatus: done\nbody:\n  verdict: approve\n  findings: []\n```";
+    const stdout = await stopWhileWriting("reviewer-fallback", () =>
+      handback("claude-opus-5-5", review),
+    );
+    expect(stdout).not.toContain("block");
+    expect(filedReport().body.verdict).toBe("approve");
   });
 
   it("files the Codex review from the file sdlc review wrote, checked by its sha256", () => {
