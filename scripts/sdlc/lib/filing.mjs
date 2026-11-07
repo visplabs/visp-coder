@@ -11,13 +11,25 @@ import { featureDir, sdlcRoot, stamp } from "./paths.mjs";
 
 const FENCE = /```ya?ml[^\n]*\n([\s\S]*?)```/g;
 
+// The report is the last fenced yaml block. A handback that is nothing but the report, unfenced,
+// counts too when it parses to a mapping with `status` or `review_file`.
 export function lastYamlBlock(text) {
   const blocks = [...(text ?? "").replace(/\r\n/g, "\n").matchAll(FENCE)];
-  if (blocks.length === 0) return { error: "the report has no ```yaml block" };
+  if (blocks.length === 0) return bareReport(text) ?? { error: "the report has no ```yaml block" };
   try {
     return { doc: parse(blocks.at(-1)[1]) };
   } catch (error) {
     return { error: `the report's yaml block does not parse: ${error.message}` };
+  }
+}
+
+function bareReport(text) {
+  try {
+    const doc = parse(text ?? "");
+    const isReport = doc && typeof doc === "object" && ("status" in doc || "review_file" in doc);
+    return isReport ? { doc } : undefined;
+  } catch {
+    return undefined;
   }
 }
 

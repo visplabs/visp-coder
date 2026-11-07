@@ -7,7 +7,8 @@
 // epic. A report that fails keeps the agent working with the reason; after five refusals in a
 // round the agent may stop and the failure is logged. A report from an agent that ran on another
 // model than sdlc.config.json sets is not filed: the run is logged as failed. Coder and reviewer
-// reports record the commit they cover. The reviewer hands back the path and sha256 of the report
+// reports record the commit they cover. One report is filed per round: a stop after it (an agent
+// woken by a background task after its handback) is let through. The reviewer hands back the path and sha256 of the report
 // `sdlc review` wrote, and the report is filed from that file, so the wrapper never retypes it.
 // Every accepted report is logged in the worklog.
 
@@ -17,7 +18,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { relative } from "node:path";
 import { parse } from "yaml";
 
-import { countBlock, loadTask, taskOf } from "../lib/agent-task.mjs";
+import { countBlock, loadTask, markFiled, taskOf } from "../lib/agent-task.mjs";
 import { CODERS, SPEC_AGENT, TASK_REPORTS } from "../lib/agents.mjs";
 import { loadConfig } from "../lib/config.mjs";
 import {
@@ -33,7 +34,7 @@ import { repoRoot, sdlcRoot } from "../lib/paths.mjs";
 import { pathRefusal } from "../lib/scope-rules.mjs";
 import { fileSpec } from "../lib/spec-filing.mjs";
 import { finalReport, modelAndUsage, settledTranscript } from "../lib/transcript.mjs";
-import { runVerification } from "../lib/verify.mjs";
+import { recordVerified, runVerification } from "../lib/verify.mjs";
 
 const MAX_BLOCKS = 5;
 
@@ -41,7 +42,7 @@ const event = await readEvent();
 const type = TASK_REPORTS[event.agent_type];
 const isSpec = event.agent_type === SPEC_AGENT;
 const task = type || isSpec ? taskOf(event) : undefined;
-if (!task || (type && !task.task)) process.exit(0);
+if (!task || (type && !task.task) || task.filed) process.exit(0);
 
 const entries = await settledTranscript(event);
 const { model, usage } = modelAndUsage(entries);
@@ -69,9 +70,11 @@ if (model && expected && !model.startsWith(expected)) {
 
 const outcome = isSpec ? await examineSpec() : examine();
 if (outcome.spec) {
+  markFiled(event);
   writeWorklog(event.cwd, envelope, { status: "done", summary: outcome.spec, now });
 } else if (outcome.artifact) {
   fileArtifact(event.cwd, outcome.artifact, now);
+  markFiled(event);
   const body = outcome.artifact.body;
   const summary = body.summary ?? `verdict: ${body.verdict}`;
   writeWorklog(event.cwd, envelope, { status: outcome.artifact.status, summary, now });
@@ -152,9 +155,9 @@ function checkHandoff(artifact) {
     return `changed files the task may not change; revert them:\n- ${outside.join("\n- ")}`;
   }
   if (process.env.SDLC_VERIFY === "off") return undefined;
-  return runVerification(
-    root,
-    changed,
-    artifact.body.tests.map((test) => test.test),
-  );
+  const tests = artifact.body.tests.map((test) => test.test);
+  const result = runVerification(root, changed, tests);
+  if (result.failed) return result.failed;
+  recordVerified(event.cwd, task, artifact.commit, result.ran);
+  return undefined;
 }

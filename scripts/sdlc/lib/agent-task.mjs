@@ -1,5 +1,6 @@
-// Which feature and task a subagent works on, its agent type, and how often its stop was refused
-// in the current round. Found once from the task or feature line in the subagent's transcript,
+// Which feature and task a subagent works on, its agent type, how often its stop was refused in
+// the current round, and whether its report for the round is filed (an agent may stop again
+// after it handed back, for example when a background wait ends). Found once from the task or feature line in the subagent's transcript,
 // then kept in .sdlc/run/agents/<agent_id>.json. A resume by SendMessage starts a new round.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -28,7 +29,11 @@ export function agentState(cwd, agentId) {
 
 export function startRound(cwd, agentId) {
   const event = { cwd, agent_id: agentId };
-  writeState(event, { ...readState(event), blocks: 0 });
+  writeState(event, { ...readState(event), blocks: 0, filed: false });
+}
+
+export function markFiled(event) {
+  writeState(event, { ...readState(event), filed: true });
 }
 
 export function countBlock(event) {

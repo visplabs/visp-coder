@@ -198,6 +198,38 @@ describe("subagent stop hook", () => {
     expect(filedReport().body.verdict).toBe("approve");
   });
 
+  it("files a handback whose yaml report has no fence", () => {
+    handback("claude-opus-5-5", "status: done\nbody:\n  verdict: approve\n  findings: []\n");
+    expect(blockReason(stop("reviewer-fallback", "Handed back."))).toBe("");
+    expect(filedReport().body.verdict).toBe("approve");
+  });
+
+  it("files one report per round, however often the agent stops", () => {
+    expect(blockReason(stop("coder", HANDOFF))).toBe("");
+    fixture.transcript("a1", [
+      promptEntry("Implement it.\nSDLC-Task: F-12/T-13"),
+      assistant("m3", "The wait finished; my report was already delivered."),
+    ]);
+    const again = stop("coder", "The wait finished; my report was already delivered.");
+    expect(blockReason(again)).toBe("");
+    expect(filed("tasks/T-13")).toHaveLength(1);
+    expect(worklog()).toHaveLength(1);
+  });
+
+  it("files again after a resume starts a new round", () => {
+    expect(blockReason(stop("coder", HANDOFF))).toBe("");
+    const resume = runHook("resume-guard.mjs", {
+      hook_event_name: "PreToolUse",
+      tool_name: "SendMessage",
+      tool_input: { to: "a1", message: "Fix the findings." },
+      cwd: fixture.repo,
+      agent_type: "manager",
+    });
+    expect(resume.status, resume.stderr).toBe(0);
+    expect(blockReason(stop("coder", HANDOFF))).toBe("");
+    expect(filed("tasks/T-13")).toHaveLength(2);
+  });
+
   it("files the Codex review from the file sdlc review wrote, checked by its sha256", () => {
     const commit = "a".repeat(40);
     const text = `status: done\ncommit: ${commit}\nbody:\n  verdict: approve\n  findings: []\n`;
