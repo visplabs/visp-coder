@@ -1,4 +1,4 @@
-// sdlc jira <action> ...: the clerk's Jira commands, as the agent service account. Reads (show)
+// sdlc jira <action> ...: the clerk's Jira commands, as the agent bot user. Reads (show)
 // are open to every agent; the safety hook lets only the clerk run the others.
 //   show VISP-13                                   title, status and body
 //   create-task VISP-12 --title T --task-file F    a task under the epic; F is its task@1 yaml

@@ -1,6 +1,6 @@
 // What /feature and /approve do. Both run only from a command the owner types (the commands
 // have disable-model-invocation, and the hook fires on UserPromptExpansion). /feature opens the
-// epic through the agent service account; the owner's own Jira token is never stored. /approve
+// epic through the agent bot user; the owner's own Jira token is never stored. /approve
 // only reads: it shows the owner's words, the spec and its hash, and the exact line the owner
 // posts as a Jira comment to approve it. That comment, written by the owner's own account, is
 // the approval; see approval.mjs.

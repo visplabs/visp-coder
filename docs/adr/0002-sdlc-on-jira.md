@@ -16,7 +16,7 @@ approval, and that rounds resumed by `SendMessage` escape a hook on the Agent to
 
 - Jira holds work items, specs and approvals; Confluence holds documents and is never on a gate;
   GitHub holds code and pull requests. `sdlc.config.json` names everything by id.
-- Agents reach Jira only through `sdlc` commands as a service account, never through MCP. A hook
+- Agents reach Jira only through `sdlc` commands as a bot user, never through MCP. A hook
   closes MCP to every SDLC agent, and the pipeline runs with claude.ai connectors off.
 - The owner approves by posting a line with the spec hash from their own account. Only that
   comment, unedited and newer than the last spec change, counts.
@@ -28,6 +28,6 @@ approval, and that rounds resumed by `SendMessage` escape a hook on the Agent to
 
 ## Consequences
 
-- Pilots need the `visp-agent` service account token in the keyring.
+- Pilots need the `visp-agent` bot user's token in the keyring.
 - The CI gate keeps reading GitHub issues until it moves to Jira with a read-only `visp-ci` key.
 - More rounds cost more: the budget caps an epic at 40 agent runs.

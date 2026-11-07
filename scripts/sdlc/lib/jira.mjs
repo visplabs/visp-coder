@@ -1,4 +1,4 @@
-// Jira Cloud REST calls for the SDLC, made as the agent service account. Issue bodies cross as
+// Jira Cloud REST calls for the SDLC, made as the agent bot user. Issue bodies cross as
 // the markdown issue-body.mjs writes (see adf.mjs). The token comes from the OS keyring each
 // time, as "email:token", through SDLC_SECRET_CMD (default: secret-tool). SDLC_JIRA_URL replaces
 // the API base in tests; service-account tokens need the api.atlassian.com gateway form.

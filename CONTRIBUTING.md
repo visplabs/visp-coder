@@ -80,13 +80,13 @@ The maintainer's agent workflow is recorded in [docs/adr/0001-agent-sdlc.md](doc
 | `pnpm sdlc validate <file...>` | Check YAML files against the schema each names |
 | `pnpm sdlc trace VISP-12 [--results <vitest json>]` | Follow every clause to criteria, test cases and results; exit 1 on an error |
 | `pnpm sdlc packet VISP-12 [--results <vitest json>]` | Write the owner packet to `.sdlc/features/VISP-12/` |
-| `pnpm sdlc jira show\|create-task\|move\|comment ...` | Jira as the agent service account; only the `clerk` agent may write |
+| `pnpm sdlc jira show\|create-task\|move\|comment ...` | Jira as the agent bot user; only the `clerk` agent may write |
 | `pnpm sdlc review --task VISP-12/VISP-13 --worktree <dir>` | One inner-loop review round on Codex; only the `reviewer` agent runs it |
 | `pnpm sdlc check-pr <n> [--results <vitest json>]` | The CI gate for a task PR (below); still reads GitHub issues until CI moves to Jira |
 
 A test case links its test as `<path> > <describe titles> > <test title>`. Produce results with `pnpm exec vitest run <files> --reporter=json --outputFile=results.json`. `.sdlc/` sits in the main checkout and is shared by every worktree.
 
-**Credentials.** `sdlc` calls Jira as the agent service account. Store its `email:token` once in the keyring: `secret-tool store --label "visp-sdlc" service visp-sdlc account visp-agent` (package `libsecret-tools`). Treat that token as readable by agents. Your own Jira token is never stored. The Codex reviewer uses its own home, `~/.codex-visp`, which you log in to once with `CODEX_HOME=~/.codex-visp codex login`; its `config.toml` turns off apps, plugins, browser, computer use, hooks and sub-agents.
+**Credentials.** `sdlc` calls Jira as the agent bot user, `visp-agent`: an ordinary Jira user (not an admin) with a scoped API token (`read:jira-work`, `write:jira-work`, `read:jira-user`), since the free plan has no service accounts. Store its `email:token` once in the keyring: `secret-tool store --label "visp-sdlc" service visp-sdlc account visp-agent` (package `libsecret-tools`). Treat that token as readable by agents. Your own Jira token is never stored. The Codex reviewer uses its own home, `~/.codex-visp`, which you log in to once with `CODEX_HOME=~/.codex-visp codex login`; its `config.toml` turns off apps, plugins, browser, computer use, hooks and sub-agents.
 
 A feature starts with two owner-only commands. They have `disable-model-invocation`, so no agent can run them; the `owner-commands.mjs` hook (UserPromptExpansion) does the work:
 
