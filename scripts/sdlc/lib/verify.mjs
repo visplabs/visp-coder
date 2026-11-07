@@ -3,8 +3,9 @@
 // checked by running them, not by reading them.
 
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import { tail } from "./hook-io.mjs";
 import { withLock } from "./lock.mjs";
 import { sdlcRoot } from "./paths.mjs";
@@ -21,7 +22,10 @@ export function verificationPlan(changed, handoffTests, directTests) {
   return [["pnpm", "build:fast"], ...run, ["pnpm", "typecheck"]];
 }
 
-// Runs the plan in the worktree; returns undefined when every step passes, else why it failed.
+// Runs the plan in the worktree; returns { ran } when every step passes, else { failed } with
+// why. Tests run with VISP_CHILD_COVERAGE set, as in CI, because child coverage changes the
+// environment the code under test sees (NODE_V8_COVERAGE): pilot 1 shipped a test that passed
+// here and failed in CI for that reason.
 export function runVerification(cwd, changed, handoffTests) {
   const directTests = (files) => {
     const result = spawnSync("node", ["scripts/direct-tests.mjs", ...files], {
@@ -31,17 +35,42 @@ export function runVerification(cwd, changed, handoffTests) {
     return result.stdout.split(/\s+/).filter((file) => file && existsSync(join(cwd, file)));
   };
   const plan = verificationPlan(changed, handoffTests, directTests);
-  return withLock(join(sdlcRoot(cwd), "run", "heavy.lock"), () => {
-    for (const command of plan) {
-      const result = spawnSync(command[0], command.slice(1), {
-        cwd,
-        encoding: "utf8",
-        maxBuffer: 64 * 1024 * 1024,
-      });
-      if (result.status !== 0) {
-        return `\`${command.join(" ")}\` failed:\n${tail(`${result.stdout}${result.stderr}`, 40)}`;
+  const coverage = mkdtempSync(join(tmpdir(), "sdlc-child-coverage-"));
+  const env = { ...process.env, VISP_CHILD_COVERAGE: coverage };
+  try {
+    return withLock(join(sdlcRoot(cwd), "run", "heavy.lock"), () => {
+      for (const command of plan) {
+        const result = spawnSync(command[0], command.slice(1), {
+          cwd,
+          env,
+          encoding: "utf8",
+          maxBuffer: 64 * 1024 * 1024,
+        });
+        if (result.status !== 0) {
+          const output = tail(`${result.stdout}${result.stderr}`, 40);
+          return { failed: `\`${command.join(" ")}\` failed:\n${output}` };
+        }
       }
-    }
-    return undefined;
-  });
+      return { ran: plan.map((command) => command.join(" ")) };
+    });
+  } finally {
+    rmSync(coverage, { recursive: true, force: true });
+  }
+}
+
+// The last passing run for a task, kept so the review packet can say what passed at which commit:
+// Codex's sandbox breaks child-process output, so it cannot run the tests itself.
+export function recordVerified(cwd, { feature, task }, commit, ran) {
+  const path = verifiedPath(cwd, feature, task);
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, JSON.stringify({ commit, ran, at: new Date().toISOString() }));
+}
+
+export function verifiedRun(cwd, { feature, task }) {
+  const path = verifiedPath(cwd, feature, task);
+  return existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : undefined;
+}
+
+function verifiedPath(cwd, feature, task) {
+  return join(sdlcRoot(cwd), "run", "verified", feature, `${task}.json`);
 }

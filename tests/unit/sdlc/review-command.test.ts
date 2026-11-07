@@ -134,6 +134,38 @@ describe("sdlc review", () => {
     expect(prompt).not.toContain("first round");
   });
 
+  it("tells Codex which criteria the epic's other tasks carry", () => {
+    fixture.write(
+      ".sdlc/features/F-12/tasks/T-14/task.yml",
+      "schema: task@1\nfeature: F-12\ntask: T-14\ncriteria: [AC-02]\nscope:\n  paths: [docs/x.md]\ntrack: trivial\nsize: S\n",
+    );
+    review(JSON.stringify(ANSWER));
+    const prompt = call().args.at(-1) ?? "";
+    expect(prompt).toContain("- T-14: AC-02");
+    expect(prompt).toContain("is not a finding against this task");
+  });
+
+  it("hands Codex the stop hook's passing run at this head instead of asking it to run tests", () => {
+    const head = fixture.git("rev-parse", "HEAD");
+    const ran = ["pnpm build:fast", "pnpm exec vitest run --bail=1 tests/x.test.ts"];
+    fixture.write(".sdlc/run/verified/F-12/T-13.json", JSON.stringify({ commit: head, ran }));
+    review(JSON.stringify(ANSWER));
+    const prompt = call().args.at(-1) ?? "";
+    expect(prompt).toContain(`passed at ${head}:`);
+    expect(prompt).toContain("- pnpm exec vitest run --bail=1 tests/x.test.ts");
+    expect(prompt).toContain("Do not run vitest");
+    expect(prompt).not.toContain("Run tests you need");
+  });
+
+  it("says when no passing run covers this head", () => {
+    fixture.write(
+      ".sdlc/run/verified/F-12/T-13.json",
+      JSON.stringify({ commit: "f".repeat(40), ran: [] }),
+    );
+    review(JSON.stringify(ANSWER));
+    expect(call().args.at(-1)).toContain("No run of the stop hook covers this head");
+  });
+
   it("exits 3 when Codex fails, and stops the epic after two failures", () => {
     expect(review("fail").status).toBe(3);
     expect(review("fail").status).toBe(3);
