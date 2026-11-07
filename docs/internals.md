@@ -62,7 +62,7 @@ Verification and review history is append-only; current projections update in th
 
 ## Running commands
 
-`src/core/exec.ts` runs every child process. A command is an argv with no shell. A command string is first split by `parseCommand`, which refuses shell syntax such as pipes, `&&` and `$`.
+`run()` in `src/core/exec.ts` runs commands. A command is an argv with no shell. A command string is first split by `parseCommand`, which refuses shell syntax such as pipes, `&&` and `$`.
 
 On POSIX the child starts in its own process group. On Windows, `.cmd` and `.bat` shims run through `cmd.exe`. The child gets the caller's environment extended with `env`, or only `env` when `replaceEnv` is set. Its stdin is ignored unless `input` is given; the input is then written and stdin is ended. Of each of stdout and stderr, VISP keeps the first 4 MiB and the last 4 MiB, with a truncation marker between them when more arrived.
 
@@ -70,9 +70,9 @@ A non-zero exit is a result: `run` returns `exitCode`. A failure to start is an 
 
 `timeoutMs` defaults to `LIMITS.commandTimeoutMs`, 600 000 ms. `0` means no timeout. A negative or non-finite value is refused before the command starts.
 
-On timeout or abort, VISP sends SIGTERM to the process group and SIGKILL 200 ms later. The result has exit code 1 and `timedOut` or `aborted` set.
+On timeout or abort, VISP sends SIGTERM to the process group and SIGKILL at most 200 ms later; it kills at once if the pipes close sooner. The result has exit code 1 and `timedOut` or `aborted` set.
 
-The same SIGTERM, 200 ms drain and SIGKILL also follow the direct child's exit. A descendant that holds the pipes open cannot keep the run alive. Exit 1 is forced only on timeout or abort; otherwise the child's own exit code stands.
+The same SIGTERM, then SIGKILL after at most 200 ms of draining, also follow the direct child's exit. A descendant that holds the pipes open cannot keep the run alive. The exit code is 1 on timeout or abort. Otherwise it is the child's own code, or 1 if a signal ended the child.
 
 Windows has no process groups. While the root is running, VISP runs `taskkill /T /F` on its tree. If taskkill cannot start or fails, it kills the shim. After the root has exited, it kills nothing.
 
