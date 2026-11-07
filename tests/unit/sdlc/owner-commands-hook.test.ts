@@ -76,8 +76,10 @@ describe("/approve", () => {
     expect(shown).toContain(`> ${OWNER_TEXT}`);
     expect(shown).toContain("I-01");
     expect(shown).toContain("AC-01");
-    expect(shown).toMatch(/^SDLC approval F-12 spec [0-9a-f]{64}$/m);
-    expect(shown).toContain("the owner has not approved this spec");
+    expect(shown).toMatch(/^SDLC approval F-12 spec [0-9a-f]{12}$/m);
+    expect(shown.split("\n")[0]).toBe(
+      "F-12 is not approved yet: the owner has not approved this spec.",
+    );
     const writes = jira.calls().filter((call) => call.method !== "GET");
     expect(writes.every((call) => call.path === "/rest/api/3/search/jql")).toBe(true);
   });
@@ -87,7 +89,9 @@ describe("/approve", () => {
     const owner = "70121:c2afbcea-4dab-468f-99ed-f959f08b036a";
     const at = "2026-11-07T12:00:00.000+0000";
     jira.setComments("F-12", [{ id: "c1", author: owner, created: at, text: line }]);
-    expect(reason(command("approve", "F-12"))).toContain("(approved)");
+    const shown = reason(command("approve", "F-12"));
+    expect(shown.split("\n")[0]).toBe("F-12 is approved (comment c1). Tell the manager: Run F-12.");
+    expect(shown).not.toContain("post this line");
     const approval = join(fixture.repo, ".sdlc/features/F-12/spec/approval.yml");
     expect(readFileSync(approval, "utf8")).toContain("approved: true");
   });

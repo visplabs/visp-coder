@@ -10,7 +10,12 @@ type Comment = {
   updated: string;
   text: string;
 };
-type Approval = { approved: boolean; reason?: string; comment?: string };
+type Approval = {
+  approved: boolean;
+  reason?: string;
+  comment?: string;
+  skipped?: Array<{ comment: string; reason: string }>;
+};
 
 const lib = (name: string) => pathToFileURL(join(process.cwd(), "scripts/sdlc/lib", name)).href;
 const { approvalLine, checkApproval } = (await import(lib("approval.mjs"))) as {
@@ -93,6 +98,35 @@ describe("spec approval from Jira comments", () => {
     const result = check([comment()], "2026-11-07T12:30:00.000+0000");
     expect(result).toMatchObject({ approved: false });
     expect(result.reason).toContain("description changed");
+  });
+
+  it("prints a short line of the first 12 hash characters", () => {
+    expect(approvalLine("VISP-12", HASH)).toBe(`SDLC approval VISP-12 spec ${HASH.slice(0, 12)}`);
+  });
+
+  it.each([
+    ["the short line", approvalLine("VISP-12", HASH)],
+    ["the full hash", `SDLC approval VISP-12 spec ${HASH}`],
+    ["spaces a paste brings around the line", `  ${approvalLine("VISP-12", HASH)} \n`],
+    ["a no-break space before the line", `\u00a0${approvalLine("VISP-12", HASH)}`],
+  ])("accepts %s", (_name, text) => {
+    expect(check([comment({ text })])).toMatchObject({ approved: true });
+  });
+
+  it("refuses a hash shorter than 12 characters", () => {
+    const text = `SDLC approval VISP-12 spec ${HASH.slice(0, 11)}`;
+    expect(check([comment({ text })]).approved).toBe(false);
+  });
+
+  it("lists every approval-like comment it passed over, with the reason", () => {
+    const bot = comment({ id: "c1", author: "bot-1", updateAuthor: "bot-1" });
+    const edited = comment({ id: "c2", updated: "2026-11-07T12:05:00.000+0000" });
+    const result = check([bot, edited]);
+    expect(result.approved).toBe(false);
+    expect(result.skipped).toEqual([
+      { comment: "c2", reason: expect.stringContaining("edited") },
+      { comment: "c1", reason: expect.stringContaining("not written by the owner") },
+    ]);
   });
 
   it("uses the newest valid approval when an older one went stale", () => {

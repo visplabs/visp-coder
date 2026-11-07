@@ -1,12 +1,13 @@
 // What /feature and /approve do. Both run only from a command the owner types (the commands
 // have disable-model-invocation, and the hook fires on UserPromptExpansion). /feature opens the
 // epic through the agent bot user; the owner's own Jira token is never stored. /approve
-// only reads: it shows the owner's words, the spec and its hash, and the exact line the owner
-// posts as a Jira comment to approve it. That comment, written by the owner's own account, is
+// only reads: it leads with whether the spec is approved and why not, then shows the owner's
+// words, the spec and the exact line the owner posts as a Jira comment to approve it. That comment, written by the owner's own account, is
 // the approval; see approval.mjs.
 
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { parse } from "yaml";
 import { approvalLine } from "./approval.mjs";
 import { specHash } from "./hash.mjs";
 import { newFeatureBody, ownerTextOf } from "./issue-body.mjs";
@@ -53,8 +54,17 @@ export async function approveCommand(args, cwd) {
     );
   }
   const hash = specHash(docs["intent@1"], docs["acceptance@1"]);
-  const status = (await pullFeature(feature, cwd))[0];
+  await pullFeature(feature, cwd);
+  const approval = parse(
+    readFileSync(join(featureDir(feature, cwd), "spec", "approval.yml"), "utf8"),
+  );
+  if (approval.approved && approval.hash === hash) {
+    return `${feature} is approved (comment ${approval.comment}). Tell the manager: Run ${feature}.`;
+  }
   return [
+    `${feature} is not approved yet: ${approval.reason}.`,
+    ...(approval.skipped ?? []).map((s) => `- comment ${s.comment}: ${s.reason}`),
+    "",
     `${feature}: ${epic.title}`,
     "",
     "Your words, as recorded:",
@@ -67,9 +77,9 @@ export async function approveCommand(args, cwd) {
     ...docs["acceptance@1"].criteria.map((c) => `- ${c.id} [${c.clauses.join(", ")}] ${c.expect}`),
     "",
     `Test cases: ${docs["test-cases@1"].cases.length}. Full spec: ${epic.url}`,
-    `Now: ${status}`,
     "",
-    "To approve exactly this, post this line as a comment on the epic from your own Jira account:",
+    "To approve exactly this spec, post this line as a new comment on the epic from your own",
+    "Jira account, and do not edit it after saving:",
     "",
     approvalLine(feature, hash),
   ].join("\n");
