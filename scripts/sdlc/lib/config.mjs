@@ -1,5 +1,6 @@
 // sdlc.config.json at the repository root: the Jira and Confluence ids, the owner's account,
-// loop bounds, the run budget, the Codex reviewer and each agent's model, effort and MCP tools.
+// loop bounds, the run budget, the Codex reviewer, the Sentry project QE runs report to and each
+// agent's model, effort and MCP tools.
 // Read fresh on every call, because hooks are short-lived processes.
 
 import { existsSync, readFileSync } from "node:fs";
@@ -29,7 +30,14 @@ const configSchema = z.object({
       inReview: z.string(),
       done: z.string(),
     }),
-    secret: z.object({ service: z.string(), account: z.string() }),
+    secret: z.object({
+      service: z.string(),
+      account: z.string(),
+      expires: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/, "expected a date like 2027-11-07")
+        .optional(),
+    }),
   }),
   confluence: z.object({
     spaceKey: z.string(),
@@ -48,6 +56,13 @@ const configSchema = z.object({
     codexHome: z.string().min(1),
     timeoutMinutes: z.number().positive(),
     fallbackAgent: z.string().min(1),
+  }),
+  sentry: z.object({
+    url: z.string().url(),
+    org: z.string().min(1),
+    project: z.string().min(1),
+    environment: z.string().min(1),
+    secret: z.object({ service: z.string(), account: z.string() }),
   }),
   agents: z.record(z.string(), agent),
 });

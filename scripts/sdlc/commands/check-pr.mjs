@@ -4,7 +4,7 @@
 import { parseArgs } from "node:util";
 import { checkPr } from "../lib/pr-check.mjs";
 
-export function run(args) {
+export async function run(args) {
   const { values, positionals } = parseArgs({
     args,
     options: { results: { type: "string" } },
@@ -12,9 +12,9 @@ export function run(args) {
   });
   const number = positionals[0];
   if (!/^\d+$/.test(number ?? "")) throw new Error("usage: sdlc check-pr <pull request number>");
-  const { status, lines } = checkPr(number, {
+  const { status, lines } = await checkPr(number, {
     resultsFile: values.results,
-    ownerLogin: process.env.SDLC_OWNER_LOGIN,
+    ownerId: process.env.SDLC_OWNER_ACCOUNT_ID,
   });
   for (const line of lines) console.log(line);
   return status === "fail" ? 1 : 0;
