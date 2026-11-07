@@ -2,6 +2,7 @@
 import functools
 import os
 import pathlib
+import re
 import shutil
 import signal
 import subprocess
@@ -99,3 +100,25 @@ def stop_recorded(run):
             stopped.append(pid)
         path.unlink(missing_ok=True)
     return stopped
+
+
+def _tag(value):
+    """A Sentry tag value VISP accepts (letters, digits, _ . : / -)."""
+    return re.sub(r"[^\w.:/-]", "_", str(value))[:200]
+
+
+def crash_env(run, arm, model):
+    """VISP's crash reporting for one run's worker.
+
+    Every run logs VISP's crashes to <run>/crashes.jsonl (runfacts.visp_crashes counts them), so a
+    run whose hooks crashed fail-open is visible in the report. With VISP_BENCH_SENTRY_DSN set,
+    they also reach Sentry's bench environment, tagged with the run, the arm and the model.
+    """
+    env = {
+        "VISP_CRASH_LOG": str(pathlib.Path(run) / "crashes.jsonl"),
+        "VISP_SENTRY_TAGS": f"bench_run={_tag(pathlib.Path(run).name)},arm={_tag(arm['arm'])},model={_tag(model)}",
+    }
+    dsn = os.environ.get("VISP_BENCH_SENTRY_DSN")
+    if dsn:
+        env.update({"VISP_SENTRY_DSN": dsn, "VISP_SENTRY_ENVIRONMENT": "bench"})
+    return env

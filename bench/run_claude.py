@@ -21,7 +21,7 @@ import pathlib
 import shutil
 import time
 
-from common import RUNS, claude_version, isolate, run_worker
+from common import RUNS, claude_version, crash_env, isolate, run_worker
 from runfacts import CLAUDE_PROJECTS, project_key
 
 MODEL = "claude-haiku-4-5-20251001"
@@ -110,6 +110,7 @@ def run_session(project, arm, prompt, model=None, timeout=2700, resume=None, eff
     """
     model, effort = worker(arm, model, effort)
     env = record_calls(worker_env(arm), pathlib.Path(project).parent / "claude-calls.jsonl")
+    env.update(crash_env(pathlib.Path(project).parent, arm, model))
     settings = memory_settings(arm, project)
     memory = memory_directory(project) if memory_setting(arm) == "auto" else None
     if memory:

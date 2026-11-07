@@ -267,6 +267,21 @@ def timing(paths):
             "editRefusals": refused["edit"], "doneRefusals": refused["done"], "otherRefusals": refused["other"]}
 
 
+def visp_crashes(run):
+    """VISP crashes the run logged (<run>/crashes.jsonl, common.crash_env), counted by command."""
+    path = pathlib.Path(run) / "crashes.jsonl"
+    counts = {}
+    if not path.is_file():
+        return counts
+    for line in path.read_text().splitlines():
+        try:
+            command = json.loads(line).get("command") or "other"
+        except ValueError:
+            command = "other"
+        counts[command] = counts.get(command, 0) + 1
+    return counts
+
+
 def _limit_in(text, source, whole=False):
     """A limit message in text, or None; whole=True only accepts text that starts with one."""
     text = str(text or "")

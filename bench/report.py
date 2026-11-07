@@ -70,7 +70,8 @@ from diffscope import run_scope
 from judge import CHECKLISTS, GAMES
 from presets import arm_title, mode_config, mode_difference, scalar, split_worker_modes, visp_build, worker_env
 from probe import has_probes, summarize as probe_summary
-from runfacts import final_project, invalid, is_finished, mark_if_invalid, sessions, timing, transcripts
+from runfacts import (final_project, invalid, is_finished, mark_if_invalid, sessions, timing, transcripts,
+                      visp_crashes)
 from scope_env import is_scope_task
 
 BENCH = pathlib.Path(__file__).resolve().parent
@@ -229,6 +230,7 @@ def facts(entry):
         "doneRefusals": split.get("doneRefusals"), "otherRefusals": split.get("otherRefusals"),
         "reviewed": reviewed, "unavailable": unavailable, "pictures": pictures,
         "cost": cost, "criticCost": critic_cost,
+        "vispCrashes": sum(visp_crashes(run).values()),
     }
 
 
