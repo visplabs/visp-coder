@@ -56,9 +56,25 @@ Source snapshots read the declared slice scopes, check inputs and control files 
 
 An execution is bound to the product source, the slice contract, the verifier inputs, the environment and the VISP runtime. For declared command verifiers on POSIX, the resolved executable's path and content are also recorded. Browser executables that resolve to the same file share an identity.
 
-Command output is streamed into bounded head and tail buffers. On POSIX, VISP owns and terminates the command process group on exit, timeout or cancellation; Windows currently terminates the direct child. Completed checks are saved individually, and an interrupted verify/done/accept can reuse current passing checks on retry. Timeouts are recorded as `timed-out`, separately from product assertion failures.
+Command output is streamed into bounded head and tail buffers. On POSIX, VISP owns and terminates the command process group on exit, timeout or cancellation; Windows ends the whole process tree with `taskkill /T /F` while its root runs, falling back to killing the shim. Completed checks are saved individually, and an interrupted verify/done/accept can reuse current passing checks on retry. Timeouts are recorded as `timed-out`, separately from product assertion failures.
 
 Verification and review history is append-only; current projections update in the same transaction. A result computed against a stale revision is saved to history without replacing the newer record.
+
+## Running commands
+
+`run()` in `src/core/exec.ts` runs commands. A command is an argv with no shell. A command string is first split by `parseCommand`, which refuses shell syntax such as pipes, `&&` and `$`.
+
+On POSIX the child starts in its own process group. On Windows, `.cmd` and `.bat` shims run through `cmd.exe`. The child gets the caller's environment extended with `env`, or only `env` when `replaceEnv` is set. Its stdin is ignored unless `input` is given; the input is then written and stdin is ended. Of each of stdout and stderr, VISP keeps the first 4 MiB and the last 4 MiB, with a truncation marker between them when more arrived.
+
+A non-zero exit is a result: `run` returns `exitCode`. A failure to start is an error (`COMMAND_FAILED`).
+
+`timeoutMs` defaults to `LIMITS.commandTimeoutMs`, 600 000 ms. `0` means no timeout. A negative or non-finite value is refused before the command starts.
+
+On timeout or abort, VISP sends SIGTERM to the process group and SIGKILL at most 200 ms later; it kills at once if the pipes close sooner. The result has exit code 1 and `timedOut` or `aborted` set.
+
+The same SIGTERM, then SIGKILL after at most 200 ms of draining, also follow the direct child's exit. A descendant that holds the pipes open cannot keep the run alive. The exit code is 1 on timeout or abort. Otherwise it is the child's own code, or 1 if a signal ended the child.
+
+Windows has no process groups. While the root is running, VISP runs `taskkill /T /F` on its tree. If taskkill cannot start or fails, it kills the shim. After the root has exited, it kills nothing.
 
 ## Telemetry
 
