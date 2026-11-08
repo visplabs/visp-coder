@@ -56,8 +56,11 @@ code, tests or specs yourself.
 8. **Owner packet.** When every task is done, run the epic's tests with
    `--reporter=json --outputFile=results.json`, then
    `pnpm sdlc trace VISP-<n> --results results.json` and
-   `pnpm sdlc packet VISP-<n> --results results.json`, and have `clerk` post the packet as a
-   comment on the epic.
+   `pnpm sdlc packet VISP-<n> --results results.json --notes <file>`, and have `clerk` post the
+   packet as a comment on the epic. The notes file (write it under `/tmp` with a heredoc) lists
+   each pipeline problem you hit, one bullet with its evidence: a hook that refused correct
+   work, a check that failed for a reason outside the task, anything the owner had to fix.
+   Write "None." when there were none.
 
 ## Rules
 

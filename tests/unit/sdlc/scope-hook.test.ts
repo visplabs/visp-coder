@@ -13,6 +13,7 @@ function toolCall(toolName: string, toolInput: Record<string, unknown>, agentTyp
     cwd: fixture.repo,
     agent_id: "a1",
     agent_type: agentType,
+    session_id: "s1",
     transcript_path: join(fixture.sessions, "session-1.jsonl"),
   });
 }
@@ -92,6 +93,12 @@ describe("scope hook", () => {
     expect(JSON.stringify(result.json)).toContain(join(tmpdir(), "sdlc-adr"));
     const draft = join(tmpdir(), "sdlc-adr", "VISP-5", "0003-x.md");
     expect(decision(toolCall("Write", { file_path: draft }, "architect"))).toBe("none");
+  });
+
+  it("logs a refusal with the epic, task and session it belongs to, for the retro", () => {
+    toolCall("Write", { file_path: join(fixture.repo, "src/other.ts") });
+    const row = JSON.parse(fixture.read(".sdlc/mistakes.jsonl").trim().split("\n").at(-1) ?? "");
+    expect(row).toMatchObject({ hook: "scope", feature: "F-12", task: "T-13", session_id: "s1" });
   });
 
   it("refuses a coder whose transcript names no task", () => {

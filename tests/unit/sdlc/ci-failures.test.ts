@@ -76,13 +76,29 @@ describe("sdlc ci-failures", () => {
       { name: "check", bucket: "fail", link: "https://ci/2" },
       { name: "lint", bucket: "pass", link: "https://ci/3" },
     ]);
+    writeFileSync(join(fixture.repo, "pr-109.json"), JSON.stringify({ headRefOid: "c9fcb773" }));
+    fixture.write(".sdlc/features/VISP-2/tasks/VISP-3/task.yml", "");
     const result = await ciFailures("109", "--task", "VISP-3");
     expect(result.status, result.stdout).toBe(0);
     expect(result.stdout).toContain("test (1) https://ci/1");
+    // The summary `check` fails whenever another job does; logging it too counted #113's one
+    // flake twice. The commit and run link let the retro tell a flake from a failure.
     expect(log()).toEqual([
-      expect.objectContaining({ hook: "ci", reason: "VISP-3 CI check test (1) failed on PR #109" }),
-      expect.objectContaining({ hook: "ci", reason: "VISP-3 CI check check failed on PR #109" }),
+      expect.objectContaining({
+        hook: "ci",
+        reason: "VISP-3 CI check test (1) failed on PR #109",
+        feature: "VISP-2",
+        task: "VISP-3",
+        commit: "c9fcb773",
+        link: "https://ci/1",
+      }),
     ]);
+  });
+
+  it("logs the summary check when it is the only failure", async () => {
+    setChecks([{ name: "check", bucket: "fail", link: "https://ci/2" }]);
+    await ciFailures("109", "--task", "VISP-3");
+    expect(log().map((entry) => entry.reason)).toEqual(["VISP-3 CI check check failed on PR #109"]);
   });
 
   it("prints the PR's new Sonar issues with file and line, and logs each rule for the retro", async () => {

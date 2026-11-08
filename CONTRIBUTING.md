@@ -80,7 +80,7 @@ The maintainer's agent workflow is recorded in [docs/adr/0001-agent-sdlc.md](doc
 | `pnpm sdlc pull VISP-12` | Copy epic VISP-12 into `.sdlc/features/VISP-12/`, read-only: the owner's words, the spec under `spec/`, whether the owner approved that exact spec (`spec/approval.yml`), and each task's `task.yml` and `ticket.yml` (status, link) |
 | `pnpm sdlc validate <file...>` | Check YAML files against the schema each names |
 | `pnpm sdlc trace VISP-12 [--results <vitest json>]` | Follow every clause to criteria, test cases and results; exit 1 on an error |
-| `pnpm sdlc packet VISP-12 [--results <vitest json>]` | Write the owner packet to `.sdlc/features/VISP-12/` |
+| `pnpm sdlc packet VISP-12 [--results <vitest json>] [--notes <file>]` | Write the owner packet to `.sdlc/features/VISP-12/`, with the manager's retro notes |
 | `pnpm sdlc jira show\|create-task\|move\|comment ...` | Jira as the agent bot user; only the `clerk` agent may write |
 | `pnpm sdlc review --task VISP-12/VISP-13 --worktree <dir>` | One inner-loop review round on Codex; only the `reviewer` agent runs it |
 | `pnpm sdlc sync-status VISP-12` | Move the epic's task tickets forward to match their PRs (In Review while open, Done once merged) and the epic to Done when every task is |

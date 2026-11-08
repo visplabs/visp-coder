@@ -10,6 +10,7 @@ import { resultsIndex, trace } from "../lib/trace.mjs";
 
 const TRACE_OPTIONS = {
   results: { type: "string" },
+  notes: { type: "string" },
   json: { type: "boolean", default: false },
 };
 
@@ -24,7 +25,7 @@ export function traceFeature(args) {
   const results = values.results
     ? resultsIndex(JSON.parse(readFileSync(values.results, "utf8")), repoRoot())
     : undefined;
-  return { feature, spec, report: trace(spec, results), json: values.json };
+  return { feature, spec, report: trace(spec, results), json: values.json, notes: values.notes };
 }
 
 export function run(args) {

@@ -1,7 +1,7 @@
 // Renders the owner packet: one page with each intent clause and its status, the problems the
 // trace found, what each stage reported, advisory findings, and the tokens spent.
 
-export function renderPacket({ feature, spec, hash, report, artifacts, invalid }) {
+export function renderPacket({ feature, spec, hash, report, artifacts, invalid, notes }) {
   const tokens = artifacts.reduce(
     (sum, artifact) =>
       sum + (artifact.usage?.input_tokens ?? 0) + (artifact.usage?.output_tokens ?? 0),
@@ -40,6 +40,10 @@ export function renderPacket({ feature, spec, hash, report, artifacts, invalid }
     ...orNone(artifacts.flatMap(advisoryLines)),
     "",
     `Usage: ${tokens.toLocaleString("en-US")} tokens across ${artifacts.length} stage reports.`,
+    "",
+    "## Retro notes",
+    "",
+    notes || "None given.",
     "",
   ].join("\n");
 }
