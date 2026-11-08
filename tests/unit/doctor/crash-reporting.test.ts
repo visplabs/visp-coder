@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -131,6 +131,22 @@ describe("crash reporting facts", () => {
       const log = join(dir, "missing", "crashes.jsonl");
       const facts = await readCrashReporting({ VISP_CRASH_LOG: log }, dir);
       expect(facts).toMatchObject({ crashLogSet: true, crashLogFolderWritable: false });
+    });
+
+    it("does not collapse .. before looking at the file system, as the writer does not", async () => {
+      // appendFileSync("<dir>/missing/../crashes.jsonl") fails: the OS walks into missing/.
+      const absolute = `${dir}/missing/../crashes.jsonl`;
+      expect(() => appendFileSync(absolute, "x")).toThrow();
+      for (const path of [absolute, "missing/../crashes.jsonl"]) {
+        const facts = await readCrashReporting({ VISP_CRASH_LOG: path }, dir);
+        expect(facts.crashLogFolderWritable).toBe(false);
+      }
+    });
+
+    it("walks .. through folders that exist", async () => {
+      mkdirSync(join(dir, "real"));
+      const facts = await readCrashReporting({ VISP_CRASH_LOG: "real/../crashes.jsonl" }, dir);
+      expect(facts.crashLogFolderWritable).toBe(true);
     });
 
     it("reports not writable when the parent is a regular file", async () => {

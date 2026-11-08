@@ -1,5 +1,5 @@
 import { access, constants, stat } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { dirname, isAbsolute, sep } from "node:path";
 import {
   crashLogPath,
   errorReportingDsn,
@@ -45,9 +45,18 @@ export async function readCrashReporting(
     crashLogSet: log !== undefined,
     ...(log === undefined
       ? {}
-      : { crashLogFolderWritable: await isWritableFolder(dirname(resolve(cwd, log))) }),
+      : { crashLogFolderWritable: await isWritableFolder(dirname(pathTheWriterOpens(log, cwd))) }),
     ...(dsnSet ? {} : { guidance: GUIDANCE }),
   };
+}
+
+/**
+ * The path appendFileSync gets, made absolute without normalising it. `resolve` would collapse
+ * `missing/..` before the file system is asked, so doctor would call writable a folder the
+ * writer cannot reach.
+ */
+function pathTheWriterOpens(log: string, cwd: string): string {
+  return isAbsolute(log) ? log : `${cwd}${sep}${log}`;
 }
 
 async function isWritableFolder(folder: string): Promise<boolean> {

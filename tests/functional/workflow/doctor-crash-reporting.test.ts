@@ -1,8 +1,9 @@
+import { spawnSync } from "node:child_process";
 import { chmodSync, mkdtempSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { TestProject } from "../support/project.js";
 
@@ -33,6 +34,7 @@ interface DoctorData {
   checks: { name: string; status: string; detail: string }[];
 }
 
+const CLI = resolve(process.cwd(), "dist/cli.js");
 const STAY_LOCAL = "Crash reports stay on this machine";
 const isRoot = process.getuid?.() === 0;
 
@@ -147,12 +149,16 @@ describe("doctor crash reporting", () => {
 
   it("prints no part of the DSN in any doctor output", () => {
     set("VISP_SENTRY_DSN", dsn());
-    const runs = [
-      project.run("doctor"),
-      project.run("doctor", "--json"),
-      project.run("doctor", "--settings"),
-    ];
+    // project.run drops stderr when the exit code is 0, so both streams are read here.
+    const runs = [["doctor"], ["doctor", "--json"], ["doctor", "--settings"]].map((args) =>
+      spawnSync("node", [CLI, "--project", project.root, ...args], {
+        cwd: project.root,
+        encoding: "utf8",
+        env: project.env(),
+      }),
+    );
     for (const run of runs) {
+      expect(run.status).toBe(0);
       for (const secret of [dsn(), "visp5secretkey", `127.0.0.1:${port}`, "424242"]) {
         expect(run.stdout).not.toContain(secret);
         expect(run.stderr).not.toContain(secret);
