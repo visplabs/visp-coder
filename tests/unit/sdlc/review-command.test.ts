@@ -75,7 +75,8 @@ const call = () =>
 describe("sdlc review", () => {
   beforeEach(() => {
     fixture = sdlcRepo();
-    fixture.git("update-ref", "refs/remotes/origin/chore/sdlc-atlassian", "HEAD");
+    const { baseBranch } = JSON.parse(readFileSync(join(fixture.repo, "sdlc.config.json"), "utf8"));
+    fixture.git("update-ref", `refs/remotes/origin/${baseBranch}`, "HEAD");
     writeFileSync(join(fixture.repo, "..", "fake-codex"), FAKE_CODEX);
     chmodSync(join(fixture.repo, "..", "fake-codex"), 0o755);
   });

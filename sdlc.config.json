@@ -1,6 +1,6 @@
 {
   "$comment": "Agent SDLC settings (CONTRIBUTING.md, Agent SDLC). Ids, not display names. Only the owner edits this file; the scope hook refuses every agent.",
-  "baseBranch": "chore/sdlc-atlassian",
+  "baseBranch": "develop",
   "owner": { "accountId": "70121:c2afbcea-4dab-468f-99ed-f959f08b036a" },
   "jira": {
     "site": "djkeshawa.atlassian.net",
