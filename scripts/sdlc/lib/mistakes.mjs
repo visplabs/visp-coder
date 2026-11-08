@@ -30,11 +30,10 @@ export function logMistake(event, hook, reason) {
 // The reason without the parts that change between repeats: keys, paths, hashes and numbers.
 function signature(reason) {
   return reason
-    .replace(/[A-Z][A-Z0-9]*-\d+/g, "KEY")
+    .replace(/(?<![A-Z0-9])[A-Z][A-Z0-9]*-\d+/g, "KEY")
     .replace(/[0-9a-f]{12,}/g, "HASH")
-    .replace(/\S*\/\S*/g, "PATH")
-    .replace(/\d+/g, "N")
     .split(/\s+/)
     .slice(0, 8)
+    .map((word) => (word.includes("/") ? "PATH" : word.replace(/\d+/g, "N")))
     .join(" ");
 }

@@ -20,15 +20,17 @@ export function bodyToAdf(body) {
     if (text) content.push({ type: "paragraph", content: [{ type: "text", text }] });
     paragraph = [];
   };
-  for (let i = 0; i < lines.length; i++) {
+  let i = 0;
+  while (i < lines.length) {
     const block = blockAt(lines, i);
-    if (!block) {
+    if (block) {
+      flush();
+      if (block.node) content.push(block.node);
+      i = block.end + 1;
+    } else {
       paragraph.push(lines[i]);
-      continue;
+      i += 1;
     }
-    flush();
-    if (block.node) content.push(block.node);
-    i = block.end;
   }
   flush();
   return { type: "doc", version: 1, content };
