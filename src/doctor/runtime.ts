@@ -2,6 +2,7 @@ import { run } from "../core/exec.js";
 import { requireRuntimeAgreement } from "../core/runtime-agreement.js";
 import { runtimeIdentity } from "../core/version.js";
 import { readInstallState } from "../harness/install-state.js";
+import { NO_ERROR_REPORTING_ENV } from "../telemetry/error-reporting.js";
 import type { WorkspaceState } from "../workflow/state.js";
 import type { Check } from "./checks.js";
 
@@ -44,6 +45,7 @@ export async function checkPathRuntime(state: WorkspaceState): Promise<Check> {
   const found = await run("visp", ["guard", "--handshake", "--json"], {
     cwd: state.paths.root,
     timeoutMs: 5_000,
+    env: NO_ERROR_REPORTING_ENV,
   });
   if (!found.ok || found.value.exitCode !== 0)
     return {

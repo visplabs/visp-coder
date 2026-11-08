@@ -1,11 +1,13 @@
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import {
   errorReportingDsn,
   errorReportingTags,
+  NO_ERROR_REPORTING_ENV,
   reportError,
+  runsDoctor,
   runTags,
 } from "../../../src/telemetry/error-reporting.js";
 
@@ -58,5 +60,55 @@ it("appends each crash to VISP_CRASH_LOG, with no Sentry DSN needed", async () =
   expect(entry.stack).toContain("Error: boom");
   await reportError(new Error("ignored"), {}, ["node", "/bin/visp", "guard"]);
   expect(readFileSync(log, "utf8").trim().split("\n")).toHaveLength(1);
+  rmSync(dir, { recursive: true, force: true });
+});
+
+it("recognises a doctor run, with global options before the command", () => {
+  const visp = ["node", "/bin/visp"];
+  expect(runsDoctor([...visp, "doctor"])).toBe(true);
+  expect(runsDoctor([...visp, "doctor", "--json", "--fix"])).toBe(true);
+  expect(runsDoctor([...visp, "--project", "/work/doctor", "doctor"])).toBe(true);
+  expect(runsDoctor([...visp, "--project=/work", "--json", "doctor"])).toBe(true);
+  expect(runsDoctor(visp)).toBe(false);
+  expect(runsDoctor([...visp, "guard", "doctor"])).toBe(false);
+  expect(runsDoctor([...visp, "--project", "doctor", "guard"])).toBe(false);
+  expect(runsDoctor([...visp, "--project"])).toBe(false);
+});
+
+it("blanks the DSN for child processes so they cannot send either", () => {
+  expect(errorReportingDsn({ ...process.env, ...NO_ERROR_REPORTING_ENV })).toBeUndefined();
+});
+
+it("leaves the SDK unloaded for doctor, so a malformed DSN is never echoed", async () => {
+  const marker = "not-a-dsn-visp5marker";
+  const complaint = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  try {
+    vi.resetModules();
+    const doctor = await import("../../../src/telemetry/error-reporting.js");
+    await doctor.startErrorReporting({ VISP_SENTRY_DSN: marker }, ["node", "visp", "doctor"]);
+    expect(complaint).not.toHaveBeenCalled();
+    // Still no SDK, so nothing is sent; the crash log is unaffected.
+    await expect(
+      doctor.reportError(new Error("boom"), {}, ["node", "visp", "doctor"]),
+    ).resolves.toBe(undefined);
+
+    vi.resetModules();
+    const other = await import("../../../src/telemetry/error-reporting.js");
+    await other.startErrorReporting({ VISP_SENTRY_DSN: marker }, ["node", "visp", "guard"]);
+    expect(complaint.mock.calls.flat().join(" ")).toContain(marker);
+  } finally {
+    complaint.mockRestore();
+    vi.resetModules();
+  }
+});
+
+it("still writes a doctor crash to VISP_CRASH_LOG", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "visp-crash-"));
+  const log = join(dir, "crashes.jsonl");
+  await reportError(new Error("doctor broke"), { VISP_CRASH_LOG: log }, ["node", "visp", "doctor"]);
+  expect(JSON.parse(readFileSync(log, "utf8"))).toMatchObject({
+    command: "doctor",
+    message: "doctor broke",
+  });
   rmSync(dir, { recursive: true, force: true });
 });

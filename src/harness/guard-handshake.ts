@@ -4,11 +4,16 @@ import { type CommandOutput, run } from "../core/exec.js";
 import { err, type Result } from "../core/result.js";
 import { requireRuntimeAgreement } from "../core/runtime-agreement.js";
 import { type RuntimeIdentity, runtimeIdentity } from "../core/version.js";
+import { NO_ERROR_REPORTING_ENV, runsDoctor } from "../telemetry/error-reporting.js";
 
 export type GuardHandshakeRunner = (
   file: string,
   args: readonly string[],
-  options: { readonly cwd: string; readonly timeoutMs?: number },
+  options: {
+    readonly cwd: string;
+    readonly timeoutMs?: number;
+    readonly env?: Record<string, string>;
+  },
 ) => Promise<Result<CommandOutput>>;
 
 interface GuardEnvelope {
@@ -30,6 +35,7 @@ export async function verifyGuardHandshake(
   root: string,
   runner: GuardHandshakeRunner = run,
   expected: RuntimeIdentity = runtimeIdentity(),
+  argv: readonly string[] = process.argv,
 ): Promise<Result<void>> {
   const found = await runner(
     process.execPath,
@@ -37,6 +43,8 @@ export async function verifyGuardHandshake(
     {
       cwd: root,
       timeoutMs: 5_000,
+      // Doctor never sends, so the children it starts must not either. Install's stay as they were.
+      ...(runsDoctor(argv) ? { env: NO_ERROR_REPORTING_ENV } : {}),
     },
   );
   if (!found.ok)
