@@ -152,7 +152,10 @@ function secret({ service, account }) {
       });
   const trimmed = value.trim();
   if (!trimmed.includes(":")) {
-    throw new Error(`the keyring entry ${service}/${account} must hold "email:token"`);
+    const source = command
+      ? `the secret SDLC_SECRET_CMD reads (${command})`
+      : `the keyring entry ${service}/${account}`;
+    throw new Error(`${source} must hold "email:token"`);
   }
   return trimmed;
 }

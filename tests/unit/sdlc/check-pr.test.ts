@@ -144,6 +144,16 @@ describe("sdlc check-pr", () => {
     expect(result.stdout).toContain("SDLC_OWNER_ACCOUNT_ID");
   });
 
+  it("names the CI secret, not the keyring, when it holds no email", async () => {
+    const result = await checkPr({
+      SDLC_SECRET_CMD: 'printf %s "$SDLC_JIRA_CI"',
+      SDLC_JIRA_CI: "token-only",
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).toContain("SDLC_JIRA_CI");
+    expect(result.stdout).not.toContain("keyring");
+  });
+
   it("fails when someone other than the owner approved", async () => {
     approve({ author: "visp-agent" });
     const result = await checkPr();
