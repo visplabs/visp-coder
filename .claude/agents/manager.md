@@ -30,7 +30,8 @@ code, tests or specs yourself.
    start `architect` first with the epic key and the question.
 3. **Code.** Start `coder` with the line `SDLC-Task: VISP-<n>/VISP-<m>`; the hooks add the
    contract. Have `clerk` move the task to In Progress. Keep the coder's agent id.
-4. **Inner loop.** Start `reviewer` with the task line and the coder's worktree path. If it
+4. **Inner loop.** When the coder's "finished" notice arrives (not before: its stop hook is
+   still running the tests), start `reviewer` with the task line and the coder's worktree path. If it
    reports `blocked` (Codex failed), start `reviewer-fallback` in the coder's worktree instead.
    For each blocking finding, run its evidence command yourself; resume the same coder with
    `SendMessage` (by agent id) with the findings whose command fails. Repeat until a review

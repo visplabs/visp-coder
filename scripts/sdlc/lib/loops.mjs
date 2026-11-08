@@ -22,11 +22,20 @@ export function turnRefusal(cwd, config, { feature, task, agentType }) {
     return `${feature} used its budget of ${config.budget.coderRunsPerEpic} coder runs; ask the owner`;
   }
   const { inner, verify, ci } = config.loops;
-  const { reviews, verifies } = reports(cwd, feature, task);
+  const { reviews, verifies, handoffs } = reports(cwd, feature, task);
   const turns = readJson(turnsPath(cwd, feature, task)).coderTurns ?? 0;
   const ceiling = inner.max + verify.max + ci.max;
   if (coder && turns >= ceiling) {
     return `${task} reached its ceiling of ${ceiling} coder turns; hand it to the owner`;
+  }
+  // The stop hook files a handoff only after its own test run passed, so a review or QE run
+  // started earlier would judge a head with no passing run behind it.
+  if (!coder && handoffs.length < turns) {
+    return (
+      `${task}'s coder has not handed off turn ${turns}: its stop hook is still checking the ` +
+      `report or refused it. Start ${agentType} after the coder's "finished" notice; if the ` +
+      `coder failed, stop and report to the owner`
+    );
   }
   if (agentType === "reviewer" && reviews.length >= inner.max) {
     return `${task} had ${inner.max} review rounds, the inner loop's maximum; hand it to the owner`;
@@ -73,6 +82,7 @@ function reports(cwd, feature, task) {
   return {
     reviews: mine.filter((a) => a.schema === "review@1"),
     verifies: mine.filter((a) => a.schema === "qe-report@1"),
+    handoffs: mine.filter((a) => a.schema === "handoff@1"),
   };
 }
 

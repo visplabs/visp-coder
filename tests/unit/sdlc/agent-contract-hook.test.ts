@@ -117,6 +117,19 @@ describe("agent contract hook", () => {
     expect(denial(spawnAgent("reviewer", "SDLC-Task: F-12/T-13"))).toContain("maximum");
   });
 
+  it("refuses review and QE runs until the task's coder has handed off its turn", () => {
+    // Pilot 2: the manager started reviewers while the coder's stop hook was still running
+    // the tests, so every packet said no run covered the head.
+    fixture.write(".sdlc/run/loops/F-12/T-13.json", '{"coderTurns":1}');
+    for (const agent of ["reviewer", "reviewer-fallback", "qe-verify"]) {
+      expect(denial(spawnAgent(agent, "SDLC-Task: F-12/T-13"))).toContain("has not handed off");
+    }
+    fixture.write(".sdlc/features/F-12/tasks/T-13/handoff-1.yml", handoff(1));
+    expect(denial(spawnAgent("reviewer", "SDLC-Task: F-12/T-13"))).toBe("");
+    fixture.write(".sdlc/run/loops/F-12/T-13.json", '{"coderTurns":2}');
+    expect(denial(spawnAgent("qe-verify", "SDLC-Task: F-12/T-13"))).toContain("turn 2");
+  });
+
   it("gives qe-spec the owner's words recorded by /feature", () => {
     fixture.write(".sdlc/features/F-12/owner-text.md", "Keep a work log.\nOne file per stop.");
     const result = spawnAgent("qe-spec", "Write the spec.\nSDLC-Feature: F-12");
@@ -138,3 +151,20 @@ describe("agent contract hook", () => {
     expect(result.stdout.trim()).toBe("");
   });
 });
+
+// A coder handoff of T-13 as the stop hook files it, after its checks passed.
+function handoff(round: number) {
+  return [
+    "schema: handoff@1",
+    `id: T-13-handoff-${round}`,
+    "feature: F-12",
+    "task: T-13",
+    "agent: coder",
+    `created_at: 2026-11-07T09:${String(round).padStart(2, "0")}:00Z`,
+    "status: done",
+    "body:",
+    "  summary: Writes worklog files.",
+    "  changed_files: [src/worklog.ts]",
+    "  tests: []",
+  ].join("\n");
+}
