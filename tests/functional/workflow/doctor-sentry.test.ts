@@ -35,6 +35,9 @@ describe("doctor and crash reporting", () => {
     capture = await startSentryCapture();
     project = await TestProject.create({ "src/a.ts": "export const a = 1;\n" });
     project.run("init", "--harness", "claude-code");
+    // Without an installed runtime doctor skips its handshake, and the tests below would
+    // pass without exercising the child processes they are about.
+    expect(project.run("install", "--harness", "claude-code").exitCode).toBe(0);
   });
 
   afterEach(async () => {
@@ -58,6 +61,15 @@ describe("doctor and crash reporting", () => {
 
   function doctor(dsn: string | undefined, cwd: string, ...args: string[]): Promise<AsyncRun> {
     return runAsync(process.execPath, [CLI, "doctor", ...args], { cwd, env: env(dsn) });
+  }
+
+  /** The row doctor writes after starting `visp guard --handshake` through PATH. */
+  async function pathVispDetail(dsn: string | undefined): Promise<string | undefined> {
+    const run = await doctor(dsn, project.root, "--json");
+    const report = JSON.parse(run.stdout) as {
+      data: { checks: { name: string; detail?: string }[] };
+    };
+    return report.data.checks.find((check) => check.name === "PATH visp")?.detail;
   }
 
   async function bareFolder(): Promise<string> {
@@ -89,7 +101,7 @@ describe("doctor and crash reporting", () => {
     it("sends nothing for doctor, while the SDK itself can reach the server", async () => {
       const run = await doctor(capture.dsn, project.root);
       expect(run.exitCode).not.toBe(2);
-      expect(run.stdout).toContain("PATH visp");
+      expect(await pathVispDetail(capture.dsn)).toContain("resolves the installed VISP build");
       expect(capture.requests).toHaveLength(0);
 
       await sendControlEvent(capture.dsn, env(capture.dsn));
@@ -98,7 +110,8 @@ describe("doctor and crash reporting", () => {
 
     it("sends nothing for doctor --json, --settings or --fix", async () => {
       for (const args of [["--json"], ["--settings"], ["--fix"]]) {
-        await doctor(capture.dsn, project.root, ...args);
+        const run = await doctor(capture.dsn, project.root, ...args);
+        expect(run.stdout).not.toContain("No installed runtime to compare");
       }
       expect(capture.requests).toHaveLength(0);
     });

@@ -55,9 +55,18 @@ describe("guard handshake", () => {
       {
         cwd: "/project",
         timeoutMs: 5_000,
-        env: { VISP_SENTRY_DSN: "" },
       },
     );
+  });
+
+  it("blanks the child's DSN when doctor starts the handshake, and only then", async () => {
+    const runner = vi.fn<GuardHandshakeRunner>(async () => command({}));
+    await verifyGuardHandshake("/project", runner, runtimeIdentity(), ["node", "visp", "doctor"]);
+    expect(runner.mock.calls[0]?.[2]).toMatchObject({ env: { VISP_SENTRY_DSN: "" } });
+
+    runner.mockClear();
+    await verifyGuardHandshake("/project", runner, runtimeIdentity(), ["node", "visp", "install"]);
+    expect(runner.mock.calls[0]?.[2]).not.toHaveProperty("env");
   });
 
   const expectedRuntime = {

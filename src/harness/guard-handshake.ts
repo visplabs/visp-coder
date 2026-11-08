@@ -4,7 +4,7 @@ import { type CommandOutput, run } from "../core/exec.js";
 import { err, type Result } from "../core/result.js";
 import { requireRuntimeAgreement } from "../core/runtime-agreement.js";
 import { type RuntimeIdentity, runtimeIdentity } from "../core/version.js";
-import { NO_ERROR_REPORTING_ENV } from "../telemetry/error-reporting.js";
+import { NO_ERROR_REPORTING_ENV, runsDoctor } from "../telemetry/error-reporting.js";
 
 export type GuardHandshakeRunner = (
   file: string,
@@ -35,6 +35,7 @@ export async function verifyGuardHandshake(
   root: string,
   runner: GuardHandshakeRunner = run,
   expected: RuntimeIdentity = runtimeIdentity(),
+  argv: readonly string[] = process.argv,
 ): Promise<Result<void>> {
   const found = await runner(
     process.execPath,
@@ -42,8 +43,8 @@ export async function verifyGuardHandshake(
     {
       cwd: root,
       timeoutMs: 5_000,
-      // Doctor runs this check; the child must not send a crash-reporting session of its own.
-      env: NO_ERROR_REPORTING_ENV,
+      // Doctor never sends, so the children it starts must not either. Install's stay as they were.
+      ...(runsDoctor(argv) ? { env: NO_ERROR_REPORTING_ENV } : {}),
     },
   );
   if (!found.ok)
