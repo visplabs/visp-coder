@@ -20,11 +20,11 @@ const COMMANDS = {
   packet,
   jira,
   review,
+  retro,
   "check-pr": checkPr,
   "ci-failures": ciFailures,
   "sync-status": syncStatus,
   "release-check": releaseCheck,
-  retro,
 };
 const USAGE = `usage: sdlc <command>
   pull VISP-12                      cache epic VISP-12: owner's words, spec, approval, tasks
@@ -33,11 +33,11 @@ const USAGE = `usage: sdlc <command>
   packet VISP-12 [--results <json>] write the owner packet
   jira show|create-task|move|comment ...  Jira as the agent account (writes: clerk only)
   review --task VISP-12/VISP-13 --worktree <dir>  one Codex review round (reviewer only)
+  retro VISP-12                     the epic's retro report from the local records (read-only)
   check-pr <n> [--results <json>]   CI gate: spec approved, the task's linked tests pass
   ci-failures <n> --task VISP-13    print a PR's failed checks and log them as mistakes
   sync-status VISP-12               move task tickets forward to match their pull requests
-  release-check <version>           fail if Sentry has new issues first seen in that release
-  retro VISP-12                     the epic's retro report from the local records (read-only)`;
+  release-check <version>           fail if Sentry has new issues first seen in that release`;
 
 const [name, ...args] = process.argv.slice(2);
 const command = COMMANDS[name];
