@@ -1,9 +1,11 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it, vi } from "vitest";
 import {
+  crashLogPath,
   errorReportingDsn,
+  errorReportingEnvironment,
   errorReportingTags,
   NO_ERROR_REPORTING_ENV,
   reportError,
@@ -111,4 +113,31 @@ it("still writes a doctor crash to VISP_CRASH_LOG", async () => {
     message: "doctor broke",
   });
   rmSync(dir, { recursive: true, force: true });
+});
+
+it("names the environment reports go to, production when VISP_SENTRY_ENVIRONMENT is blank", () => {
+  expect(errorReportingEnvironment({})).toBe("production");
+  expect(errorReportingEnvironment({ VISP_SENTRY_ENVIRONMENT: "" })).toBe("production");
+  expect(errorReportingEnvironment({ VISP_SENTRY_ENVIRONMENT: "   " })).toBe("production");
+  expect(errorReportingEnvironment({ VISP_SENTRY_ENVIRONMENT: " qe " })).toBe("qe");
+});
+
+it("names the crash log only when VISP_CRASH_LOG is not blank", () => {
+  expect(crashLogPath({})).toBeUndefined();
+  expect(crashLogPath({ VISP_CRASH_LOG: "" })).toBeUndefined();
+  expect(crashLogPath({ VISP_CRASH_LOG: "  " })).toBeUndefined();
+  expect(crashLogPath({ VISP_CRASH_LOG: " logs/crashes.jsonl " })).toBe("logs/crashes.jsonl");
+});
+
+it("writes nothing for a blank VISP_CRASH_LOG, the same case doctor reports as not set", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "visp-crash-"));
+  const previous = process.cwd();
+  process.chdir(dir);
+  try {
+    await reportError(new Error("boom"), { VISP_CRASH_LOG: "   " }, ["node", "/bin/visp", "guard"]);
+    expect(readdirSync(dir)).toEqual([]);
+  } finally {
+    process.chdir(previous);
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

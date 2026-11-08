@@ -6,6 +6,7 @@ import { withRuntimeDiagnostic } from "../../core/runtime-agreement.js";
 import { recoverStateLock } from "../../core/state-lock.js";
 import { runtimeIdentity } from "../../core/version.js";
 import { type Check, runChecks } from "../../doctor/checks.js";
+import { readCrashReporting, withCrashReporting } from "../../doctor/crash-reporting.js";
 import { applyFixes } from "../../doctor/fix.js";
 import { withValidationSmoke } from "../../doctor/validation.js";
 import { type ValidationLayer, validationLayerSchema } from "../../workflow/artifacts/common.js";
@@ -74,15 +75,18 @@ export function doctorCommand(): Command {
 
       // Re-check after repairing, so the verdict describes the state you leave in.
       const checked = repairs.length > 0 ? await runChecks(state.value) : first;
+      // Read once, after the re-check: --fix never sees this row and never creates folders.
+      const crashReporting = await readCrashReporting();
+      const withCrash = withCrashReporting(checked, crashReporting);
       const report =
         opts.checkCommand !== undefined
           ? await withValidationSmoke(
-              checked,
+              withCrash,
               opts.checkCommand,
               state.value.paths.root,
               layer.value,
             )
-          : checked;
+          : withCrash;
       const remaining = report.checks.filter((check) => check.recovery);
       const featureReadiness = await readDoctorFeatureReadiness(state.value, report.checks);
       const settings = await requestedSettings(state.value, opts.settings);
@@ -92,6 +96,7 @@ export function doctorCommand(): Command {
         ok({
           runtime: runtimeIdentity(),
           ...report,
+          crashReporting,
           repairs,
           featureReadiness,
           ...settings,
