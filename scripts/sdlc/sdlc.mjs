@@ -29,7 +29,7 @@ const USAGE = `usage: sdlc <command>
   validate <file...>                check YAML files against their schema
   trace VISP-12 [--results <json>]  follow clauses to criteria, tests and results
   packet VISP-12 [--results <json>] write the owner packet
-  jira show|create-task|move|comment ...  Jira as the agent account (writes: clerk only)
+  jira show|create-task|edit-task|move|comment ...  Jira as the agent account (writes: clerk only)
   review --task VISP-12/VISP-13 --worktree <dir>  one Codex review round (reviewer only)
   check-pr <n> [--results <json>]   CI gate: spec approved, the task's linked tests pass
   ci-failures <n> --task VISP-13    print a PR's failed checks and log them as mistakes

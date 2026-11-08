@@ -79,9 +79,9 @@ The maintainer's agent workflow is recorded in [docs/adr/0001-agent-sdlc.md](doc
 | --- | --- |
 | `pnpm sdlc pull VISP-12` | Copy epic VISP-12 into `.sdlc/features/VISP-12/`, read-only: the owner's words, the spec under `spec/`, whether the owner approved that exact spec (`spec/approval.yml`), and each task's `task.yml` and `ticket.yml` (status, link) |
 | `pnpm sdlc validate <file...>` | Check YAML files against the schema each names |
-| `pnpm sdlc trace VISP-12 [--results <vitest json>]` | Follow every clause to criteria, test cases and results; exit 1 on an error |
+| `pnpm sdlc trace VISP-12 [--results <vitest json>]` | Follow every clause to criteria, test cases and results, and check each criterion is in exactly one task; exit 1 on an error |
 | `pnpm sdlc packet VISP-12 [--results <vitest json>] [--notes <file>]` | Write the owner packet to `.sdlc/features/VISP-12/`, with the manager's retro notes |
-| `pnpm sdlc jira show\|create-task\|move\|comment ...` | Jira as the agent bot user; only the `clerk` agent may write |
+| `pnpm sdlc jira show\|create-task\|edit-task\|move\|comment ...` | Jira as the agent bot user; only the `clerk` agent may write. `edit-task` re-plans a task: before it starts anything but its epic and key may change; once In Progress its scope may only grow, by files or one folder; each change is commented on the ticket and listed in the owner packet |
 | `pnpm sdlc review --task VISP-12/VISP-13 --worktree <dir>` | One inner-loop review round on Codex; only the `reviewer` agent runs it |
 | `pnpm sdlc sync-status VISP-12` | Move the epic's task tickets forward to match their PRs (In Review while open, Done once merged) and the epic to Done when every task is |
 | `pnpm sdlc ci-failures <n> --task VISP-13` | Print a task PR's failed checks and new SonarQube Cloud issues, and log each to the mistake log; the manager runs it when CI fails |

@@ -26,6 +26,12 @@ code, tests or specs yourself.
 1. **Plan tasks.** Split the criteria into tasks a single agent can deliver and verify in one
    pull request: criteria, `scope.paths` as narrow as possible, track, size. Start `clerk` to
    create each task under the epic and move it to Ready, then pull. A task's id is its key.
+   After `pnpm sdlc trace VISP-<n>`, every criterion must be in exactly one task.
+   **Re-plan** when the plan is wrong (a hook refuses a path the task needs, a task is too big):
+   have `clerk` run `sdlc jira edit-task` with the full new `task@1` draft and why, then pull.
+   Before a task starts, anything but its epic and key may change; once In Progress, its scope
+   may only grow, by files or one folder like `docs/adr/**`; an In Review task needs a new task.
+   Every change is commented on the ticket and listed in the owner packet.
 2. **Design.** If a task changes architecture (new module boundary, public API, data format),
    start `architect` first with the epic key and the question.
 3. **Code.** Start `coder` with the line `SDLC-Task: VISP-<n>/VISP-<m>`; the hooks add the

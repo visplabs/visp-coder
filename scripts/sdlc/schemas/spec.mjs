@@ -90,6 +90,20 @@ export const taskSchema = z
     scope: z.object({ paths: z.array(scopePath).min(1) }).strict(),
     track: z.enum(["trivial", "standard", "complex"]),
     size: z.enum(["S", "M", "L"]),
+    // Each re-plan by the manager (sdlc jira edit-task): when, what scope it added or removed,
+    // and why. The owner packet lists them.
+    changes: z
+      .array(
+        z
+          .object({
+            at: z.string().min(1),
+            added: z.array(z.string()),
+            removed: z.array(z.string()),
+            why: z.string().min(1),
+          })
+          .strict(),
+      )
+      .optional(),
   })
   .strict();
 

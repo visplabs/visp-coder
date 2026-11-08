@@ -1,7 +1,16 @@
 // Renders the owner packet: one page with each intent clause and its status, the problems the
 // trace found, what each stage reported, advisory findings, and the tokens spent.
 
-export function renderPacket({ feature, spec, hash, report, artifacts, invalid, notes }) {
+export function renderPacket({
+  feature,
+  spec,
+  hash,
+  report,
+  artifacts,
+  invalid,
+  notes,
+  tasks = [],
+}) {
   const tokens = artifacts.reduce(
     (sum, artifact) =>
       sum + (artifact.usage?.input_tokens ?? 0) + (artifact.usage?.output_tokens ?? 0),
@@ -41,6 +50,10 @@ export function renderPacket({ feature, spec, hash, report, artifacts, invalid, 
     "",
     `Usage: ${tokens.toLocaleString("en-US")} tokens across ${artifacts.length} stage reports.`,
     "",
+    "## Scope changes",
+    "",
+    ...orNone(tasks.flatMap(changeLines)),
+    "",
     "## Retro notes",
     "",
     notes || "None given.",
@@ -71,4 +84,14 @@ function orNone(lines) {
 
 function cell(text) {
   return text.replace(/\|/g, "\\|").replace(/\n/g, " ");
+}
+
+function changeLines(task) {
+  return (task.changes ?? []).map((change) => {
+    const what = [
+      change.added.length > 0 ? `added ${change.added.join(", ")}` : "",
+      change.removed.length > 0 ? `removed ${change.removed.join(", ")}` : "",
+    ].filter(Boolean);
+    return `- ${task.task}: ${what.join("; ") || "changed criteria, track or size"} (${change.why})`;
+  });
 }

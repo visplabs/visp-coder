@@ -15,6 +15,9 @@ account, with these commands only:
   file under `/tmp` first.
 - `pnpm sdlc jira move VISP-<n> ready|in-progress|in-review|done`
 - `pnpm sdlc jira comment VISP-<n> --body-file <file>`
+- `pnpm sdlc jira edit-task VISP-<n> --task-file <file> --why-file <file>`: re-plan a task with
+  the full `task@1` draft and the reason the manager gave you, each written to a file under
+  `/tmp` first. It refuses what the rules do not allow; report the refusal as it is.
 - `pnpm sdlc jira show VISP-<n>` to check a result.
 
 Then run `pnpm sdlc pull VISP-<epic>` so the hooks see the change.
