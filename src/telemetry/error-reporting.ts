@@ -78,10 +78,39 @@ function recordCrash(cause: unknown, env: NodeJS.ProcessEnv, argv: readonly stri
   }
 }
 
-/** Loads the SDK only when reporting is on, so a normal run pays nothing for it. */
-export async function startErrorReporting(env: NodeJS.ProcessEnv = process.env): Promise<void> {
+/** Options that take a value, so the scan for the command skips that value. */
+const VALUE_OPTIONS = new Set(["--project"]);
+
+/**
+ * True when the command line runs `visp doctor`, whatever global options come first.
+ * Doctor reports on the machine's setup, so it must not send anything itself.
+ */
+export function runsDoctor(argv: readonly string[] = process.argv): boolean {
+  const args = argv.slice(2);
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i] ?? "";
+    if (VALUE_OPTIONS.has(arg)) i++;
+    else if (!arg.startsWith("-")) return arg === "doctor";
+  }
+  return false;
+}
+
+/**
+ * Environment for a `visp` child that doctor starts: an empty DSN turns sending off, so a
+ * handshake cannot send a session envelope for a check the user ran.
+ */
+export const NO_ERROR_REPORTING_ENV: Record<string, string> = { VISP_SENTRY_DSN: "" };
+
+/**
+ * Loads the SDK only when reporting is on, so a normal run pays nothing for it. Doctor never
+ * loads it: it has nothing to report, and the SDK would echo a malformed DSN to stderr.
+ */
+export async function startErrorReporting(
+  env: NodeJS.ProcessEnv = process.env,
+  argv: readonly string[] = process.argv,
+): Promise<void> {
   const dsn = errorReportingDsn(env);
-  if (!dsn || sentry) return;
+  if (!dsn || sentry || runsDoctor(argv)) return;
   sentry = await import("@sentry/node");
   sentry.init({
     dsn,

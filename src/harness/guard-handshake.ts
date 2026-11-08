@@ -4,11 +4,16 @@ import { type CommandOutput, run } from "../core/exec.js";
 import { err, type Result } from "../core/result.js";
 import { requireRuntimeAgreement } from "../core/runtime-agreement.js";
 import { type RuntimeIdentity, runtimeIdentity } from "../core/version.js";
+import { NO_ERROR_REPORTING_ENV } from "../telemetry/error-reporting.js";
 
 export type GuardHandshakeRunner = (
   file: string,
   args: readonly string[],
-  options: { readonly cwd: string; readonly timeoutMs?: number },
+  options: {
+    readonly cwd: string;
+    readonly timeoutMs?: number;
+    readonly env?: Record<string, string>;
+  },
 ) => Promise<Result<CommandOutput>>;
 
 interface GuardEnvelope {
@@ -37,6 +42,8 @@ export async function verifyGuardHandshake(
     {
       cwd: root,
       timeoutMs: 5_000,
+      // Doctor runs this check; the child must not send a crash-reporting session of its own.
+      env: NO_ERROR_REPORTING_ENV,
     },
   );
   if (!found.ok)

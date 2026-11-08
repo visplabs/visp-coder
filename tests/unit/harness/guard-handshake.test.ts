@@ -55,6 +55,7 @@ describe("guard handshake", () => {
       {
         cwd: "/project",
         timeoutMs: 5_000,
+        env: { VISP_SENTRY_DSN: "" },
       },
     );
   });

@@ -96,3 +96,20 @@ it("reports unidentified, malformed, and unavailable PATH commands", async () =>
     recovery: expect.stringContaining(installation.runtime.executable),
   });
 });
+
+it("starts the PATH visp handshake with crash reporting off", async () => {
+  const { state, installation } = await installed();
+  if (!project) throw new Error("Missing project");
+  const seen = join(project.workspace.root, "seen-dsn");
+  const bin = join(project.workspace.root, "runtime-bin");
+  await mkdir(bin, { recursive: true });
+  await writeFile(
+    join(bin, "visp"),
+    `#!${process.execPath}\nprocess.getBuiltinModule("node:fs").writeFileSync(${JSON.stringify(seen)}, JSON.stringify(process.env.VISP_SENTRY_DSN ?? null));\nprocess.stdout.write(${JSON.stringify(JSON.stringify({ data: { runtime: installation.runtime } }))});\n`,
+    { mode: 0o755 },
+  );
+  vi.stubEnv("PATH", `${bin}${delimiter}${process.env.PATH ?? ""}`);
+  vi.stubEnv("VISP_SENTRY_DSN", "http://key@127.0.0.1:9/1");
+  expect(await checkPathRuntime(state)).toMatchObject({ status: "ok" });
+  expect(JSON.parse(await readFile(seen, "utf8"))).toBe("");
+});
