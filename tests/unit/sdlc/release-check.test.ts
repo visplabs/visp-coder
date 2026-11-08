@@ -13,10 +13,14 @@ let requests: { url: URL; auth: string }[] = [];
 
 function startSentry() {
   sentry = createServer((request, response) => {
-    requests.push({
-      url: new URL(request.url ?? "", "http://x"),
-      auth: request.headers.authorization ?? "",
-    });
+    const url = new URL(request.url ?? "", "http://x");
+    requests.push({ url, auth: request.headers.authorization ?? "" });
+    // Sentry's project issue list takes only these stats periods and answers 400 to any other.
+    if (!["", "24h", "14d"].includes(url.searchParams.get("statsPeriod") ?? "")) {
+      response.writeHead(400, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ detail: "Invalid stats_period" }));
+      return;
+    }
     response.writeHead(answer.status, { "Content-Type": "application/json" });
     response.end(JSON.stringify(answer.status === 200 ? answer.issues : { detail: "down" }));
   });

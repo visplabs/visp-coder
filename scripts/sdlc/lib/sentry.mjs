@@ -8,9 +8,9 @@ import { execFileSync } from "node:child_process";
 
 export async function newIssuesForRelease(sentry, version) {
   const base = process.env.SDLC_SENTRY_URL ?? sentry.url;
+  // No statsPeriod: on this endpoint it only picks the stats buckets (24h or 14d), not a range.
   const params = new URLSearchParams({
     query: `is:unresolved firstRelease:visp-coder@${version}`,
-    statsPeriod: "90d",
     limit: "100",
   });
   for (const environment of sentry.environments) params.append("environment", environment);
