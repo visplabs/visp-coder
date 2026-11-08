@@ -4,7 +4,7 @@ import { promptEntry, runHook, type SdlcRepo, sdlcRepo } from "./support/sdlc-re
 
 let fixture: SdlcRepo;
 
-function toolCall(toolName: string, toolInput: Record<string, unknown>, agentType = "coder-m") {
+function toolCall(toolName: string, toolInput: Record<string, unknown>, agentType = "coder") {
   return runHook("scope.mjs", {
     hook_event_name: "PreToolUse",
     tool_name: toolName,
@@ -67,7 +67,27 @@ describe("scope hook", () => {
     expect(decision(toolCall("Write", { file_path: "src/worklog.ts" }))).toBe("deny");
   });
 
-  it("leaves non-coder agents and the main session alone", () => {
+  it("leaves non-coder agents and the main session alone outside SDLC state", () => {
     expect(decision(toolCall("Write", { file_path: "biome.json" }, "reviewer"))).toBe("none");
+    expect(decision(toolCall("Write", { file_path: "sdlc.config.json" }, ""))).toBe("none");
+  });
+
+  it("keeps every agent away from SDLC state: settings, config, hooks and .sdlc", () => {
+    const state = [
+      ".claude/settings.local.json",
+      "sdlc.config.json",
+      "scripts/sdlc/hooks/scope.mjs",
+      join(fixture.repo, ".sdlc/run/agents/a1.json"),
+    ];
+    for (const agent of ["manager", "clerk", "reviewer", "qe-verify", "architect"]) {
+      for (const path of state) {
+        expect(decision(toolCall("Write", { file_path: path }, agent)), `${agent} ${path}`).toBe(
+          "deny",
+        );
+      }
+      const command = `echo '{}' > ${join(fixture.repo, ".sdlc/run/loops.json")}`;
+      expect(decision(toolCall("Bash", { command }, agent)), agent).toBe("deny");
+    }
+    expect(decision(toolCall("Edit", { file_path: "sdlc.config.json" }))).toBe("deny");
   });
 });

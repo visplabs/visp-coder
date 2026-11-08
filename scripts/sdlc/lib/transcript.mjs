@@ -55,6 +55,25 @@ export function workMarker(entries) {
   return undefined;
 }
 
+// Claude Code may run SubagentStop before the transcript holds the agent's last lines, and a
+// subagent that handed back its report cannot be resumed by a refusal. So while no yaml report
+// is in sight, the transcript is read again for up to SDLC_TRANSCRIPT_WAIT_MS (default 3 s).
+export async function settledTranscript(event) {
+  const waitMs = Number(process.env.SDLC_TRANSCRIPT_WAIT_MS ?? 3000);
+  const deadline = Date.now() + waitMs;
+  let entries = readTranscript(findAgentTranscript(event));
+  while (
+    !REPORT.test(finalReport(entries, event.last_assistant_message)) &&
+    Date.now() < deadline
+  ) {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    entries = readTranscript(findAgentTranscript(event));
+  }
+  return entries;
+}
+
+const REPORT = /```ya?ml/;
+
 // Since Claude Code 2.1.271 a subagent may report through SubagentHandback; its report is that
 // call's `message`, and the final assistant text is only a closing line.
 export function finalReport(entries, lastMessage) {

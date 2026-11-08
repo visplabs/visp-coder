@@ -1,19 +1,21 @@
 #!/usr/bin/env node
 // Claude Code WorktreeCreate hook. Claude Code's default worktree starts from the remote's
-// default branch (main); topic work here starts from develop. This hook fetches origin, adds
-// .claude/worktrees/<name> on a new branch sdlc/<name> from origin/<SDLC_BASE, default develop>,
+// default branch (main); SDLC work starts from sdlc.config.json's baseBranch, the same branch
+// the stop hook diffs against. This hook fetches origin, adds .claude/worktrees/<name> on a new
+// branch sdlc/<name> from origin/<baseBranch> (SDLC_BASE overrides it),
 // installs and builds, and prints the path as its last line. It replaces git's default for every
 // worktree Claude Code creates, so it is registered only in the owner's settings.local.json.
 
 import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
+import { loadConfig } from "../lib/config.mjs";
 import { readEvent } from "../lib/hook-io.mjs";
 
 const event = await readEvent({ ownerOnly: false });
 const name = String(event.name ?? "");
 if (!/^[A-Za-z0-9._-]+$/.test(name)) fail(`unexpected worktree name "${name}"`);
 
-const base = process.env.SDLC_BASE ?? "develop";
+const base = process.env.SDLC_BASE ?? baseBranch();
 const main = dirname(
   capture("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], event.cwd),
 );
@@ -41,4 +43,12 @@ function capture(command, args, cwd) {
 function fail(message) {
   console.error(`sdlc worktree: ${message}`);
   process.exit(1);
+}
+
+function baseBranch() {
+  try {
+    return loadConfig(event.cwd).baseBranch;
+  } catch {
+    return "develop";
+  }
 }

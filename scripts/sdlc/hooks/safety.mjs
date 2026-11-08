@@ -4,6 +4,7 @@
 // agents leave them to the owner. It does nothing unless SDLC_OWNER=1, which the owner sets in
 // .claude/settings.local.json; other contributors to this repository are unaffected.
 
+import { logMistake } from "../lib/mistakes.mjs";
 import { refusal } from "../lib/safety-rules.mjs";
 
 if (process.env.SDLC_OWNER !== "1") process.exit(0);
@@ -18,8 +19,13 @@ try {
 }
 if (event.tool_name !== "Bash") process.exit(0);
 
-const reason = refusal(String(event.tool_input?.command ?? ""), event.cwd ?? process.cwd());
+const reason = refusal(
+  String(event.tool_input?.command ?? ""),
+  event.cwd ?? process.cwd(),
+  event.agent_type,
+);
 if (reason) {
+  logMistake(event, "safety", `this command ${reason}`);
   console.error(`sdlc safety: this command ${reason}. Leave it to the owner to run.`);
   process.exit(2);
 }

@@ -109,8 +109,8 @@ jobs:
           path: dist/
           retention-days: 7
 
-  # Advisory: one coverage report of src/ (coverage/merged/lcov.info) for review and, later, Sonar.
-  # Not part of `check`.
+  # One coverage report of src/ (coverage/merged/lcov.info) for review and for the `sonar` job,
+  # which `check` waits for.
   coverage:
     needs: test
     runs-on: ubuntu-latest
@@ -134,6 +134,31 @@ jobs:
           name: coverage-report
           path: coverage/merged/
           retention-days: 14
+
+  # SonarQube Cloud: analyses the code with the merged coverage (sonar-project.properties) and, on a
+  # pull request, fails when the new code fails the quality gate. Without SONAR_TOKEN (a fork, or
+  # before the owner adds it) it says so and passes.
+  sonar:
+    needs: coverage
+    runs-on: ubuntu-latest
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    steps:
+      - if: env.SONAR_TOKEN == ''
+        run: echo "::notice::SONAR_TOKEN is not set; SonarQube Cloud analysis skipped"
+      - if: env.SONAR_TOKEN != ''
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - if: env.SONAR_TOKEN != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/merged
+      - if: env.SONAR_TOKEN != ''
+        uses: SonarSource/sonarqube-scan-action@v5
+        with:
+          args: -Dsonar.qualitygate.wait=true
 
   browser:
     runs-on: ubuntu-latest
@@ -182,7 +207,7 @@ jobs:
   check:
     if: always()
     needs:
-      [trust-boundary, static, test, browser, qualification, trust-coverage, package]
+      [trust-boundary, static, test, browser, qualification, trust-coverage, package, sonar]
     runs-on: ubuntu-latest
     permissions:
       actions: read

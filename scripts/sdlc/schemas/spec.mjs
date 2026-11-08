@@ -4,8 +4,11 @@
 
 import { z } from "zod";
 
-export const featureId = z.string().regex(/^F-\d+$/, "expected F-<feature issue number>");
-export const taskId = z.string().regex(/^T-\d+$/, "expected T-<task issue number>");
+// A Jira issue key (VISP-12). F-12 and T-13, the GitHub issue form, still match until CI reads
+// Jira.
+export const workKey = /^[A-Z][A-Z0-9]*-\d+$/;
+export const featureId = z.string().regex(workKey, "expected the epic's Jira key, like VISP-12");
+export const taskId = z.string().regex(workKey, "expected the task's Jira key, like VISP-13");
 export const clauseId = z.string().regex(/^I-\d{2,}$/, "expected I-01 style id");
 export const criterionId = z.string().regex(/^AC-\d{2,}$/, "expected AC-01 style id");
 export const testCaseId = z.string().regex(/^TC-\d{2,}$/, "expected TC-01 style id");
@@ -79,5 +82,17 @@ export const taskSchema = z
     scope: z.object({ paths: z.array(z.string().min(1)).min(1) }).strict(),
     track: z.enum(["trivial", "standard", "complex"]),
     size: z.enum(["S", "M", "L"]),
+  })
+  .strict();
+
+// The tests that cover a task's test cases, kept in the task's Jira issue (never the epic, whose
+// edits would void the owner's approval). The stop hook writes them from the coder's handoff and
+// qe-verify's report; the CI gate and the trace read them over the spec's own links.
+export const testLinksSchema = z
+  .object({
+    schema: z.literal("test-links@1"),
+    feature: featureId,
+    task: taskId,
+    links: z.array(z.object({ case: testCaseId, test: z.string().min(1) }).strict()),
   })
   .strict();

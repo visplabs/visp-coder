@@ -2,7 +2,7 @@
 // the envelope from its own input and the transcript, so no envelope field is self-reported.
 
 import { z } from "zod";
-import { clauseId, criterionId, featureId, taskId, testCaseId } from "./spec.mjs";
+import { clauseId, featureId, taskId, testCaseId } from "./spec.mjs";
 
 const envelope = z.object({
   id: z.string().min(1),
@@ -12,6 +12,11 @@ const envelope = z.object({
   agent_id: z.string().min(1).optional(),
   model: z.string().min(1).optional(),
   effort: z.string().min(1).optional(),
+  // The commit the report covers: the coder's head at handoff, the head the reviewer saw.
+  commit: z
+    .string()
+    .regex(/^[0-9a-f]{40}$/)
+    .optional(),
   created_at: z.string().datetime({ offset: true }),
   intent_hash: z
     .string()
@@ -40,7 +45,7 @@ export const handoffSchema = artifact(
     .object({
       summary: z.string().min(1),
       changed_files: z.array(z.string().min(1)),
-      tests: z.array(z.object({ criterion: criterionId, test: z.string().min(1) }).strict()),
+      tests: z.array(z.object({ case: testCaseId, test: z.string().min(1) }).strict()),
       commands: z.array(command).optional(),
       notes: z.string().optional(),
     })
@@ -103,10 +108,11 @@ export const qeReportSchema = artifact(
             id: testCaseId,
             result: z.enum(["pass", "fail", "skipped"]),
             evidence: z.string().optional(),
+            test: z.string().min(1).optional(),
           })
           .strict(),
       ),
-      sentry_events: z.number().int().nonnegative().optional(),
+      crashes: z.number().int().nonnegative().optional(),
     })
     .strict(),
 );

@@ -1,53 +1,51 @@
-// The CI gate for a task pull request. The PR names its task with a "Task: #<n>" line; the task
-// sub-issue names its feature. The gate passes only when the owner's newest approval comment is
-// unedited, newer than the last edit of the feature issue and carries the hash of the spec as it
-// is now, and every test case of the task links a test that passed. A PR that names no task is
-// skipped, so dependency bumps and outside contributions are not blocked.
+// The CI gate for a task pull request. The PR names its Jira task with a "Task: VISP-<n>" line;
+// the task's task@1 block names its epic, and its test-links@1 block the tests the stop hook
+// checked for its test cases. The gate passes only when the owner approved the epic's
+// spec as it stands (approval.mjs: the owner's own unedited comment, newer than the last
+// description change, carrying the current hash) and every test case of the task links a test
+// that passed. The owner's account id comes from the environment (a repository variable in CI),
+// never from the PR's sdlc.config.json. A PR from an agent branch (sdlc/...) must name a task;
+// any other PR that names none is skipped, so dependency bumps and outside contributions pass.
 
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { gh, ghJson } from "./gh.mjs";
+import { checkApproval } from "./approval.mjs";
+import { ghJson } from "./gh.mjs";
 import { specHash } from "./hash.mjs";
 import { ownerTextOf } from "./issue-body.mjs";
+import { jiraClient } from "./jira.mjs";
 import { repoRoot } from "./paths.mjs";
 import { specDocuments, taskDocument } from "./spec-store.mjs";
+import { applyLinks, linksOf } from "./test-links.mjs";
 import { resultsIndex, traceTask } from "./trace.mjs";
 import { yamlBlocks } from "./yaml-blocks.mjs";
 
-const TASK_TRAILER = /^Task: #(\d+)\s*$/m;
-const APPROVAL_MARK = "<!-- sdlc:approval -->";
-const FEATURE_QUERY = `query($owner: String!, $name: String!, $number: Int!) {
-  repository(owner: $owner, name: $name) {
-    issue(number: $number) {
-      body createdAt lastEditedAt
-      comments(last: 100) { nodes { body createdAt lastEditedAt author { login } } }
-    }
-  }
-}`;
+const TASK_TRAILER = /^Task: ([A-Z][A-Z0-9]*-\d+)\s*$/m;
+const AGENT_BRANCH = "sdlc/";
 
-export function checkPr(number, { resultsFile, ownerLogin, cwd = process.cwd() }) {
-  const pr = ghJson(["pr", "view", String(number), "--json", "body,commits"]);
+export async function checkPr(number, { resultsFile, ownerId, cwd = process.cwd() }) {
+  const pr = ghJson(["pr", "view", String(number), "--json", "body,commits,headRefName"]);
   const texts = [
     pr.body ?? "",
     ...(pr.commits ?? []).map((c) => `${c.messageHeadline ?? ""}\n${c.messageBody ?? ""}`),
   ];
-  const taskNumber = texts.map((text) => text.match(TASK_TRAILER)?.[1]).find(Boolean);
-  if (!taskNumber) {
-    return { status: "skipped", lines: [`PR #${number} names no task ("Task: #<n>"); skipped`] };
+  const key = texts.map((text) => text.match(TASK_TRAILER)?.[1]).find(Boolean);
+  if (!key) return untracked(number, pr.headRefName ?? "");
+  if (!ownerId) {
+    throw new Error("set SDLC_OWNER_ACCOUNT_ID (a repository variable in CI) to the owner's id");
   }
-  if (!ownerLogin)
-    throw new Error("set SDLC_OWNER_LOGIN (a repository variable in CI) to the owner's login");
-  const task = readTask(taskNumber);
-  const issue = readFeature(task.feature);
-  const docs = specDocuments(issue.body ?? "", task.feature);
+  const jira = jiraClient(cwd);
+  const { task, links } = await readTask(jira, key);
+  const epic = await jira.readIssue(task.feature);
+  const docs = specDocuments(epic.body ?? "", task.feature);
   const lines = [`PR #${number} delivers ${task.feature}/${task.task}`];
-  const problems = specProblems(issue, docs, ownerLogin, task.feature);
+  const problems = await specProblems(jira, epic, docs, ownerId, task.feature);
   const spec = {
     intent: docs["intent@1"],
     acceptance: docs["acceptance@1"],
-    testCases: docs["test-cases@1"],
+    testCases: { ...docs["test-cases@1"], cases: applyLinks(docs["test-cases@1"].cases, links) },
   };
   const report = traceTask(spec, task, linkedResults(spec, task, resultsFile, cwd));
   problems.push(
@@ -60,63 +58,35 @@ export function checkPr(number, { resultsFile, ownerLogin, cwd = process.cwd() }
   return { status: "fail", lines: [...lines, ...problems.map((problem) => `error ${problem}`)] };
 }
 
-function readTask(number) {
-  const issue = ghJson(["issue", "view", number, "--json", "title,body,updatedAt,url"]);
+function untracked(number, branch) {
+  if (branch.startsWith(AGENT_BRANCH)) {
+    const why = `${branch} is an agent branch; its PR must name its task ("Task: VISP-<n>")`;
+    return { status: "fail", lines: [`PR #${number}: ${why}`] };
+  }
+  return { status: "skipped", lines: [`PR #${number} names no task ("Task: VISP-<n>"); skipped`] };
+}
+
+async function readTask(jira, key) {
+  const issue = await jira.readIssue(key);
   const block = yamlBlocks(issue.body ?? "").find((doc) => doc.schema === "task@1");
-  if (!block) throw new Error(`task issue #${number} has no task@1 block`);
-  return taskDocument(issue.body, block.feature, Number(number));
+  if (!block) throw new Error(`task ${key} has no task@1 block`);
+  const task = taskDocument(issue.body, block.feature, key);
+  return { task, links: linksOf(issue.body, task.feature, key).links };
 }
 
-function readFeature(feature) {
-  const slug =
-    process.env.GITHUB_REPOSITORY ??
-    ghJson(["repo", "view", "--json", "nameWithOwner"]).nameWithOwner;
-  const [owner, name] = slug.split("/");
-  const result = JSON.parse(
-    gh([
-      "api",
-      "graphql",
-      "-f",
-      `query=${FEATURE_QUERY}`,
-      "-F",
-      `owner=${owner}`,
-      "-F",
-      `name=${name}`,
-      "-F",
-      `number=${feature.slice(2)}`,
-    ]),
-  );
-  const issue = result.data?.repository?.issue;
-  if (!issue) throw new Error(`feature issue for ${feature} not found`);
-  return issue;
-}
-
-function specProblems(issue, docs, ownerLogin, feature) {
-  if (docs["intent@1"].owner_text.trim() !== (ownerTextOf(issue.body) ?? "").trim()) {
-    return ["intent@1 owner_text differs from the owner's words in the feature issue"];
+async function specProblems(jira, epic, docs, ownerId, feature) {
+  if (docs["intent@1"].owner_text.trim() !== (ownerTextOf(epic.body) ?? "").trim()) {
+    return ["intent@1 owner_text differs from the owner's words in the epic"];
   }
-  const approvals = issue.comments.nodes
-    .filter(
-      (c) => c.author?.login === ownerLogin && c.body.includes(APPROVAL_MARK) && !c.lastEditedAt,
-    )
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-  const latest = approvals.at(-1);
-  if (!latest)
-    return [`no approval by ${ownerLogin} on ${feature}: the owner runs /approve ${feature}`];
-  const edited = issue.lastEditedAt ?? issue.createdAt;
-  if (latest.createdAt < edited) {
-    return [
-      `the spec was edited after the last approval (${edited}); the owner runs /approve ${feature} again`,
-    ];
-  }
-  const approved = latest.body.match(/Spec hash: `([0-9a-f]{64})`/)?.[1];
-  const hash = specHash(docs["intent@1"], docs["acceptance@1"]);
-  if (approved !== hash) {
-    return [
-      `the spec hash ${hash.slice(0, 12)} does not match the approved hash ${String(approved).slice(0, 12)}`,
-    ];
-  }
-  return [];
+  const approval = checkApproval({
+    feature,
+    hash: specHash(docs["intent@1"], docs["acceptance@1"]),
+    ownerId,
+    comments: await jira.comments(feature),
+    bodyChangedAt: await jira.bodyChangedAt(feature),
+  });
+  if (approval.approved) return [];
+  return [`${approval.reason}; the owner runs /approve ${feature} and posts the line it prints`];
 }
 
 // Results from --results, or from running the task's linked test files with vitest.

@@ -1,16 +1,18 @@
 name: sdlc-trace
 
 # The agent SDLC gate for task pull requests (CONTRIBUTING.md, "Agent SDLC"). A PR whose body or
-# commits say "Task: #<n>" passes only when the owner approved the feature's spec as it stands
-# and every test case of the task links a test that passes. Other PRs are skipped. It runs on
-# `pull_request`, never `pull_request_target`, so a fork's code never sees a write token.
+# commits say "Task: VISP-<n>" passes only when the owner approved the epic's spec in Jira as it
+# stands and every test case of the task links a test that passes. A PR from an agent branch
+# (sdlc/...) must name its task; other PRs that name none are skipped. Jira is read with the
+# read-only visp-ci key (secret SDLC_JIRA_CI, "email:token"); the owner's account id comes from
+# the repository variable SDLC_OWNER_ACCOUNT_ID, never from the PR. It runs on `pull_request`,
+# never `pull_request_target`, so a fork's code never sees a write token or the Jira key.
 on:
   pull_request:
     types: [opened, synchronize, reopened, edited]
 
 permissions:
   contents: read
-  issues: read
   pull-requests: read
 
 concurrency:
@@ -27,5 +29,7 @@ jobs:
       - name: Spec approved and the task's tests pass
         env:
           GH_TOKEN: ${{ github.token }}
-          SDLC_OWNER_LOGIN: ${{ vars.SDLC_OWNER_LOGIN }}
+          SDLC_OWNER_ACCOUNT_ID: ${{ vars.SDLC_OWNER_ACCOUNT_ID }}
+          SDLC_JIRA_CI: ${{ secrets.SDLC_JIRA_CI }}
+          SDLC_SECRET_CMD: printf %s "$SDLC_JIRA_CI"
         run: pnpm sdlc check-pr ${{ github.event.pull_request.number }}

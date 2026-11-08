@@ -104,11 +104,11 @@ describe("sdlc schemas", () => {
     const handoff = {
       ...envelope,
       schema: "handoff@1",
-      agent: "coder-m",
+      agent: "coder",
       body: {
         summary: "Adds the worklog writer",
         changed_files: ["scripts/sdlc/lib/worklog.mjs"],
-        tests: [{ criterion: "AC-01", test: "tests/unit/sdlc/worklog.test.ts > writes one file" }],
+        tests: [{ case: "TC-01", test: "tests/unit/sdlc/worklog.test.ts > writes one file" }],
       },
     };
     expect(errorsOf(handoff)).toEqual([]);

@@ -1,5 +1,7 @@
 // What a coder agent may change: paths inside its task's scope, never the files that define the
 // SDLC, CI, lint, tests or packages, and nothing outside the repository but temporary files.
+// Every other agent may not change SDLC state: settings, agent definitions, hooks, the config
+// and the shared .sdlc/ folder, where loop counters and contracts live.
 
 import { tmpdir } from "node:os";
 import { basename, relative, resolve, sep } from "node:path";
@@ -18,10 +20,23 @@ const PROTECTED = [
   "package.json",
   "pnpm-lock.yaml",
   "pnpm-workspace.yaml",
+  "sdlc.config.json",
+  ".sdlc/**",
   "tsconfig*.json",
   "tsup*.config.ts",
   "vitest*.config.ts",
 ];
+
+const STATE = [".claude/**", "scripts/sdlc/**", "sdlc.config.json", ".sdlc/**"];
+
+export function stateRefusal(root, cwd, path, sdlcDir) {
+  const absolute = resolve(cwd, path);
+  const rel = relative(root, absolute).split(sep).join("/");
+  const inSdlc = !relative(sdlcDir, absolute).startsWith("..");
+  return inSdlc || matchesAny(rel, STATE)
+    ? `${path} is SDLC state; only the owner and the sdlc commands change it`
+    : undefined;
+}
 
 export function pathRefusal(root, cwd, path, scope) {
   const absolute = resolve(cwd, path);

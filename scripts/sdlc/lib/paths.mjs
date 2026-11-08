@@ -2,7 +2,8 @@
 // directory, so every worktree of the repository reads and writes the same artifacts.
 
 import { execFileSync } from "node:child_process";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
+import { workKey } from "../schemas/spec.mjs";
 
 const git = (cwd, ...args) => execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
 
@@ -17,13 +18,18 @@ export function sdlcRoot(cwd = process.cwd()) {
   );
 }
 
+// The key comes from the owner, an agent or Jira's answer; only a real key names a folder, and
+// the resolved folder must sit inside .sdlc/features.
 export function featureDir(feature, cwd = process.cwd()) {
-  return join(sdlcRoot(cwd), "features", feature);
+  const root = join(sdlcRoot(cwd), "features");
+  const dir = resolve(root, parseFeature(feature));
+  if (!dir.startsWith(root + sep)) throw new Error(`"${feature}" names a folder outside ${root}`);
+  return dir;
 }
 
 export function parseFeature(value) {
-  if (!/^F-\d+$/.test(value ?? "")) {
-    throw new Error(`expected a feature id like F-12 (its issue number), got "${value ?? ""}"`);
+  if (!workKey.test(value ?? "")) {
+    throw new Error(`expected the epic's Jira key, like VISP-12, got "${value ?? ""}"`);
   }
   return value;
 }

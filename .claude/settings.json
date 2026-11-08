@@ -27,6 +27,24 @@
             "command": "node \"$CLAUDE_PROJECT_DIR/scripts/sdlc/hooks/scope.mjs\""
           }
         ]
+      },
+      {
+        "matcher": "mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/sdlc/hooks/mcp-guard.mjs\""
+          }
+        ]
+      },
+      {
+        "matcher": "SendMessage",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/sdlc/hooks/resume-guard.mjs\""
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -58,6 +76,27 @@
           {
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/scripts/sdlc/hooks/owner-commands.mjs\"",
+            "timeout": 120
+          }
+        ]
+      }
+    ],
+    "ConfigChange": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/sdlc/hooks/config-guard.mjs\""
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/sdlc/hooks/ticket-status.mjs\"",
             "timeout": 120
           }
         ]

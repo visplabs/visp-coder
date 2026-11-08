@@ -1,28 +1,47 @@
 // Commands an agent must leave to the owner: force pushes, pushes to main or develop, tags,
 // merges, releases, publishing, branch and worktree deletion, `git clean -x`, credential reads,
-// changing the GitHub identity agents run under, and editing or deleting issues (the spec and
-// the owner's approval live there). Each rule gets the words of one simple command and returns what the command would do
-// that is refused, or undefined. It catches mistakes; a determined script can still get past it.
+// changing the GitHub identity agents run under, overriding the models agents run on, and
+// editing or deleting issues (the spec and the owner's approval live there). Inside a subagent
+// it also refuses direct `codex` calls, `sdlc review` from any agent but the reviewer, Jira
+// writes from any agent but the clerk, and a pull request whose task may not ship yet. Each rule gets the words of one simple command and
+// returns what the command would do that is refused, or undefined. It catches mistakes; a
+// determined script can still get past it.
 
 import { execFileSync } from "node:child_process";
 import { basename, resolve } from "node:path";
+import { agentCommandRefusal } from "./sdlc-command-rules.mjs";
 import { splitCommands } from "./shell-words.mjs";
 
 const PROTECTED_BRANCHES = new Set(["main", "develop"]);
 const CREDENTIAL_PATHS = [".config/gh/hosts.yml", ".git-credentials", ".npmrc"];
+const CREDENTIAL_PATTERNS = [/\.codex[^/\s]*\/auth\.json/];
 const WRAPPERS = new Set(["sudo", "env", "command", "exec", "time", "nohup"]);
 const SHELLS = new Set(["bash", "sh", "zsh"]);
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
 const IDENTITY_VAR = /^(GH_CONFIG_DIR|GH_TOKEN|GITHUB_TOKEN|GH_ENTERPRISE_TOKEN)(=|$)/;
 const IDENTITY_EXPANSION = /\$\{?(GH_CONFIG_DIR|GH_TOKEN|GITHUB_TOKEN|GH_ENTERPRISE_TOKEN)\b/;
+// The Codex home holds the reviewer's login; these Claude Code variables outrank the models and
+// efforts that sdlc.config.json and the agent definitions set.
+const RUNTIME_VAR =
+  /^(CODEX_HOME|CLAUDE_CODE_SUBAGENT_MODEL|CLAUDE_CODE_SUBAGENT_MODEL_FORCE|CLAUDE_CODE_EFFORT_LEVEL|ANTHROPIC_MODEL)=/;
 const UNSETTERS = new Set(["-u", "--unset", "unset", "export"]);
 
-export function refusal(line, cwd) {
+// `agentType` is the subagent running the command; undefined in the owner's own session.
+export function refusal(line, cwd, agentType) {
   for (const words of splitCommands(line)) {
-    const reason = identityRefusal(words) ?? refuseCommand(stripPrefixes(words), cwd);
+    const reason =
+      identityRefusal(words) ??
+      runtimeRefusal(words) ??
+      refuseCommand(stripPrefixes(words), cwd, agentType);
     if (reason) return reason;
   }
   return undefined;
+}
+
+function runtimeRefusal(words) {
+  return words.some((word) => RUNTIME_VAR.test(word))
+    ? "changes the Codex home or the model an agent runs on"
+    : undefined;
 }
 
 // Agents act as the agent bot through GH_CONFIG_DIR; setting, unsetting or reading these
@@ -43,19 +62,27 @@ function stripPrefixes(words) {
   return words.slice(i);
 }
 
-function refuseCommand(words, cwd) {
+function refuseCommand(words, cwd, agentType) {
   const [cmd, ...args] = words;
   if (!cmd) return undefined;
-  if (words.some((word) => CREDENTIAL_PATHS.some((path) => word.includes(path)))) {
-    return "reads stored credentials";
-  }
+  if (words.some(readsCredentials)) return "reads stored credentials";
   const name = basename(cmd);
   if (SHELLS.has(name)) {
     const script = args[args.indexOf("-c") + 1];
-    return args.includes("-c") && script ? refusal(script, cwd) : undefined;
+    return args.includes("-c") && script ? refusal(script, cwd, agentType) : undefined;
   }
-  if (name === "eval") return refusal(args.join(" "), cwd);
-  return COMMAND_RULES[name]?.(args, cwd);
+  if (name === "eval") return refusal(args.join(" "), cwd, agentType);
+  return (
+    (agentType ? agentCommandRefusal(words, cwd, agentType) : undefined) ??
+    COMMAND_RULES[name]?.(args, cwd)
+  );
+}
+
+function readsCredentials(word) {
+  return (
+    CREDENTIAL_PATHS.some((path) => word.includes(path)) ||
+    CREDENTIAL_PATTERNS.some((pattern) => pattern.test(word))
+  );
 }
 
 const COMMAND_RULES = {

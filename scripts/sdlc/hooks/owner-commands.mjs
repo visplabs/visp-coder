@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Claude Code UserPromptExpansion hook for the owner-only commands /feature and /approve.
-// /feature opens the feature issue and lets the command expand, with the result as context for
+// /feature opens the epic in Jira and lets the command expand, with the result as context for
 // the session; /approve always stops the turn and shows its result to the owner. A failure
 // stops the turn with the reason.
 
@@ -17,11 +17,11 @@ try {
     respond({
       hookSpecificOutput: {
         hookEventName: "UserPromptExpansion",
-        additionalContext: featureCommand(args, event.cwd),
+        additionalContext: await featureCommand(args, event.cwd),
       },
     });
   } else {
-    respond({ decision: "block", reason: approveCommand(args, event.cwd) });
+    respond({ decision: "block", reason: await approveCommand(args, event.cwd) });
   }
 } catch (error) {
   respond({ decision: "block", reason: `sdlc /${name}: ${error.message}` });

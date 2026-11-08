@@ -1,10 +1,17 @@
+import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parse } from "yaml";
-import { promptEntry, runHook, type SdlcRepo, sdlcRepo } from "./support/sdlc-repo.js";
+import { type FakeJira, startFakeJira } from "./support/fake-jira.js";
+import { promptEntry, runHook, type SdlcRepo, SPEC, sdlcRepo } from "./support/sdlc-repo.js";
 
 let fixture: SdlcRepo;
+const { adfToBody } = (await import(
+  pathToFileURL(join(process.cwd(), "scripts/sdlc/lib/adf.mjs")).href
+)) as { adfToBody(adf: unknown): string };
 let base = "";
 
 const HANDOFF = [
@@ -15,7 +22,7 @@ const HANDOFF = [
   "  summary: Adds the worklog writer",
   "  changed_files: [src/worklog.ts]",
   "  tests:",
-  "    - { criterion: AC-01, test: 'tests/worklog.test.ts > worklog > writes one file' }",
+  "    - { case: TC-01, test: 'tests/worklog.test.ts > worklog > writes one file' }",
   "```",
 ].join("\n");
 
@@ -26,28 +33,61 @@ function assistant(id: string, text: string, usage = { input_tokens: 100, output
   };
 }
 
+function stopEvent(agentType: string, lastMessage: string | undefined) {
+  return {
+    hook_event_name: "SubagentStop",
+    stop_hook_active: false,
+    agent_id: "a1",
+    agent_type: agentType,
+    agent_transcript_path: join(fixture.sessions, "session-1", "subagents", "agent-a1.jsonl"),
+    transcript_path: join(fixture.sessions, "session-1.jsonl"),
+    last_assistant_message: lastMessage,
+    effort: { level: "high" },
+    cwd: fixture.repo,
+  };
+}
+
+const HOOK_ENV = { SDLC_VERIFY: "off", SDLC_TRANSCRIPT_WAIT_MS: "0" };
+let jira: FakeJira;
+
 function stop(agentType: string, lastMessage: string | undefined) {
-  const transcript = join(fixture.sessions, "session-1", "subagents", "agent-a1.jsonl");
-  return runHook(
-    "subagent-stop.mjs",
+  return runHook("subagent-stop.mjs", stopEvent(agentType, lastMessage), {
+    ...HOOK_ENV,
+    ...jira.env,
+    SDLC_BASE_REF: base,
+  });
+}
+
+// The hook as Claude Code runs it: started while the transcript may still lack the last lines.
+function stopWhileWriting(agentType: string, write: () => void) {
+  const child = spawn(
+    process.execPath,
+    [join(process.cwd(), "scripts/sdlc/hooks/subagent-stop.mjs")],
     {
-      hook_event_name: "SubagentStop",
-      stop_hook_active: false,
-      agent_id: "a1",
-      agent_type: agentType,
-      agent_transcript_path: transcript,
-      transcript_path: join(fixture.sessions, "session-1.jsonl"),
-      last_assistant_message: lastMessage,
-      effort: { level: "high" },
-      cwd: fixture.repo,
+      env: {
+        ...process.env,
+        SDLC_OWNER: "1",
+        ...HOOK_ENV,
+        ...jira.env,
+        SDLC_BASE_REF: base,
+        SDLC_TRANSCRIPT_WAIT_MS: "3000",
+      },
     },
-    { SDLC_BASE_REF: base, SDLC_VERIFY: "off" },
   );
+  let stdout = "";
+  child.stdout.on("data", (chunk) => {
+    stdout += chunk;
+  });
+  child.stdin.end(JSON.stringify(stopEvent(agentType, undefined)));
+  setTimeout(write, 400);
+  return new Promise<string>((resolve) => child.on("close", () => resolve(stdout)));
 }
 
 function filed(dir: string) {
   const path = join(fixture.repo, ".sdlc/features/F-12", dir);
-  return existsSync(path) ? readdirSync(path).filter((name) => name !== "task.yml") : [];
+  return existsSync(path)
+    ? readdirSync(path).filter((name) => name !== "task.yml" && name !== "ticket.yml")
+    : [];
 }
 
 function worklog() {
@@ -62,8 +102,11 @@ const blockReason = (result: ReturnType<typeof runHook>) =>
   result.json?.decision === "block" ? String(result.json.reason) : "";
 
 describe("subagent stop hook", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     fixture = sdlcRepo();
+    jira = await startFakeJira(join(fixture.repo, ".."));
+    const task = `\`\`\`yaml\n${SPEC["tasks/T-13/task.yml"]}\n\`\`\``;
+    jira.setIssue("T-13", { summary: "Worklog", body: task, parent: "F-12" });
     base = fixture.git("rev-parse", "HEAD");
     fixture.write("src/worklog.ts", "export const worklog = 1;\n");
     fixture.transcript("a1", [
@@ -73,10 +116,13 @@ describe("subagent stop hook", () => {
       assistant("m2", HANDOFF, { input_tokens: 300, output_tokens: 80 }),
     ]);
   });
-  afterEach(() => fixture.cleanup());
+  afterEach(() => {
+    jira.stop();
+    fixture.cleanup();
+  });
 
   it("files a valid handoff with an envelope taken from the hook input and transcript", () => {
-    const result = stop("coder-m", HANDOFF);
+    const result = stop("coder", HANDOFF);
     expect(result.status, result.stderr).toBe(0);
     expect(blockReason(result)).toBe("");
     const [file] = filed("tasks/T-13");
@@ -88,7 +134,7 @@ describe("subagent stop hook", () => {
       schema: "handoff@1",
       feature: "F-12",
       task: "T-13",
-      agent: "coder-m",
+      agent: "coder",
       agent_id: "a1",
       model: "claude-sonnet-5-5",
       effort: "high",
@@ -96,31 +142,67 @@ describe("subagent stop hook", () => {
       usage: { input_tokens: 400, output_tokens: 100 },
     });
     expect(worklog()).toEqual([
-      expect.objectContaining({ schema: "worklog@1", task: "T-13", agent: "coder-m" }),
+      expect.objectContaining({ schema: "worklog@1", task: "T-13", agent: "coder" }),
     ]);
   });
 
   it("keeps the agent working when the report is missing or invalid", () => {
-    expect(blockReason(stop("coder-m", "All done, no yaml."))).toContain("yaml");
-    const invalid = HANDOFF.replace("criterion: AC-01", "criterion: 1");
-    expect(blockReason(stop("coder-m", invalid))).toContain("body.tests.0.criterion");
+    expect(blockReason(stop("coder", "All done, no yaml."))).toContain("yaml");
+    const invalid = HANDOFF.replace("case: TC-01", "case: 1");
+    expect(blockReason(stop("coder", invalid))).toContain("body.tests.0.case");
     expect(filed("tasks/T-13")).toEqual([]);
+  });
+
+  it("keeps the coder working until every unit and integration test case is linked", () => {
+    const unlinked = HANDOFF.replace(/ {2}tests:\n.*\n/, "  tests: []\n");
+    expect(blockReason(stop("coder", unlinked))).toContain("link a test for TC-01");
+  });
+
+  it("writes the coder's test links into the task's Jira issue, not the epic", () => {
+    expect(blockReason(stop("coder", HANDOFF))).toBe("");
+    const body = adfToBody(jira.issue("T-13").fields.description);
+    expect(body).toContain("schema: task@1");
+    expect(body).toContain("schema: test-links@1");
+    expect(body).toContain("case: TC-01");
+    expect(body).toContain("test: tests/worklog.test.ts > worklog > writes one file");
   });
 
   it("keeps the coder working when it changed files outside its scope", () => {
     fixture.write("src/other.ts", "export {};\n");
-    expect(blockReason(stop("coder-m", HANDOFF))).toContain("src/other.ts");
+    expect(blockReason(stop("coder", HANDOFF))).toContain("src/other.ts");
   });
 
   it("lets the agent stop after five rejected reports and logs the failure", () => {
     for (let attempt = 0; attempt < 5; attempt += 1) {
-      expect(blockReason(stop("coder-m", "no report"))).not.toBe("");
+      expect(blockReason(stop("coder", "no report"))).not.toBe("");
     }
-    expect(blockReason(stop("coder-m", "no report"))).toBe("");
+    expect(blockReason(stop("coder", "no report"))).toBe("");
     expect(worklog().at(-1)).toMatchObject({ status: "failed" });
   });
 
-  it("reads a reviewer's report from its SubagentHandback call", () => {
+  function handback(model: string, message: string) {
+    fixture.transcript("a1", [
+      promptEntry("Review it.\nSDLC-Task: F-12/T-13"),
+      {
+        type: "assistant",
+        message: {
+          id: "m9",
+          model,
+          content: [{ type: "tool_use", name: "SubagentHandback", input: { message } }],
+          usage: { input_tokens: 10, output_tokens: 5 },
+        },
+      },
+    ]);
+  }
+
+  function filedReport() {
+    const [file] = filed("tasks/T-13");
+    expect(file).toMatch(/^review-/);
+    const dir = join(fixture.repo, ".sdlc/features/F-12/tasks/T-13");
+    return parse(readFileSync(join(dir, file ?? ""), "utf8"));
+  }
+
+  it("files the fallback reviewer's report from its SubagentHandback call", () => {
     const review = [
       "```yaml",
       "status: done",
@@ -128,22 +210,107 @@ describe("subagent stop hook", () => {
       "  verdict: approve",
       "  findings: []",
       "```",
-    ].join("\n");
+    ];
+    handback("claude-opus-5-5", review.join("\n"));
+    expect(blockReason(stop("reviewer-fallback", "Handed back."))).toBe("");
+    expect(filedReport().commit).toBe(fixture.git("rev-parse", "HEAD"));
+  });
+
+  it("waits for a SubagentHandback the transcript has not written yet", async () => {
+    fixture.transcript("a1", [promptEntry("Review it.\nSDLC-Task: F-12/T-13")]);
+    const review = "```yaml\nstatus: done\nbody:\n  verdict: approve\n  findings: []\n```";
+    const stdout = await stopWhileWriting("reviewer-fallback", () =>
+      handback("claude-opus-5-5", review),
+    );
+    expect(stdout).not.toContain("block");
+    expect(filedReport().body.verdict).toBe("approve");
+  });
+
+  it("files a handback whose yaml report has no fence", () => {
+    handback("claude-opus-5-5", "status: done\nbody:\n  verdict: approve\n  findings: []\n");
+    expect(blockReason(stop("reviewer-fallback", "Handed back."))).toBe("");
+    expect(filedReport().body.verdict).toBe("approve");
+  });
+
+  it("files one report per round, however often the agent stops", () => {
+    expect(blockReason(stop("coder", HANDOFF))).toBe("");
     fixture.transcript("a1", [
-      promptEntry("Review it.\nSDLC-Task: F-12/T-13"),
-      {
-        type: "assistant",
-        message: {
-          id: "m9",
-          model: "claude-opus-5-5",
-          content: [{ type: "tool_use", name: "SubagentHandback", input: { message: review } }],
-          usage: { input_tokens: 10, output_tokens: 5 },
-        },
-      },
+      promptEntry("Implement it.\nSDLC-Task: F-12/T-13"),
+      assistant("m3", "The wait finished; my report was already delivered."),
     ]);
-    const result = stop("reviewer", "Handed back.");
+    const again = stop("coder", "The wait finished; my report was already delivered.");
+    expect(blockReason(again)).toBe("");
+    expect(filed("tasks/T-13")).toHaveLength(1);
+    expect(worklog()).toHaveLength(1);
+  });
+
+  it("files again after a resume starts a new round", () => {
+    expect(blockReason(stop("coder", HANDOFF))).toBe("");
+    const resume = runHook("resume-guard.mjs", {
+      hook_event_name: "PreToolUse",
+      tool_name: "SendMessage",
+      tool_input: { to: "a1", message: "Fix the findings." },
+      cwd: fixture.repo,
+      agent_type: "manager",
+    });
+    expect(resume.status, resume.stderr).toBe(0);
+    expect(blockReason(stop("coder", HANDOFF))).toBe("");
+    expect(filed("tasks/T-13")).toHaveLength(2);
+  });
+
+  it("logs each blocking finding of a filed review to the mistake log", () => {
+    const review = [
+      "```yaml",
+      "status: done",
+      "body:",
+      "  verdict: changes_requested",
+      "  findings:",
+      "    - { id: R-1, severity: blocking, cites: AC-01, text: Writes two files, evidence: { command: 'pnpm exec vitest run x' } }",
+      "    - { id: R-2, severity: advisory, text: Shorter name }",
+      "```",
+    ];
+    handback("claude-opus-5-5", review.join("\n"));
+    expect(blockReason(stop("reviewer-fallback", "Handed back."))).toBe("");
+    const entries = fixture
+      .read(".sdlc/mistakes.jsonl")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    expect(entries).toEqual([
+      expect.objectContaining({
+        hook: "review",
+        agent_type: "reviewer-fallback",
+        reason: "T-13 blocking finding on AC-01: Writes two files",
+      }),
+    ]);
+  });
+
+  it("files the Codex review from the file sdlc review wrote, checked by its sha256", () => {
+    const commit = "a".repeat(40);
+    const text = `status: done\ncommit: ${commit}\nbody:\n  verdict: approve\n  findings: []\n`;
+    fixture.write(".sdlc/run/reviews/T-13-1.yml", text);
+    const path = join(fixture.repo, ".sdlc/run/reviews/T-13-1.yml");
+    const sha = createHash("sha256").update(text).digest("hex");
+    handback(
+      "claude-haiku-5-5",
+      `\`\`\`yaml\nreview_file: ${path}\nsha256: ${"0".repeat(64)}\n\`\`\``,
+    );
+    expect(blockReason(stop("reviewer", "Handed back."))).toContain("sha256 does not match");
+    handback("claude-haiku-5-5", `\`\`\`yaml\nreview_file: /etc/passwd\nsha256: ${sha}\n\`\`\``);
+    expect(blockReason(stop("reviewer", "Handed back."))).toContain("review_file");
+    handback("claude-haiku-5-5", `\`\`\`yaml\nreview_file: ${path}\nsha256: ${sha}\n\`\`\``);
+    expect(blockReason(stop("reviewer", "Handed back."))).toBe("");
+    expect(filedReport()).toMatchObject({ commit, body: { verdict: "approve" } });
+  });
+
+  it("files nothing from an agent that ran on another model than the config sets", () => {
+    const result = stop("qe-verify", HANDOFF);
     expect(blockReason(result)).toBe("");
-    expect(filed("tasks/T-13")[0]).toMatch(/^review-/);
+    expect(filed("tasks/T-13")).toEqual([]);
+    expect(worklog().at(-1)).toMatchObject({ status: "failed" });
+    expect(worklog().at(-1)?.body.summary).toContain(
+      "ran on claude-sonnet-5-5, but sdlc.config.json sets claude-opus-5-5",
+    );
   });
 
   it("ignores agents outside the SDLC", () => {

@@ -2,7 +2,8 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "entry": [
     "scripts/**/*.{mjs,js}",
-    "tests/compat/*.ts"
+    "tests/compat/*.ts",
+    "tests/unit/sdlc/support/fake-jira-server.mjs"
   ],
   "project": [
     "src/**/*.ts!",
@@ -12,7 +13,8 @@
   ],
   "ignoreBinaries": [
     "mkfifo",
-    "pgrep"
+    "pgrep",
+    "secret-tool"
   ],
   "ignoreExportsUsedInFile": true,
   "rules": {

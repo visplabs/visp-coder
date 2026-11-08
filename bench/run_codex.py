@@ -15,7 +15,7 @@ import shutil
 import tempfile
 import time
 
-from common import RUNS, isolate, run_worker
+from common import RUNS, crash_env, isolate, run_worker
 
 parser = argparse.ArgumentParser()
 parser.add_argument("run")
@@ -36,7 +36,8 @@ shutil.copy(pathlib.Path.home() / ".codex" / "auth.json", codex_home / "auth.jso
 path = os.environ["PATH"]
 if arm.get("shim"):
     path = f"{arm['shim']}:{path}"
-env = {"HOME": str(home), "CODEX_HOME": str(codex_home), "PATH": path, "LANG": "C.UTF-8"}
+env = {"HOME": str(home), "CODEX_HOME": str(codex_home), "PATH": path, "LANG": "C.UTF-8",
+       **crash_env(run, arm, args.model)}
 # BMAD renders its skills with `uv run`, which otherwise downloads CPython into every clean
 # home; the worker read that as breaking the no-download rule and stopped. Use the host's.
 uv_python = pathlib.Path.home() / ".local" / "share" / "uv" / "python"
