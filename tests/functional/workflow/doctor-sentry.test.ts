@@ -63,13 +63,25 @@ describe("doctor and crash reporting", () => {
     return runAsync(process.execPath, [CLI, "doctor", ...args], { cwd, env: env(dsn) });
   }
 
-  /** The row doctor writes after starting `visp guard --handshake` through PATH. */
-  async function pathVispDetail(dsn: string | undefined): Promise<string | undefined> {
-    const run = await doctor(dsn, project.root, "--json");
+  const INSTALLED_BUILD = "The shell resolves the installed VISP build";
+
+  /**
+   * Proves this very run reached the end and started the handshake child: it exited 0 and its
+   * own output has the PATH visp row that only the handshake can produce ("ok"; without an
+   * installed runtime the row says "No installed runtime to compare").
+   */
+  function expectRanInstalledHandshake(run: AsyncRun, format: "text" | "json"): void {
+    expect(run.exitCode).toBe(0);
+    if (format === "text") {
+      expect(run.stdout).toMatch(/ok\s+PATH visp\s+The shell resolves the installed VISP build/);
+      return;
+    }
     const report = JSON.parse(run.stdout) as {
-      data: { checks: { name: string; detail?: string }[] };
+      data: { checks: { name: string; status: string; detail?: string }[] };
     };
-    return report.data.checks.find((check) => check.name === "PATH visp")?.detail;
+    expect(report.data.checks).toContainEqual(
+      expect.objectContaining({ name: "PATH visp", status: "ok", detail: INSTALLED_BUILD }),
+    );
   }
 
   async function bareFolder(): Promise<string> {
@@ -100,8 +112,7 @@ describe("doctor and crash reporting", () => {
   describe("with a DSN at a local capture server", () => {
     it("sends nothing for doctor, while the SDK itself can reach the server", async () => {
       const run = await doctor(capture.dsn, project.root);
-      expect(run.exitCode).not.toBe(2);
-      expect(await pathVispDetail(capture.dsn)).toContain("resolves the installed VISP build");
+      expectRanInstalledHandshake(run, "text");
       expect(capture.requests).toHaveLength(0);
 
       await sendControlEvent(capture.dsn, env(capture.dsn));
@@ -109,10 +120,10 @@ describe("doctor and crash reporting", () => {
     });
 
     it("sends nothing for doctor --json, --settings or --fix", async () => {
-      for (const args of [["--json"], ["--settings"], ["--fix"]]) {
-        const run = await doctor(capture.dsn, project.root, ...args);
-        expect(run.stdout).not.toContain("No installed runtime to compare");
-      }
+      expectRanInstalledHandshake(await doctor(capture.dsn, project.root, "--json"), "json");
+      // --settings and --fix print the same check rows as plain doctor, then their own section.
+      expectRanInstalledHandshake(await doctor(capture.dsn, project.root, "--settings"), "text");
+      expectRanInstalledHandshake(await doctor(capture.dsn, project.root, "--fix"), "text");
       expect(capture.requests).toHaveLength(0);
     });
 
