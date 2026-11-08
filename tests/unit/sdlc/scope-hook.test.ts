@@ -12,6 +12,7 @@ function toolCall(toolName: string, toolInput: Record<string, unknown>, agentTyp
     cwd: fixture.repo,
     agent_id: "a1",
     agent_type: agentType,
+    session_id: "s1",
     transcript_path: join(fixture.sessions, "session-1.jsonl"),
   });
 }
@@ -60,6 +61,12 @@ describe("scope hook", () => {
     expect(decision(toolCall("Bash", { command: "sed -i s/a/b/ src/other.ts" }))).toBe("deny");
     expect(decision(toolCall("Bash", { command: "pnpm exec vitest run tests/unit" }))).toBe("none");
     expect(decision(toolCall("Bash", { command: "echo ok > src/worklog.ts" }))).toBe("none");
+  });
+
+  it("logs a refusal with the epic, task and session it belongs to, for the retro", () => {
+    toolCall("Write", { file_path: join(fixture.repo, "src/other.ts") });
+    const row = JSON.parse(fixture.read(".sdlc/mistakes.jsonl").trim().split("\n").at(-1) ?? "");
+    expect(row).toMatchObject({ hook: "scope", feature: "F-12", task: "T-13", session_id: "s1" });
   });
 
   it("refuses a coder whose transcript names no task", () => {
