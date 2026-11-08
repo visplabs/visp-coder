@@ -16,6 +16,20 @@ export function errorReportingDsn(env: NodeJS.ProcessEnv = process.env): string 
   return dsn ? dsn : undefined;
 }
 
+/** The environment reports go to: VISP_SENTRY_ENVIRONMENT, or production when it is blank. */
+export function errorReportingEnvironment(env: NodeJS.ProcessEnv = process.env): string {
+  return env.VISP_SENTRY_ENVIRONMENT?.trim() || "production";
+}
+
+/**
+ * The file VISP_CRASH_LOG names, or undefined when it is unset or blank (no log is written).
+ * A relative path resolves from the working directory of the process that crashes.
+ */
+export function crashLogPath(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  const path = env.VISP_CRASH_LOG?.trim();
+  return path ? path : undefined;
+}
+
 const TAG_KEY = /^[a-z][a-z0-9_]{0,31}$/;
 const TAG_VALUE = /^[\w.:/-]{1,200}$/;
 
@@ -60,7 +74,7 @@ export function runTags(
  * still fails. Only the message and the top of the stack are written, on this machine.
  */
 function recordCrash(cause: unknown, env: NodeJS.ProcessEnv, argv: readonly string[]): void {
-  const path = env.VISP_CRASH_LOG?.trim();
+  const path = crashLogPath(env);
   if (!path) return;
   const error = cause instanceof Error ? cause : new Error(String(cause));
   const entry = {
@@ -115,7 +129,7 @@ export async function startErrorReporting(
   sentry.init({
     dsn,
     release: `visp-coder@${VERSION}`,
-    environment: env.VISP_SENTRY_ENVIRONMENT?.trim() || "production",
+    environment: errorReportingEnvironment(env),
     initialScope: { tags: { ...runTags(env), ...errorReportingTags(env) } },
     // Errors and stack traces only. VISP handles other people's code, prompts
     // and dashboard links, so none of the SDK's request, MCP or variable
