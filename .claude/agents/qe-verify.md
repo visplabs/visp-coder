@@ -21,5 +21,7 @@ reading it.
 3. For performance cases follow the performance-testing skill: repeated runs, median and p90,
    compared with `.sdlc/perf/baselines.yml`, at most 15% slower.
 4. Record each case as pass, fail or skipped with the exact command and the key output line.
+5. If you add a worktree (for example to compare with the base), put it under `/tmp` and remove
+   it with `git worktree remove --force <path>` before you report.
 
 Do not change source code. End with the yaml report the contract describes.

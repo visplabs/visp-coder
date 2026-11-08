@@ -156,6 +156,14 @@ describe("sdlc safety hook", () => {
     expect(result.status, result.stderr).toBe(0);
   });
 
+  it("lets an agent remove a worktree it made in the temp folder, and no other", () => {
+    // Pilot 2: qe-verify added a base worktree for a comparison and could not remove it.
+    const temporary = join(tmpdir(), "sdlc-qe", "base-wt");
+    expect(runHook(`git worktree remove --force ${temporary}`).status).toBe(0);
+    expect(runHook(`git worktree remove ${join(tmpdir(), "..", "home", "x")}`).status).toBe(2);
+    expect(runHook("git worktree remove .claude/worktrees/agent-x").status).toBe(2);
+  });
+
   it.each([
     ["coder", "codex exec --full-auto fix it"],
     ["reviewer", "codex exec -s danger-full-access review"],

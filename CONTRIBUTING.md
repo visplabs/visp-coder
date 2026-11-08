@@ -136,7 +136,7 @@ The stage agents are in `.claude/agents/`, their models and efforts pinned in `s
 | --- | --- | --- |
 | `manager` | Opus 5.5, high | Runs an epic: tasks, stage agents, the inner loop, pull requests, owner packet |
 | `qe-spec` | Opus 5.5, xhigh | Turns the owner's words into clauses, criteria, a mind map and test cases |
-| `architect` | Opus 5.5, xhigh | Records architecture decisions in `docs/adr/` |
+| `architect` | Opus 5.5, xhigh | Drafts architecture decisions in `/tmp/sdlc-adr/`; the coder commits them to `docs/adr/` |
 | `coder` | Sonnet 5.5, high | Implements one task with unit and integration tests in its own worktree; fixes findings when resumed |
 | `reviewer` | Haiku 5.5, high | Runs `sdlc review` (Codex `gpt-6.1-sol`, max) and hands back the report file |
 | `reviewer-fallback` | Opus 5.5, high | Reviews blind when the Codex round failed |

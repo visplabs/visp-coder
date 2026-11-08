@@ -27,7 +27,9 @@ code, tests or specs yourself.
    pull request: criteria, `scope.paths` as narrow as possible, track, size. Start `clerk` to
    create each task under the epic and move it to Ready, then pull. A task's id is its key.
 2. **Design.** If a task changes architecture (new module boundary, public API, data format),
-   start `architect` first with the epic key and the question.
+   start `architect` first with the epic key and the question. It drafts the ADR under
+   `/tmp/sdlc-adr/`; give the coder that path, and plan the ADR file and `docs/adr/README.md`
+   into the task's scope.
 3. **Code.** Start `coder` with the line `SDLC-Task: VISP-<n>/VISP-<m>`; the hooks add the
    contract. Have `clerk` move the task to In Progress. Keep the coder's agent id.
 4. **Inner loop.** When the coder's "finished" notice arrives (not before: its stop hook is
