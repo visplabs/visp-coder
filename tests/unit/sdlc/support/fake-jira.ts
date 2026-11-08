@@ -36,6 +36,8 @@ export type FakeJira = {
   setIssue(key: string, fields: IssueFields): void;
   setComments(key: string, comments: Comment[]): void;
   setChangelog(key: string, created: string[]): void;
+  // What new issue keys start with, instead of "VISP-": a broken or hostile Jira.
+  setKeyPrefix(prefix: string): void;
   issue(key: string): { fields: IssueFields & { description: unknown; issuetype: { id: string } } };
   calls(): { method: string; path: string; auth?: string; body?: unknown }[];
   stop(): void;
@@ -114,6 +116,9 @@ export async function startFakeJira(dir: string): Promise<FakeJira> {
         items: [{ field: "description" }],
       }));
       save(value);
+    },
+    setKeyPrefix(prefix) {
+      save({ ...state(), prefix });
     },
     issue(key) {
       return state().issues[key];

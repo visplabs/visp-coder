@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { epicBody, type FakeJira, startFakeJira } from "./support/fake-jira.js";
@@ -56,6 +56,12 @@ describe("/feature", () => {
     expect(JSON.stringify(epic.fields.description)).toContain(JSON.stringify(words).slice(1, -1));
     const local = join(fixture.repo, ".sdlc/features/VISP-20/owner-text.md");
     expect(readFileSync(local, "utf8")).toBe(words);
+  });
+
+  it("refuses an issue key from Jira that is not one, and writes nothing", () => {
+    jira.setKeyPrefix("../../escape/");
+    expect(reason(command("feature", "Work log files"))).toContain("expected the epic's Jira key");
+    expect(existsSync(join(fixture.repo, "escape"))).toBe(false);
   });
 
   it("refuses an empty request", () => {

@@ -41,7 +41,7 @@ const server = createServer(async (req, res) => {
     return send(200, { issues });
   }
   if (req.method === "POST" && url.pathname === "/rest/api/3/issue") {
-    const newKey = `VISP-${state.next++}`;
+    const newKey = `${state.prefix ?? "VISP-"}${state.next++}`;
     state.issues[newKey] = {
       key: newKey,
       fields: {

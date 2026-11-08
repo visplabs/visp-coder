@@ -18,8 +18,10 @@ export function sdlcRoot(cwd = process.cwd()) {
   );
 }
 
+// The key comes from the owner, an agent or Jira's answer; only a real key names a folder, so
+// none can point outside .sdlc/features.
 export function featureDir(feature, cwd = process.cwd()) {
-  return join(sdlcRoot(cwd), "features", feature);
+  return join(sdlcRoot(cwd), "features", parseFeature(feature));
 }
 
 export function parseFeature(value) {
