@@ -137,25 +137,30 @@ jobs:
 
   # SonarQube Cloud: analyses the code with the merged coverage (sonar-project.properties) and, on a
   # pull request, fails when the new code fails the quality gate. Without SONAR_TOKEN (a fork, or
-  # before the owner adds it) it says so and passes.
+  # before the owner adds it) it says so and passes. The free plan analyses only pull requests and
+  # main; a push to develop fails with "not allowed to access data from non main branches" (run
+  # 42494765591), so there the job says so and passes. It never skips: `check` fails on a skip.
   sonar:
     needs: coverage
     runs-on: ubuntu-latest
     env:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_RUN: ${{ secrets.SONAR_TOKEN != '' && (github.event_name == 'pull_request' || github.ref == 'refs/heads/main') }}
     steps:
       - if: env.SONAR_TOKEN == ''
         run: echo "::notice::SONAR_TOKEN is not set; SonarQube Cloud analysis skipped"
-      - if: env.SONAR_TOKEN != ''
+      - if: env.SONAR_TOKEN != '' && env.SONAR_RUN != 'true'
+        run: echo "::notice::SonarQube Cloud's free plan analyses only pull requests and main; skipped on ${{ github.ref_name }}"
+      - if: env.SONAR_RUN == 'true'
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - if: env.SONAR_TOKEN != ''
+      - if: env.SONAR_RUN == 'true'
         uses: actions/download-artifact@v4
         with:
           name: coverage-report
           path: coverage/merged
-      - if: env.SONAR_TOKEN != ''
+      - if: env.SONAR_RUN == 'true'
         uses: SonarSource/sonarqube-scan-action@v5
         with:
           args: -Dsonar.qualitygate.wait=true
