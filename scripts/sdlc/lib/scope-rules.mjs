@@ -4,7 +4,7 @@
 // and the shared .sdlc/ folder, where loop counters and contracts live.
 
 import { tmpdir } from "node:os";
-import { basename, join, relative, resolve, sep } from "node:path";
+import { basename, join, posix, relative, resolve, sep } from "node:path";
 import { matchesAny } from "./glob.mjs";
 import { splitCommands } from "./shell-words.mjs";
 
@@ -109,7 +109,7 @@ function intoTarget(args, isDir) {
   const sources = args.slice(0, -1);
   const folder = sources.length > 1 || target.endsWith("/") || isDir(target);
   return folder && sources.length > 0
-    ? sources.map((source) => `${target.replace(/\/+$/, "")}/${basename(source)}`)
+    ? sources.map((source) => posix.join(target, basename(source)))
     : [target];
 }
 
