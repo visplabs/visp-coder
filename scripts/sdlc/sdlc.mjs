@@ -7,6 +7,7 @@ import * as jira from "./commands/jira.mjs";
 import * as packet from "./commands/packet.mjs";
 import * as pull from "./commands/pull.mjs";
 import * as releaseCheck from "./commands/release-check.mjs";
+import * as retro from "./commands/retro.mjs";
 import * as review from "./commands/review.mjs";
 import * as syncStatus from "./commands/sync-status.mjs";
 import * as trace from "./commands/trace.mjs";
@@ -23,6 +24,7 @@ const COMMANDS = {
   "ci-failures": ciFailures,
   "sync-status": syncStatus,
   "release-check": releaseCheck,
+  retro,
 };
 const USAGE = `usage: sdlc <command>
   pull VISP-12                      cache epic VISP-12: owner's words, spec, approval, tasks
@@ -34,7 +36,8 @@ const USAGE = `usage: sdlc <command>
   check-pr <n> [--results <json>]   CI gate: spec approved, the task's linked tests pass
   ci-failures <n> --task VISP-13    print a PR's failed checks and log them as mistakes
   sync-status VISP-12               move task tickets forward to match their pull requests
-  release-check <version>           fail if Sentry has new issues first seen in that release`;
+  release-check <version>           fail if Sentry has new issues first seen in that release
+  retro VISP-12                     the epic's retro report from the local records (read-only)`;
 
 const [name, ...args] = process.argv.slice(2);
 const command = COMMANDS[name];
