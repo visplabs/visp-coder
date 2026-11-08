@@ -211,6 +211,14 @@ describe("sdlc command line", () => {
     expect(packet).toContain("1,500 tokens");
     expect(packet).not.toContain("task@1");
     expect(packet).not.toContain("invalid report");
+    expect(packet).toContain("## Retro notes\n\nNone given.");
+    const notes = join(repo, "notes.md");
+    writeFileSync(notes, "- The scope hook refused `cp x docs/adr` under docs/adr/**.\n");
+    const withNotes = sdlc("packet", "VISP-12", "--notes", notes);
+    expect(withNotes.status, withNotes.stderr).toBe(0);
+    expect(readFileSync(withNotes.stdout.trim(), "utf8")).toContain(
+      "## Retro notes\n\n- The scope hook refused `cp x docs/adr` under docs/adr/**.",
+    );
   });
 
   it("hashes the spec the same way whatever the key order", () => {
