@@ -11,7 +11,7 @@ old one and set the old one's status to `Superseded by NNNN`.
 | --- | --- |
 | [0001 Agent SDLC](0001-agent-sdlc.md) | Accepted |
 | [0002 Agent SDLC on Jira](0002-sdlc-on-jira.md) | Accepted |
-| [0003 Doctor's crash-reporting facts](0003-doctor-crash-reporting.md) | Proposed |
+| [0003 Doctor's crash-reporting facts](0003-doctor-crash-reporting.md) | Accepted |
 
 ## Template
 
