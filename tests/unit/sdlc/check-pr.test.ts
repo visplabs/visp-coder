@@ -131,6 +131,21 @@ describe("sdlc check-pr", () => {
     expect(result.stdout).toContain("skipped");
   });
 
+  it("fails a PR that names no task when Jira refuses the CI credential", async () => {
+    // Pilot 2: a bad SDLC_JIRA_CI passed every ordinary PR and failed only the first agent PR.
+    setPr("Dependency bump.", { branch: "deps/vitest" });
+    const result = await checkPr({ SDLC_SECRET_CMD: "printf %s rejected@example.com:x" });
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain("401");
+  });
+
+  it("skips a PR that names no task without asking Jira when no credential is set (a fork)", async () => {
+    setPr("Dependency bump.", { branch: "deps/vitest" });
+    const result = await checkPr({ SDLC_SECRET_CMD: 'printf %s ""' });
+    expect(result.status, result.stdout).toBe(0);
+    expect(result.stdout).toContain("Jira not checked");
+  });
+
   it("fails an agent pull request that names no task", async () => {
     setPr("Adds the worklog.");
     const result = await checkPr();

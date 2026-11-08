@@ -5,7 +5,9 @@
 // description change, carrying the current hash) and every test case of the task links a test
 // that passed. The owner's account id comes from the environment (a repository variable in CI),
 // never from the PR's sdlc.config.json. A PR from an agent branch (sdlc/...) must name a task;
-// any other PR that names none is skipped, so dependency bumps and outside contributions pass.
+// any other PR that names none is skipped, so dependency bumps and outside contributions pass,
+// but only after Jira accepted the credential: a broken SDLC_JIRA_CI then fails on the next PR
+// of any kind, not on the first agent PR. A fork's PR has no credential and skips unchecked.
 
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -15,7 +17,7 @@ import { checkApproval } from "./approval.mjs";
 import { ghJson } from "./gh.mjs";
 import { specHash } from "./hash.mjs";
 import { ownerTextOf } from "./issue-body.mjs";
-import { jiraClient } from "./jira.mjs";
+import { jiraClient, NO_SECRET } from "./jira.mjs";
 import { repoRoot } from "./paths.mjs";
 import { specDocuments, taskDocument } from "./spec-store.mjs";
 import { applyLinks, linksOf } from "./test-links.mjs";
@@ -32,7 +34,7 @@ export async function checkPr(number, { resultsFile, ownerId, cwd = process.cwd(
     ...(pr.commits ?? []).map((c) => `${c.messageHeadline ?? ""}\n${c.messageBody ?? ""}`),
   ];
   const key = texts.map((text) => text.match(TASK_TRAILER)?.[1]).find(Boolean);
-  if (!key) return untracked(number, pr.headRefName ?? "");
+  if (!key) return untracked(number, pr.headRefName ?? "", cwd);
   if (!ownerId) {
     throw new Error("set SDLC_OWNER_ACCOUNT_ID (a repository variable in CI) to the owner's id");
   }
@@ -58,12 +60,22 @@ export async function checkPr(number, { resultsFile, ownerId, cwd = process.cwd(
   return { status: "fail", lines: [...lines, ...problems.map((problem) => `error ${problem}`)] };
 }
 
-function untracked(number, branch) {
+async function untracked(number, branch, cwd) {
   if (branch.startsWith(AGENT_BRANCH)) {
     const why = `${branch} is an agent branch; its PR must name its task ("Task: VISP-<n>")`;
     return { status: "fail", lines: [`PR #${number}: ${why}`] };
   }
-  return { status: "skipped", lines: [`PR #${number} names no task ("Task: VISP-<n>"); skipped`] };
+  const skipped = `PR #${number} names no task ("Task: VISP-<n>"); skipped`;
+  try {
+    await jiraClient(cwd).project();
+  } catch (error) {
+    if (error.code !== NO_SECRET) throw error;
+    return {
+      status: "skipped",
+      lines: [`${skipped}; Jira not checked (no credential, as on a fork)`],
+    };
+  }
+  return { status: "skipped", lines: [`${skipped}; the Jira credential works`] };
 }
 
 async function readTask(jira, key) {

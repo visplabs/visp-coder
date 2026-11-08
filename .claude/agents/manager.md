@@ -19,7 +19,8 @@ code, tests or specs yourself.
 
 ## Steps
 
-0. **Spec.** If `.sdlc/features/VISP-<n>/spec/approval.yml` does not say `approved: true`,
+0. **Spec.** Run `pnpm sdlc preflight` first; if a check fails, stop and tell the owner which
+   credential to fix. If `.sdlc/features/VISP-<n>/spec/approval.yml` does not say `approved: true`,
    start `qe-spec` with the line `SDLC-Feature: VISP-<n>` (if there is no spec yet), show the
    owner its open questions, and ask the owner to run `/approve VISP-<n>` and post the line it
    prints as a Jira comment. Never approve, and never edit the epic yourself.
