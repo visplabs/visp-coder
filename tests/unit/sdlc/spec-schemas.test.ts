@@ -72,6 +72,20 @@ describe("sdlc schemas", () => {
     expect(errors.some((error) => error.startsWith("clauses.0.kind"))).toBe(true);
   });
 
+  it("refuses a task scope path that names a folder, since it matches no file", () => {
+    const task = {
+      schema: "task@1",
+      feature: "F-12",
+      task: "T-13",
+      criteria: ["AC-01"],
+      scope: { paths: ["src/worklog.ts", "docs/adr/"] },
+      track: "standard",
+      size: "S",
+    };
+    expect(errorsOf(task).join("\n")).toContain("docs/adr/**");
+    expect(errorsOf({ ...task, scope: { paths: ["src/worklog.ts", "docs/adr/**"] } })).toEqual([]);
+  });
+
   it("rejects unknown fields and unknown schemas", () => {
     expect(errorsOf({ ...intent, extra: true }).length).toBeGreaterThan(0);
     expect(errorsOf({ schema: "plan@9" })[0]).toContain('unknown schema "plan@9"');
