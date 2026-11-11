@@ -240,7 +240,7 @@ The probes for the review's findings passed in 0–20% of bare runs and 83–93%
 
 ## Lean batches after the pivot (October 23 2026)
 
-Both batches used the bench preset `quality-2026-10`: a Claude Haiku 5.5 worker at high effort, with VISP launching a Claude reviewer (`critic.launch: claude-exec`). A default Claude Code install leaves the reviewer to the host, so these results describe the `claude-exec` configuration.
+Both batches used the bench preset `quality-2026-10`: a Claude Haiku 5.5 worker at high effort, with VISP launching a Claude reviewer (`critic.launch: claude-exec`). At the time a default Claude Code install left the reviewer to the host; `visp init --harness claude-code` now writes `claude-exec`. These results describe the `claude-exec` configuration.
 
 **B2, 8 runs per arm on three tasks.** The arms were bare, develop, a candidate build (#79 and #82), and the candidate with the reviewer off.
 
@@ -256,7 +256,7 @@ Both batches used the bench preset `quality-2026-10`: a Claude Haiku 5.5 worker 
 
 - **Quality.** Every arm held it. The probe checks (#84) for gaps the earlier reviews had found scored the same in every arm, so in this batch the reviewer did not change the product.
 - **Candidate against develop.** The candidate met the merge rule against develop, and was faster and cheaper on the extension task.
-- **Cost.** It is still over the target of near-bare cost: +$0.036 and +82 s on bundles, and 1.68× bare on extend.
+- **Cost.** It is still over the target of near-bare cost: +$0.036 and +82 s on bundles, and 1.68× bare on extend. Batch T1 below measured the changes made for this.
 
 **B3, carryover over two or three sessions.** A convention from the first session (a 10000 restock cap) had to hold in later sessions without being restated.
 
@@ -273,6 +273,26 @@ Per task, VISP with recall kept the convention in 10 of 10 runs over two session
 - **Why bare misses it.** The cap is visible in the code in every run. Bare workers read it as applying only to item creation; the wider scope lives only in the earlier request.
 - **The auto-memory arm saved no memory files.** The bench prompt confined edits to the project, which kept its memory folder out of reach. #90 fixes this for later runs.
 - **Limits.** This is one task family and one worker model. The VISP arms ran with the `critic.launch: claude-exec` configuration.
+
+## Lean cost batch T1 (October 25–27 2026)
+
+T1 measured the lean-cost changes (#92) together, 8 runs per arm with a Claude Haiku 5.5 worker. "Develop" is the build before those changes. The lean-cost arm ran with `workflow.autoCompact` on. The target was at most +$0.03 and +60 s over bare on the small task, and at most 1.5 times bare on the existing-code task.
+
+| Task | Metric | Bare | Develop | Lean cost | Lean cost, reviewer off |
+| --- | --- | --- | --- | --- | --- |
+| reservations-bundles | mean cost per run | $0.023 | $0.058 | $0.038 | $0.032 |
+| reservations-bundles | median wall | 108 s | 180 s | 158 s | 142 s |
+| spreadsheet-extend | mean cost per run | $0.190 and $0.205 | $0.278 | $0.127 | not run |
+| spreadsheet-extend | median wall | 422 s and 407 s | 494 s | 691 s | not run |
+| lighthouse-pixel | judge | 7.375 | 8.0 | 7.625 | not run |
+| lighthouse-pixel | mean cost per run | $0.039 | $0.073 | $0.047 | not run |
+
+The existing-code task had two bare arms, the second as a drift check; they agree within $0.015 and are pooled at $0.198.
+
+- **Small task: target met.** Lean cost added $0.015 and 50 s to a bare run. Compaction did not fire there, so this is the shipped default.
+- **Existing-code task: met only with compaction.** Lean cost was 0.64 times bare. Most of that saving is compaction: a bare run with the same compaction setting cost $0.116. Median wall was 40% over develop, which breaks the 15% speed guardrail, so `workflow.autoCompact` ships off. Develop was already 1.41 times bare. The shipped default, lean cost without compaction, was not measured on this task.
+- **Quality held.** Hidden checks and probes were equal across arms within noise. The lighthouse judge was inside the 0.5 margin against both bare and develop.
+- **Limits.** One worker model, 8 runs per arm. The code judge for the existing-code task has not run.
 
 ## What made the difference
 

@@ -1,11 +1,13 @@
 # visp
 
+> **Status: frozen at 0.5.0-beta.5 (November 2026).** VISP gets no new features. Issues are read, but fixes are not promised. What works, what was never measured and what is known to be wrong is listed under [Known limits](#known-limits).
+
 VISP makes an AI coding agent's work verifiable. It ties the user's verbatim request to a declared file scope and runnable checks, enforces that scope with host hooks, a Git pre-commit hook and CI, and ends each feature with an evidence record (`visp pr`): what was asked, what ran and passed, what changed, and what was not verified. Where the measurements stand:
 
-- **Carryover works, with recall on.** Earlier decisions reach later sessions when VISP launches the reviewer (`critic.launch: claude-exec` or `codex-exec`). With the default Claude Code setup (`launch: host`) nothing is recalled.
-- **Cost is not yet near a bare agent.** In batch B2 the lean profile cost about 1.7 times a bare run on an existing-code task, and on a small task it added $0.036 and 82 s.
+- **Carryover works, with recall on.** Earlier decisions reach later sessions when VISP launches the reviewer (`critic.launch: claude-exec` or `codex-exec`), which `visp init` writes for Claude Code and Codex. A project that sets `launch: host`, or was initialised before that default, recalls nothing.
+- **Cost is near a bare agent on a small task; an existing-code task is open.** In batch T1 the lean profile added $0.015 and 50 s to a bare run on a small task. On an existing-code task it cost 0.64 times a bare run, but only with `workflow.autoCompact` on, which ships off because it was 40% slower. The shipped default was not measured on that task; the build before it cost 1.41 times bare.
 - **Scope enforcement is unmeasured.** The hooks and the Git hook exist and are tested, but their effect on agent behavior has not been measured.
-- **Evidence labels are checked.** VISP compares the tests a worker names with the check output, and `visp pr` marks what it cannot confirm.
+- **Evidence labels are checked, for runners that print each test.** VISP compares the tests a worker names with the check output, and `visp pr` marks what it cannot confirm. Under the default vitest and jest reporters a named test is never confirmed (see [Known limits](#known-limits)).
 
 The full loop, with an independent tester and reviewer, is an escalation for weak or local models, failing checks and large requests.
 
@@ -152,10 +154,25 @@ Measured on VISP's own benchmark (`bench/`) with Claude Haiku 5.5 as the coding 
 
 - A bare agent already passes the benchmark's hidden checks. VISP adds little measurable code quality for this model, and with Claude Haiku 4.5 it raised hidden-check scores more (35–37 of 38 against 26–35 on a spreadsheet engine).
 - Across sessions (batch B3, a convention from the first session that later sessions must keep), VISP with recall kept it in 19 of 20 runs, a bare agent in 22 of 40 and a bare agent with Claude Code auto memory in 14 of 40. With recall off VISP kept it in 9 of 19. This needs `critic.launch: claude-exec` (or `codex-exec`). One task family, one worker model; one recall-off run is still marked invalid.
-- Cost (batch B2, lean against bare, hidden checks equal at 100% on bundles and extend): $0.059 against $0.023 per run on a small task (+82 s median) and $0.283 against $0.168 on an existing-code task. That misses the target of near-bare cost.
+- Cost (batch T1, lean against bare, 8 runs per arm, hidden checks and probes equal): $0.038 against $0.023 per run on a small task (+50 s median), inside the target of +$0.03 and +60 s. On an existing-code task, $0.127 against $0.198 (0.64 times bare, target 1.5) with `workflow.autoCompact` on, at a median 691 s against 494 s for the build before these changes; that setting ships off. The earlier build cost $0.278 there (1.41 times bare), and the shipped default without compaction was not measured on that task.
 - On real chains of issues (ChainSWE), bare agents broke no earlier tests; their failures were incomplete fixes. VISP's requirement listing targets that.
 - Outside evidence: in Claude Code, stating the allowed scope in the prompt cut out-of-scope actions from 15.8% to 3.9% with Sonnet 4.6 and from 17.1% to 0.0% with GLM-4.6 (OverEager-Bench, arXiv 2605.18583). That study changed prompt text only; VISP's own effect on scope has not been measured.
 - Scope enforcement today: hooks, the Git pre-commit hook and CI refuse edits outside a slice's declared scope, but the lean default's one-slice light path declares every file in scope (`**`), so there it refuses only blocked paths and VISP's own state.
+
+## Known limits
+
+From a read-only audit of 0.5.0-beta.5 in November 2026, on small Python and TypeScript projects under Claude Code. Each item was read in the code or reproduced; none is scheduled to be fixed.
+
+- **Named tests are not confirmed under vitest or jest default reporters.** Their output lists files, not tests, so a worker's account gets "not confirmed" even when the test passed. Python `unittest -v` output is confirmed. No false `verified` was seen.
+- **The flip check can end "unchecked" on a project with a large `node_modules`.** It copies the dependency tree with a 15-second limit per copy.
+- **Recall is silent when it does nothing.** With `critic.launch: host`, or when the model call fails, a feature starts without earlier decisions and without a note saying so.
+- **The lean default refuses little.** Its one slice allows every file. Edits to absolute paths outside the project pass, and shell writes are not checked when they run; `visp done` and the Git hook catch changes inside the repository later. A multi-slice brief enforces its declared scope.
+- **Under Claude Code the independent tester runs for new projects only.** On existing code a full-profile feature has no tester, and the reply does not say so.
+- **Codex was not re-checked for this release.** Hooks, reviewer, tester and recall under `codex-exec` were last exercised in October. `visp doctor` under Codex prints "apply_patch is not intercepted" even when the edit hook is installed.
+- **A repository with a Git submodule is refused**, and one whose Git hooks path is managed elsewhere (Husky) cannot take the `pre-commit` scope check without a manual Git config change that `visp install` prints.
+- **`.mcp.json` and `.codex/config.toml` hold the installed CLI's absolute path**, so a committed copy does not work on another machine until `visp install` runs there.
+- **The regression gate is unmeasured.** It defaults to `advise`, found planted regressions in small projects and no real one in any benchmark run.
+- **`visp pr` counts outcomes, not requirements**, in its "n of n requirements shown" line.
 
 ## Documentation
 
