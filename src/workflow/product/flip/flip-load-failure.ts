@@ -14,7 +14,7 @@ const SCRIPT_FILE_FAILED = [
   /^✖ (?:file:\/\/)?\S+\.[cm]?[jt]sx?\s+\(\d[\d.]*ms\)/m,
   // node:test's TAP output (Node 22 off a terminal): the file itself failed, not a test in it.
   /^not ok \d+ - (?:[^\s.]*\.)+[cm]?[jt]sx?\r?\n(?: {2}(?!failureType:)\S[^\n]*\n)* {2}failureType: 'testCodeFailure'/m,
-  /⎯+ Failed Suites\b/,
+  /⎯ Failed Suites\b/,
   /^[ \t]*FAIL[ \t]+(\S+)[ \t]+\[[ \t]*\1[ \t]*\]/m,
   /Test suite failed to run/,
 ];
