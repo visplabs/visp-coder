@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.0-beta.5 - 2026-11-12
 
 ### Added
 - **`visp doctor` says whether crash reporting is on.** A new `crash reporting` row, and `data.crashReporting` in `visp doctor --json`, give whether `VISP_SENTRY_DSN` is set (never its value), the environment reports go to (`VISP_SENTRY_ENVIRONMENT`, or `production`), whether `VISP_CRASH_LOG` is set and whether its folder is writable. With no DSN it says crash reports stay on this machine and that `VISP_SENTRY_DSN` turns reporting on. A `VISP_CRASH_LOG` in a folder that is not writable makes the verdict `degraded` (exit code 0). The CLI text output of `visp doctor` gains the row; MCP `visp_doctor` and `visp ui` are unchanged. See `docs/configuration.md`.
