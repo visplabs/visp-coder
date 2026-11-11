@@ -382,6 +382,16 @@ describe("at visp done", () => {
     expect(closed.ok && closed.value.closed).toBe(true);
   });
 
+  it("accepts an account for a request that lists no requirements and says it was ignored", async () => {
+    await started("Make the public value two.");
+    const closed = await runProductDone(await state(), { account: ["R001=C001 two"] });
+    expect(closed.ok && closed.value.closed).toBe(true);
+    expect(closed.ok && closed.value.warnings).toContain(
+      "This request lists no requirements, so --account was ignored.",
+    );
+    expect(closed.ok && closed.value).not.toHaveProperty("requirements");
+  });
+
   it("moves a lean feature to the full profile when its change touches more than 15 files", async () => {
     await started("Make the public value two.");
     for (let index = 0; index < 15; index++)
