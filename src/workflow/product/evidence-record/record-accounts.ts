@@ -43,6 +43,20 @@ export function accountEvidence(
   });
 }
 
+/**
+ * What the account table lists: every requirement `visp feature` listed, and those whose cited
+ * check passed with no test name VISP failed to confirm.
+ */
+export function accountCounts(accounts: readonly EvidenceAccount[]): {
+  readonly requirements: number;
+  readonly verified: number;
+} {
+  const shown = accounts.filter(
+    (entry) => entry.verification === "verified" || entry.verification === "no-names",
+  );
+  return { requirements: accounts.length, verified: shown.length };
+}
+
 /** One gap for the accounts whose named tests VISP could not confirm; none when all could be. */
 export function accountGaps(accounts: readonly EvidenceAccount[] | undefined): EvidenceGap[] {
   const claimed = (accounts ?? []).filter((entry) => entry.verification === "claimed");

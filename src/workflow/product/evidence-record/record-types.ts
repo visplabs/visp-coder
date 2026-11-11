@@ -34,6 +34,7 @@ export interface EvidenceRecord {
 }
 
 export interface EvidenceSummary {
+  /** The requirements the record lists: the listed ones (R001…) when the request has two or more, else the outcomes. */
   readonly requirements: number;
   /** Shown by a passing check VISP ran on the current version. */
   readonly verified: number;

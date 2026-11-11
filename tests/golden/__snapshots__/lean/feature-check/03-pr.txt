@@ -2,7 +2,7 @@ $ visp pr
 --- stdout
 # Evidence record: Return two from the public value module
 
-`001-return-two-from-the-public` (active) · 1 of 1 requirement shown by checks VISP ran on this version · 1 item not verified.
+`001-return-two-from-the-public` (active) · 0 of 2 requirements shown by checks VISP ran on this version · 1 item not verified.
 
 ## Not verified (1)
 
