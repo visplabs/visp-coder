@@ -2,6 +2,8 @@
 
 A feature is one brief plus the records VISP generates while the agent works through it. The agent authors only the brief; status, executions, reviews and summaries are generated and should not be edited.
 
+The workflow needs a Git repository without submodules: it refuses one that contains a submodule, and `visp doctor` names the submodule path.
+
 ## Starting a feature
 
 ```sh

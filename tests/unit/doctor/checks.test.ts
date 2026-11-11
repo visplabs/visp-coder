@@ -1253,6 +1253,27 @@ describe("the git preflight check", () => {
   });
 });
 
+describe("the git submodules check", () => {
+  it("is ok without a submodule", async () => {
+    expect(await check("git submodules")).toMatchObject({ status: "ok" });
+  });
+
+  it("names the submodule path and says the workflow refuses the repository", async () => {
+    const added = spawnSync(
+      "git",
+      ["update-index", "--add", "--cacheinfo", `160000,${"a".repeat(40)},vendor/lib`],
+      { cwd: workspace.root, encoding: "utf8" },
+    );
+    expect(added.status).toBe(0);
+
+    const result = await check("git submodules");
+
+    expect(result.status).toBe("warn");
+    expect(result.detail).toContain("vendor/lib");
+    expect(result.detail).toContain("workflow refuses");
+  });
+});
+
 describe("the active feature check", () => {
   it("points at how to start one when there is none", async () => {
     const result = await check("active feature");
