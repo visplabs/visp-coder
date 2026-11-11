@@ -1,6 +1,6 @@
 import type { WorkspaceState } from "../state.js";
 import type { ProductExecution } from "./model.js";
-import { testFilesRun } from "./test-run-files.js";
+import { testFilesRun, withoutPassedFiles } from "./test-run-files.js";
 import { loadTestSources, type TestRunnerKind, type TestSources } from "./test-sources.js";
 
 /**
@@ -95,7 +95,10 @@ const NOT_RUN =
   /\.\.\. (?:skipped|expected failure|unexpected success)\b|\b(?:SKIPPED|XFAIL|XPASS)\b|--- SKIP\b|^\s*[○✎﹣]\s/;
 const TAP_DIRECTIVE = /#\s*(?:skip|todo)\b/i;
 const notRun = (line: string) => NOT_RUN.test(line) || TAP_DIRECTIVE.test(line);
-/** Lines that report a test one by one: a runner printing only dots has none. */
+/**
+ * Lines that report a test one by one: a runner printing only dots has none. Nor does vitest or
+ * jest by default: their `✓ file (2 tests)` and `PASS file` lines name files, not tests.
+ */
 const PER_TEST = new RegExp(
   String.raw`\.\.\. (?:ok|FAIL|ERROR|skipped)|\b(?:PASSED|FAILED|ERROR)\b|^\s*(?:PASS|FAIL)\s|[✔✓✖✕✅]|^\s*(?:not )?ok\s+(?!${GO_PACKAGE})\S|--- (?:PASS|FAIL)`,
   "m",
@@ -194,6 +197,10 @@ const UNITTEST_RAN = /^Ran (\d+) tests? in /m;
 const UNITTEST_OK = /^OK$/m;
 const PYTEST_SUMMARY = /^[= ]*((?:\d+ [a-z]+(?:, )?)+) in [\d.]+s\b/m;
 const JEST_SUMMARY = /^Tests:\s+(\d+) passed, (\d+) total\b/m;
+/** jest's suites line when a suite failed, was skipped or could not run: `Tests` can still read clean. */
+const JEST_SUITES_NOT_CLEAN = /^Test Suites:(?!\s+(\d+) passed, \1 total\b)/m;
+const VITEST_FILES = /^\s*Test Files\s+(\d+) passed \((\d+)\)\s*$/m;
+const VITEST_TESTS = /^\s*Tests\s+(\d+) passed \((\d+)\)\s*$/m;
 const MOCHA_PASSING = /^\s*(\d+) passing\b/m;
 const MOCHA_NOT_PASSING = /^\s*\d+ (?:failing|pending)\b/m;
 const NODE_PASS = /^(?:ℹ|#) pass\s+(\d+)\s*$/m;
@@ -216,6 +223,13 @@ function equalCounts(match: RegExpExecArray | null, runner: TestRunnerKind): Sui
   return match && ran === total && ran > 0 ? { text: `${ran} passed`, ran, runner } : undefined;
 }
 
+/** vitest: every test file and every test passed, none skipped (a skip adds `| 1 skipped`). */
+function vitestPass(output: string): SuitePass | undefined {
+  const files = VITEST_FILES.exec(output);
+  if (!files || files[1] !== files[2]) return undefined;
+  return equalCounts(VITEST_TESTS.exec(output), "js");
+}
+
 /**
  * The summary line of a run in which every test passed and none was skipped, for the runners VISP
  * knows that print a count: unittest, pytest, jest, mocha, node:test and TAP, and "N/N passed"
@@ -231,8 +245,9 @@ function suitePass(output: string): SuitePass | undefined {
       : undefined;
   const pytest = pytestPass(output);
   if (pytest) return pytest;
+  if (/^\s*Test Files\s/m.test(output)) return vitestPass(output);
   const jest = JEST_SUMMARY.exec(output);
-  if (jest) return equalCounts(jest, "js");
+  if (jest) return JEST_SUITES_NOT_CLEAN.test(output) ? undefined : equalCounts(jest, "js");
   const mocha = MOCHA_PASSING.exec(output)?.[1];
   if (mocha)
     return MOCHA_NOT_PASSING.test(output)
@@ -299,9 +314,13 @@ function namedTests(
   sources: TestSources | undefined,
 ): NameVerdict[] {
   const identifiers = testNamesIn(note);
-  if (!PER_TEST.test(execution.output)) {
+  if (!PER_TEST.test(withoutPassedFiles(execution.output))) {
     const pass = sources ? suitePass(execution.output) : undefined;
-    return identifiers.map((name) =>
+    // A title counts only where the test files define it, as in the listed case.
+    const titles = pass
+      ? titleSegments(note).filter((title) => sources?.definedIn(title, pass.runner).length)
+      : [];
+    return [...identifiers, ...titles].map((name) =>
       sources && pass
         ? suiteVerdict(name, pass, execution, sources)
         : { name, verdict: "claimed", reason: "no-test-names" },
