@@ -443,7 +443,7 @@ async function checkSubmodules(state: WorkspaceState): Promise<Check> {
     name,
     status: "warn",
     detail: `Git submodule${links.value.length > 1 ? "s" : ""} at ${links.value.join(", ")}: ${PRODUCT_NAME}'s workflow refuses a repository that contains one`,
-    recovery: `Use ${PRODUCT_NAME} in a repository without submodules, or remove the submodule (git rm <path>)`,
+    recovery: `Use ${PRODUCT_NAME} in a repository without submodules`,
   };
 }
 
