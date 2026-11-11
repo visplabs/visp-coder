@@ -199,8 +199,8 @@ const PYTEST_SUMMARY = /^[= ]*((?:\d+ [a-z]+(?:, )?)+) in [\d.]+s\b/m;
 const JEST_SUMMARY = /^Tests:\s+(\d+) passed, (\d+) total\b/m;
 /** jest's suites line when a suite failed, was skipped or could not run: `Tests` can still read clean. */
 const JEST_SUITES_NOT_CLEAN = /^Test Suites:(?!\s+(\d+) passed, \1 total\b)/m;
-const VITEST_FILES = /^\s*Test Files\s+(\d+) passed \((\d+)\)\s*$/m;
-const VITEST_TESTS = /^\s*Tests\s+(\d+) passed \((\d+)\)\s*$/m;
+const VITEST_FILES = /^[ \t]*Test Files[ \t]+(\d+) passed \((\d+)\)[ \t]*\r?$/m;
+const VITEST_TESTS = /^[ \t]*Tests[ \t]+(\d+) passed \((\d+)\)[ \t]*\r?$/m;
 const MOCHA_PASSING = /^\s*(\d+) passing\b/m;
 const MOCHA_NOT_PASSING = /^\s*\d+ (?:failing|pending)\b/m;
 const NODE_PASS = /^(?:ℹ|#) pass\s+(\d+)\s*$/m;
@@ -245,7 +245,7 @@ function suitePass(output: string): SuitePass | undefined {
       : undefined;
   const pytest = pytestPass(output);
   if (pytest) return pytest;
-  if (/^\s*Test Files\s/m.test(output)) return vitestPass(output);
+  if (/^[ \t]*Test Files[ \t]/m.test(output)) return vitestPass(output);
   const jest = JEST_SUMMARY.exec(output);
   if (jest) return JEST_SUITES_NOT_CLEAN.test(output) ? undefined : equalCounts(jest, "js");
   const mocha = MOCHA_PASSING.exec(output)?.[1];

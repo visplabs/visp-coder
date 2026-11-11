@@ -13,9 +13,9 @@ const SCRIPT_LOAD_ERROR =
 const SCRIPT_FILE_FAILED = [
   /^✖ (?:file:\/\/)?\S+\.[cm]?[jt]sx?\s+\(\d[\d.]*ms\)/m,
   // node:test's TAP output (Node 22 off a terminal): the file itself failed, not a test in it.
-  /^not ok \d+ - \S+\.[cm]?[jt]sx?\r?\n(?: {2}\S.*\r?\n)*? {2}failureType: 'testCodeFailure'/m,
+  /^not ok \d+ - (?:[^\s.]*\.)+[cm]?[jt]sx?\r?\n(?: {2}(?!failureType:)\S[^\n]*\n)* {2}failureType: 'testCodeFailure'/m,
   /⎯+ Failed Suites\b/,
-  /^\s*FAIL\s+(\S+)\s+\[\s*\1\s*\]/m,
+  /^[ \t]*FAIL[ \t]+(\S+)[ \t]+\[[ \t]*\1[ \t]*\]/m,
   /Test suite failed to run/,
 ];
 /** Signs that some test ran, so the failure is not only a load failure. */
@@ -26,7 +26,7 @@ const TEST_RAN = [
   /\b[1-9]\d* (?:passed|failed)\b/,
   /(?:ℹ|^#) pass [1-9]/m,
   /^ok \d+/m,
-  /^\s*[✓✔]\s/m,
+  /^[ \t]*[✓✔][ \t]/m,
   /\.\.\. ok$/m,
 ];
 
