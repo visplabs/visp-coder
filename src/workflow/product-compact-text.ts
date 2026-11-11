@@ -1,4 +1,5 @@
 import { projectMemoryText } from "../memory/project-memory.js";
+import { COULD_NOT_LOAD } from "./product/flip/flip-load-failure.js";
 import { projectRulesText } from "./product/project-rules.js";
 
 /** Where the reader runs: MCP tool text, or CLI text output read by a model through a shell. */
@@ -373,7 +374,10 @@ function executionSummary(execution: Record<string, unknown>): unknown {
       return {
         check: execution.check,
         status: "passed",
-        failsWithoutChange: flip.failsWithoutChange,
+        failsWithoutChange:
+          flip.failsWithoutChange === true && flip.failedToLoad === true
+            ? COULD_NOT_LOAD
+            : flip.failsWithoutChange,
         flipExtraMs: execution.flipDurationMs,
         ...(flip.failsWithoutChange === false
           ? {

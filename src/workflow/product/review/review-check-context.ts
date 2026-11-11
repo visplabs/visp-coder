@@ -4,6 +4,7 @@ import { matchesAny } from "../../../core/patterns.js";
 import { privatePath } from "../../../core/redaction.js";
 import type { WorkspaceState } from "../../state.js";
 import { isBrowserCheckCommand } from "../check/check-command.js";
+import { flipOutcome } from "../flip/flip-load-failure.js";
 import type { ProductCheck, ProductExecution } from "../model.js";
 
 /** Infer executable entries and conventional discovery inputs, never claim they were assertions. */
@@ -86,7 +87,7 @@ export function reviewCheckResult(
     `Provenance: ${execution.provenance}; assertions: ${execution.assertions}`,
     ...(execution.flip
       ? [
-          `Without the change (implementation reverted to the work-authorization baseline, tests kept): ${execution.flip.failsWithoutChange === true ? "failed" : execution.flip.failsWithoutChange === false ? "passed" : "unchecked"}${execution.flip.reason ? ` (${execution.flip.reason})` : ""}`,
+          `Without the change (implementation reverted to the work-authorization baseline, tests kept): ${flipOutcome(execution.flip)}${execution.flip.reason ? ` (${execution.flip.reason})` : ""}`,
           ...(options.timing === false
             ? []
             : [`Flip check extra time: ${execution.flipDurationMs ?? 0} ms`]),

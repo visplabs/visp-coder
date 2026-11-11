@@ -200,7 +200,7 @@ it("reports added implementation absence as structural in on mode", async () => 
   const w = await setup({ greenfield: true, mode: "on" });
   expect((await verify(w)).executions[0]).toMatchObject({
     status: "passed",
-    flip: { failsWithoutChange: true, signal: "structural" },
+    flip: { failsWithoutChange: true, signal: "structural", failedToLoad: true },
   });
 });
 
