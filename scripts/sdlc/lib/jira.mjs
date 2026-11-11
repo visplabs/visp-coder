@@ -10,6 +10,8 @@ import { loadConfig } from "./config.mjs";
 // Jira's limit for a text field; the document is measured as stored JSON, which is longer than
 // its text, so a body that passes always fits.
 const MAX_FIELD = 32_767;
+// The error code when no credential is set at all, as on a fork's pull request in CI.
+export const NO_SECRET = "SDLC_NO_SECRET";
 const ISSUE_FIELDS = ["summary", "description", "status", "parent", "issuetype", "updated"];
 
 export function jiraClient(cwd = process.cwd()) {
@@ -30,6 +32,10 @@ export function jiraClient(cwd = process.cwd()) {
 
   return {
     config,
+    // The project, read to prove the credential works (preflight, and check-pr on any PR).
+    async project() {
+      return request("GET", `/rest/api/3/project/${config.jira.project.id}`);
+    },
     async readIssue(key) {
       return issue(await request("GET", `/rest/api/3/issue/${key}?fields=${ISSUE_FIELDS}`));
     },
@@ -151,6 +157,13 @@ function secret({ service, account }) {
         encoding: "utf8",
       });
   const trimmed = value.trim();
+  if (trimmed === "") {
+    const error = new Error(
+      `no Jira credential in ${command ? "SDLC_SECRET_CMD" : `${service}/${account}`}`,
+    );
+    error.code = NO_SECRET;
+    throw error;
+  }
   if (!trimmed.includes(":")) {
     const source = command
       ? `the secret SDLC_SECRET_CMD reads (${command})`

@@ -59,6 +59,19 @@ describe("ticket status from pull requests", () => {
     expect(result.stdout).toContain("T-14 -> Done (PR #109 merged)");
   });
 
+  it("reports a failed CI run on a task's merge commit", () => {
+    // Pilot 2: Sonar failed every push to develop after #110, and nothing in the pipeline said so.
+    const list = [
+      { number: 109, state: "MERGED", body: "Task: T-14", mergeCommit: { oid: "4d4a5856" } },
+    ];
+    writeFileSync(join(fixture.repo, "pr-list.json"), JSON.stringify(list));
+    const runs = [{ name: "ci", conclusion: "failure", status: "completed", url: "https://ci/9" }];
+    writeFileSync(join(fixture.repo, "runs-4d4a5856.json"), JSON.stringify(runs));
+    const result = sync();
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("after PR #109 merged, CI ci failed on 4d4a5856: https://ci/9");
+  });
+
   it("moves the epic to Done once every task is Done", () => {
     setPrs([
       { number: 108, state: "MERGED", task: "T-13" },

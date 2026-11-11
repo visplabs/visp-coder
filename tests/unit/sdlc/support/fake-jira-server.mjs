@@ -29,7 +29,12 @@ const server = createServer(async (req, res) => {
     res.writeHead(status, { "Content-Type": "application/json" });
     res.end(value === undefined ? "" : JSON.stringify(value));
   };
+  // The credential "rejected@example.com:x" stands for a token Jira refuses (pilot 2's unscoped
+  // token at the api.atlassian.com gateway answered 401).
+  const rejected = `Basic ${Buffer.from("rejected@example.com:x").toString("base64")}`;
+  if (req.headers.authorization === rejected) return send(401, { message: "Unauthorized" });
   const parts = url.pathname.split("/").filter(Boolean);
+  if (req.method === "GET" && parts[3] === "project") return send(200, { key: "VISP" });
   const key = parts[4];
   const issue = state.issues[key];
   if (req.method === "POST" && url.pathname === "/rest/api/3/search/jql") {
