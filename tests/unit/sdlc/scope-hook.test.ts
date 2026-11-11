@@ -1,3 +1,4 @@
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { promptEntry, runHook, type SdlcRepo, sdlcRepo } from "./support/sdlc-repo.js";
@@ -61,6 +62,37 @@ describe("scope hook", () => {
     expect(decision(toolCall("Bash", { command: "sed -i s/a/b/ src/other.ts" }))).toBe("deny");
     expect(decision(toolCall("Bash", { command: "pnpm exec vitest run tests/unit" }))).toBe("none");
     expect(decision(toolCall("Bash", { command: "echo ok > src/worklog.ts" }))).toBe("none");
+  });
+
+  it("says a path held in a shell variable cannot be checked", () => {
+    // Pilot 2: "$f is outside this task's scope" read as if $f were a file name.
+    for (const command of ['for f in a b; do rm "$f"; done', "cp a.ts $P", "touch `x`"]) {
+      const result = toolCall("Bash", { command });
+      expect(decision(result), command).toBe("deny");
+      expect(JSON.stringify(result.json), command).toContain("shell variable");
+    }
+  });
+
+  it("judges a copy into a folder by the file it creates there", () => {
+    // Pilot 2: `cp x.md docs/adr` was refused under scope docs/adr/**.
+    fixture.write(
+      ".sdlc/features/F-12/tasks/T-13/task.yml",
+      "schema: task@1\nfeature: F-12\ntask: T-13\ncriteria: [AC-01]\nscope: { paths: [src/worklog.ts, 'docs/adr/**'] }\ntrack: standard\nsize: M\n",
+    );
+    fixture.write("docs/adr/README.md", "# ADRs\n");
+    fixture.write("src/other.ts", "");
+    expect(decision(toolCall("Bash", { command: "cp /tmp/0003-x.md docs/adr" }))).toBe("none");
+    expect(decision(toolCall("Bash", { command: "cp /tmp/0003-x.md docs/adr/" }))).toBe("none");
+    expect(decision(toolCall("Bash", { command: "mv /tmp/a.ts /tmp/b.ts src" }))).toBe("deny");
+  });
+
+  it("keeps the architect's ADR drafts out of the repository", () => {
+    // Pilot 2: the architect wrote ADR 0003 into the owner's main checkout.
+    const result = toolCall("Write", { file_path: "docs/adr/0003-x.md" }, "architect");
+    expect(decision(result)).toBe("deny");
+    expect(JSON.stringify(result.json)).toContain(join(tmpdir(), "sdlc-adr"));
+    const draft = join(tmpdir(), "sdlc-adr", "VISP-5", "0003-x.md");
+    expect(decision(toolCall("Write", { file_path: draft }, "architect"))).toBe("none");
   });
 
   it("logs a refusal with the epic, task and session it belongs to, for the retro", () => {

@@ -8,7 +8,8 @@
 // determined script can still get past it.
 
 import { execFileSync } from "node:child_process";
-import { basename, resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { basename, isAbsolute, resolve, sep } from "node:path";
 import { agentCommandRefusal } from "./sdlc-command-rules.mjs";
 import { splitCommands } from "./shell-words.mjs";
 
@@ -111,8 +112,18 @@ const GIT_RULES = {
     args.some((arg) => arg === "--delete" || /[dD]/.test(shortFlags(arg)))
       ? "deletes a branch"
       : undefined,
-  worktree: (args) =>
-    args[0] === "remove" || args[0] === "prune" ? "removes a worktree" : undefined,
+  worktree: (args) => {
+    if (args[0] === "prune") return "removes a worktree";
+    if (args[0] !== "remove") return undefined;
+    // An agent may remove a worktree it made in the temp folder, such as QE's base checkout.
+    const path =
+      args
+        .slice(1)
+        .filter((arg) => !arg.startsWith("-"))
+        .at(-1) ?? "";
+    const temporary = isAbsolute(path) && resolve(path).startsWith(tmpdir() + sep);
+    return temporary ? undefined : "removes a worktree";
+  },
   clean: (args) =>
     args.some((arg) => /[xX]/.test(shortFlags(arg))) ? "removes ignored files" : undefined,
   credential: (args) => (args[0] === "fill" ? "reads stored credentials" : undefined),
