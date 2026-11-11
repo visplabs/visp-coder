@@ -1,15 +1,17 @@
 import { existsSync } from "node:fs";
-import {
+import fsDefault, {
   chmod,
   mkdir,
   mkdtemp,
   open,
   readFile,
   rm,
+  stat,
   symlink,
   utimes,
   writeFile,
 } from "node:fs/promises";
+import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
@@ -407,6 +409,87 @@ it.each([
       "node_modules/wide.bin refers to the project by absolute path",
     );
   } finally {
+    await disposeFlipEnvironment(environment);
+  }
+});
+
+async function manyFileEnvironment(root: string) {
+  await mkdir(join(root, "node_modules/pkg"), { recursive: true });
+  for (let index = 0; index < 300; index++)
+    await writeFile(
+      join(root, `node_modules/pkg/file-${index}.js`),
+      `module.exports = ${index};\n`,
+    );
+  await writeFile(join(root, "node_modules/pkg/run.sh"), "#!/bin/sh\necho clean\n");
+  await chmod(join(root, "node_modules/pkg/run.sh"), 0o755);
+  await writeFile(join(root, "node_modules/pkg/shim.sh"), `#!/bin/sh\nexec ${root}/tool\n`);
+}
+
+it("gives the comparison unchanged environment files without copying their bytes", async () => {
+  workspace = await TestWorkspace.create({ ".gitignore": "node_modules/\n", "src/a.mjs": "1\n" });
+  const root = workspace.root;
+  await manyFileEnvironment(root);
+  const environment = await captureFlipEnvironment(root);
+  expect(environment.reason).toBeUndefined();
+  const comparison = await tree();
+  const snapshot = join(environment.directory as string, "node_modules/pkg");
+  try {
+    await provideFlipEnvironment(root, comparison, environment);
+    const pkg = join(comparison, "node_modules/pkg");
+    for (let index = 0; index < 300; index++) {
+      const name = `file-${index}.js`;
+      expect(await readFile(join(pkg, name), "utf8")).toBe(`module.exports = ${index};\n`);
+      expect((await stat(join(pkg, name))).ino).toBe((await stat(join(snapshot, name))).ino);
+    }
+    expect((await stat(join(pkg, "run.sh"))).mode & 0o777).toBe(0o755);
+    // A file that names the project gets its own bytes; the snapshot keeps its text.
+    expect(await readFile(join(pkg, "shim.sh"), "utf8")).toBe(
+      `#!/bin/sh\nexec ${comparison}/tool\n`,
+    );
+    expect((await stat(join(pkg, "shim.sh"))).ino).not.toBe(
+      (await stat(join(snapshot, "shim.sh"))).ino,
+    );
+    expect(await readFile(join(snapshot, "shim.sh"), "utf8")).toContain(root);
+    // Nothing in the comparison is the user's file: writes and cleanup leave the real environment.
+    const real = await stat(join(root, "node_modules/pkg/file-1.js"));
+    expect((await stat(join(pkg, "file-1.js"))).ino).not.toBe(real.ino);
+    await writeFile(join(pkg, "file-1.js"), "changed by the check\n");
+    await disposeFlipEnvironment(environment);
+    await rm(comparison, { recursive: true, force: true });
+    for (const index of [1, 299])
+      expect(await readFile(join(root, `node_modules/pkg/file-${index}.js`), "utf8")).toBe(
+        `module.exports = ${index};\n`,
+      );
+  } finally {
+    await disposeFlipEnvironment(environment);
+  }
+});
+
+it("copies environment files when the file system refuses links", async () => {
+  workspace = await TestWorkspace.create({ ".gitignore": "node_modules/\n", "src/a.mjs": "1\n" });
+  const root = workspace.root;
+  await manyFileEnvironment(root);
+  const environment = await captureFlipEnvironment(root);
+  expect(environment.reason).toBeUndefined();
+  const comparison = await tree();
+  const refuse = vi
+    .spyOn(fsDefault, "link")
+    .mockRejectedValue(Object.assign(new Error("cross-device link"), { code: "EXDEV" }));
+  syncBuiltinESMExports();
+  try {
+    await provideFlipEnvironment(root, comparison, environment);
+    expect(refuse).toHaveBeenCalled();
+    const pkg = join(comparison, "node_modules/pkg");
+    const snapshot = join(environment.directory as string, "node_modules/pkg");
+    expect(await readFile(join(pkg, "file-7.js"), "utf8")).toBe("module.exports = 7;\n");
+    expect((await stat(join(pkg, "file-7.js"))).ino).not.toBe(
+      (await stat(join(snapshot, "file-7.js"))).ino,
+    );
+    expect((await stat(join(pkg, "run.sh"))).mode & 0o777).toBe(0o755);
+    expect(await readFile(join(pkg, "shim.sh"), "utf8")).toContain(comparison);
+  } finally {
+    refuse.mockRestore();
+    syncBuiltinESMExports();
     await disposeFlipEnvironment(environment);
   }
 });

@@ -2,6 +2,7 @@ import { constants } from "node:fs";
 import {
   chmod,
   copyFile,
+  link,
   lstat,
   mkdir,
   mkdtemp,
@@ -204,6 +205,8 @@ interface CopyContext {
   ancestors: ReadonlySet<string>;
   /** Every spelling of the project root, as bytes: rebased in copied text, refused in UTF-16. */
   needles: RootNeedles;
+  /** Cleared by the first refused link, so a file system without links is not asked again. */
+  links: { enabled: boolean };
 }
 
 async function copyEnvironments(
@@ -261,6 +264,7 @@ async function copyEnvironmentRoot(
     ancestors: new Set(),
     mappings: source === project ? [{ source: actual, logical: canonical }] : [],
     needles,
+    links: { enabled: true },
   };
   // Keep a project-internal root alias at its canonical private path, so baseline
   // overlays of tracked packages also update the bytes loaded through the environment.
@@ -517,9 +521,12 @@ async function scanAndRebase(
   const state: { carry: Buffer; prior?: number } = { carry: Buffer.alloc(0) };
   const file = await open(source, "r");
   try {
+    // One buffer, no larger than the file: zeroing a whole step per read made a tree of many
+    // small files cost seconds. Every use below copies out of it before the next read.
+    const size = (await file.stat()).size;
+    const step = Buffer.allocUnsafe(Math.max(1, Math.min(size, REBASE_STEP_BYTES)));
     for (;;) {
-      const step = Buffer.alloc(REBASE_STEP_BYTES);
-      const { bytesRead } = await file.read(step, 0, REBASE_STEP_BYTES, null);
+      const { bytesRead } = await file.read(step, 0, step.length, null);
       const raw = step.subarray(0, bytesRead);
       scan.bytes += bytesRead;
       scan.binary ||= raw.includes(0);
@@ -599,6 +606,29 @@ function namesProject(path: string) {
 }
 
 /**
+ * Gives the comparison a file of the pre-run snapshot as a hard link when nothing in it needs
+ * rewriting: no spelling of the project root, and no moved link target. Reading it once to check
+ * costs far less than copying it, which is what let a large dependency tree outlast the time bound.
+ * Only snapshot files are linked, never a file inside the project, and a snapshot serves one tree
+ * and is then removed, so a check that rewrites a file in place changes nothing the user keeps.
+ * Any refusal (another device, a file system or platform without links) returns false and the file
+ * is copied as before.
+ */
+async function linkUnchanged(source: string, target: string, context: CopyContext) {
+  if (!context.links.enabled || contained(context.project, source)) return false;
+  if (context.mappings.some((mapping) => mapping.source !== mapping.logical)) return false;
+  const scan = await scanProjectFile(source, context.needles);
+  if (scan.reference || scan.wide) return false;
+  try {
+    await link(source, target);
+    return true;
+  } catch {
+    context.links.enabled = false;
+    return false;
+  }
+}
+
+/**
  * Copies one regular file into the comparison tree. Text has every UTF-8 spelling of the project
  * root rewritten to the tree's root, at any size, so the copy names the comparison rather than the
  * user's project. A UTF-16 spelling, or a binary file holding a UTF-8 one, cannot be rewritten and
@@ -615,6 +645,7 @@ async function copyRelocatedFile(
     await copyFile(source, target, constants.COPYFILE_FICLONE);
     return;
   }
+  if (await linkUnchanged(source, target, context)) return;
   const scan = await rebaseTo(source, target, context.needles, Buffer.from(context.rebound));
   if (scan.wide || (scan.binary && scan.reference))
     throw namesProject(relative(context.project, original));
