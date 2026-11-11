@@ -351,3 +351,23 @@ describe("host configuration backups", () => {
     expect(written?.path).toMatch(/mcp\.json\.0000000000007-[0-9a-f]{12}$/);
   });
 });
+
+describe("a Git hooks path outside the worktree", () => {
+  it("names the configured value and what each way out costs", async () => {
+    workspace.git("config", "core.hooksPath", "/opt/shared-hooks");
+    const state = await workspace.state();
+    const result = await buildInstallPlan(
+      state.paths,
+      { harness: "claude-code", profile: "minimal", hooks: ["claude", "git"], mcp: false },
+      "minimal",
+      state.files,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("STAGE_BLOCKED");
+    expect(result.error.message).toContain("core.hooksPath is /opt/shared-hooks");
+    expect(result.error.recovery).toContain("--no-hooks");
+    expect(result.error.recovery).toContain("cannot authorize coding");
+    expect(result.error.recovery).toContain("core.hooksPath .visp/hooks/git");
+  });
+});
