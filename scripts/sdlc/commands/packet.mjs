@@ -11,12 +11,12 @@ import { loadArtifacts } from "../lib/spec-store.mjs";
 import { traceFeature } from "./trace.mjs";
 
 export function run(args) {
-  const { feature, spec, report, notes: notesFile } = traceFeature(args);
+  const { feature, spec, report, notes: notesFile, tasks } = traceFeature(args);
   const notes = notesFile ? readFileSync(notesFile, "utf8").trim() : undefined;
   const dir = featureDir(feature);
   const { artifacts, invalid } = loadArtifacts(dir);
   const hash = specHash(spec.intent, spec.acceptance);
-  const text = renderPacket({ feature, spec, hash, report, artifacts, invalid, notes });
+  const text = renderPacket({ feature, spec, hash, report, artifacts, invalid, notes, tasks });
   mkdirSync(dir, { recursive: true });
   const path = join(dir, `owner-packet-${stamp()}.md`);
   writeFileSync(path, text);

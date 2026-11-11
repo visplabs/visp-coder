@@ -3,6 +3,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   statSync,
@@ -253,6 +254,116 @@ describe("sdlc command line", () => {
     expect(readFileSync(join(dir, "task.yml"), "utf8")).toContain("task: VISP-20");
     expect(readFileSync(join(dir, "ticket.yml"), "utf8")).toContain('status: "10022"');
     expect(sdlc("jira", "show", "VISP-20").stdout).toContain("VISP-20 Docs");
+  });
+
+  describe("re-planning a task (owner decision D11)", () => {
+    const LINKS =
+      "schema: test-links@1\nfeature: VISP-12\ntask: VISP-13\nlinks:\n  - { case: TC-01, test: 'tests/worklog.test.ts > worklog > writes one file' }";
+    const WIDER = TASK.replace('"tests/unit/sdlc/**"]', '"tests/unit/sdlc/**", "docs/adr/**"]');
+    const editTask = (task: string, why = "The scope hook refused cp x.md docs/adr.") => {
+      writeFileSync(join(repo, "task.yml"), task);
+      writeFileSync(join(repo, "why.md"), why);
+      return sdlc(
+        "jira",
+        "edit-task",
+        "VISP-13",
+        "--task-file",
+        "task.yml",
+        "--why-file",
+        "why.md",
+      );
+    };
+    const body = () => adfToBody(jira.issue("VISP-13").fields.description);
+
+    it("replaces only the task@1 block, records the change and comments on the ticket", () => {
+      setTask("VISP-13", issueBody(TASK, LINKS), "Write worklog files");
+      const result = editTask(WIDER);
+      expect(result.status, result.stderr).toBe(0);
+      expect(body()).toContain("docs/adr/**");
+      expect(body()).toContain("schema: test-links@1");
+      expect(body()).toMatch(/changes:\n\s+- at: .+\n\s+added:\n\s+- docs\/adr\/\*\*/);
+      const comment = jira
+        .calls()
+        .find((call) => call.method === "POST" && call.path.endsWith("/comment"));
+      expect(JSON.stringify(comment?.body)).toContain("added docs/adr/**");
+      expect(JSON.stringify(comment?.body)).toContain("refused cp x.md docs/adr");
+      sdlc("pull", "VISP-12");
+      const packet = sdlc("packet", "VISP-12");
+      expect(readFileSync(packet.stdout.trim(), "utf8")).toContain(
+        "- VISP-13: added docs/adr/** (The scope hook refused cp x.md docs/adr.)",
+      );
+    });
+
+    it("once the task is In Progress, only widens its scope by one folder at most", () => {
+      jira.setIssue("VISP-13", {
+        summary: "Code",
+        body: issueBody(TASK, LINKS),
+        parent: "VISP-12",
+        status: "3",
+      });
+      const narrower = TASK.replace(', "tests/unit/sdlc/**"]', "]");
+      expect(editTask(narrower).stderr).toContain("may only grow");
+      expect(editTask(TASK.replace("[AC-01]", "[AC-01, AC-02]")).stderr).toContain("criteria");
+      const tooWide = TASK.replace('"tests/unit/sdlc/**"]', '"tests/unit/sdlc/**", "src/**"]');
+      expect(editTask(tooWide).stderr).toContain("wider than one folder");
+      expect(editTask(WIDER).status).toBe(0);
+    });
+
+    it("refuses an epic, a task whose PR is open, a missing reason and another task's block", () => {
+      jira.setIssue("VISP-13", {
+        summary: "Code",
+        body: issueBody(TASK),
+        parent: "VISP-12",
+        status: "10023",
+      });
+      expect(editTask(WIDER).stderr).toContain("In Review");
+      setTask("VISP-13", issueBody(TASK), "Write worklog files");
+      expect(editTask(WIDER, "").stderr).toContain("why");
+      expect(editTask(WIDER.replace("task: VISP-13", "task: VISP-99")).stderr).toContain("VISP-99");
+      writeFileSync(join(repo, "why.md"), "x");
+      const epic = sdlc(
+        "jira",
+        "edit-task",
+        "VISP-12",
+        "--task-file",
+        "task.yml",
+        "--why-file",
+        "why.md",
+      );
+      expect(epic.stderr).toContain("epic");
+    });
+  });
+
+  it("fails the trace when a criterion is in no task or in two", () => {
+    const twoCriteria = ACCEPTANCE.replace(
+      "    level: unit",
+      "    level: unit\n  - id: AC-02\n    clauses: [I-01]\n    given: a\n    when: b\n    expect: c\n    level: unit",
+    );
+    const twoCases = `${TEST_CASES}\n  - id: TC-02\n    title: second\n    criteria: [AC-02]`;
+    setEpic(issueBody(INTENT, twoCriteria, twoCases));
+    setTask("VISP-13", issueBody(TASK), "One");
+    setTask("VISP-14", issueBody(TASK.replace("task: VISP-13", "task: VISP-14")), "Two");
+    sdlc("pull", "VISP-12");
+    const result = sdlc("trace", "VISP-12");
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain("AC-01 is in two tasks: VISP-13, VISP-14");
+    expect(result.stdout).toContain("AC-02 is in no task");
+  });
+
+  it("drops the contract of a task that left the epic, keeps its reports, and leaves no temp files", () => {
+    setTask("VISP-13", issueBody(TASK), "One");
+    setTask("VISP-14", issueBody(TASK.replace("task: VISP-13", "task: VISP-14")), "Two");
+    sdlc("pull", "VISP-12");
+    const gone = join(repo, ".sdlc/features/VISP-12/tasks/VISP-14");
+    writeFileSync(join(gone, "review-1.yml"), "kept");
+    jira.setIssue("VISP-14", { summary: "Two", body: "moved", parent: "VISP-99", status: "10022" });
+    const result = sdlc("pull", "VISP-12");
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("dropped VISP-14");
+    expect(existsSync(join(gone, "task.yml"))).toBe(false);
+    expect(existsSync(join(gone, "review-1.yml"))).toBe(true);
+    const spec = join(repo, ".sdlc/features/VISP-12/spec");
+    expect(readdirSync(spec).filter((name) => name.includes(".tmp"))).toEqual([]);
   });
 
   it("warns when the agent's Jira token expires within 30 days, and not before", () => {

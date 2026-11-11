@@ -1,9 +1,19 @@
 // Copies an epic from Jira into the local read-only cache: the owner's words as owner-text.md,
 // the spec blocks under spec/, whether the owner approved that exact spec as spec/approval.yml,
 // and each child task's task@1 block and ticket (status, link) under tasks/<key>/. An epic
-// without a spec yet keeps only the owner's words. Returns what it did, line by line.
+// without a spec yet keeps only the owner's words. Each file is replaced in one rename, so a hook
+// reading the cache mid-pull sees the old file or the new one, never none. A task that left the
+// epic loses its contract (task, ticket, links) but keeps its reports. Returns what it did.
 
-import { chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { stringify } from "yaml";
 import { checkApproval } from "./approval.mjs";
@@ -24,9 +34,9 @@ export async function pullFeature(feature, cwd = process.cwd()) {
   const ownerText = ownerTextOf(epic.body);
   if (ownerText !== undefined) writeReadOnly(join(root, "owner-text.md"), ownerText);
   const dir = join(root, "spec");
-  rmSync(dir, { recursive: true, force: true });
   const hasSpec = yamlBlocks(epic.body).some((block) => block.schema in SPEC_FILES);
   if (!hasSpec) {
+    rmSync(dir, { recursive: true, force: true });
     lines.push(`${feature} has no spec yet; kept the owner's words only`);
     return lines;
   }
@@ -56,6 +66,7 @@ export async function pullFeature(feature, cwd = process.cwd()) {
 
 async function pullTasks(jira, feature, root) {
   const lines = [];
+  const pulled = new Set();
   for (const issue of await jira.children(feature, jira.config.jira.issueTypes.task)) {
     const task = taskDocument(issue.body, feature, issue.key);
     if (!task) {
@@ -69,12 +80,27 @@ async function pullTasks(jira, feature, root) {
     writeReadOnly(join(dir, "ticket.yml"), stringify(ticket));
     writeReadOnly(join(dir, "links.yml"), stringify(linksOf(issue.body, feature, issue.key)));
     lines.push(`pulled ${task.task} into ${dir}`);
+    pulled.add(task.task);
   }
-  return lines;
+  return [...lines, ...dropStale(join(root, "tasks"), pulled, feature)];
+}
+
+const CONTRACT_FILES = ["task.yml", "ticket.yml", "links.yml"];
+
+function dropStale(tasksDir, pulled, feature) {
+  if (!existsSync(tasksDir)) return [];
+  const stale = readdirSync(tasksDir).filter(
+    (name) => !pulled.has(name) && existsSync(join(tasksDir, name, "task.yml")),
+  );
+  for (const name of stale) {
+    for (const file of CONTRACT_FILES) rmSync(join(tasksDir, name, file), { force: true });
+  }
+  return stale.map((name) => `dropped ${name}: no longer a task of ${feature}; its reports stay`);
 }
 
 function writeReadOnly(path, text) {
-  rmSync(path, { force: true });
-  writeFileSync(path, text);
-  chmodSync(path, 0o444);
+  const temporary = `${path}.tmp-${process.pid}`;
+  writeFileSync(temporary, text);
+  chmodSync(temporary, 0o444);
+  renameSync(temporary, path);
 }

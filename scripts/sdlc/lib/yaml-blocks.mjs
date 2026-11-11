@@ -21,3 +21,21 @@ export function yamlBlocks(markdown) {
   }
   return blocks;
 }
+
+// The markdown with the block whose `schema` is `schema` replaced by `yaml`; other text and
+// blocks stay as they were. Throws when there is no such block.
+export function replaceBlock(markdown, schema, yaml) {
+  const text = markdown.replace(/\r\n/g, "\n");
+  for (const match of text.matchAll(FENCE)) {
+    let doc;
+    try {
+      doc = parse(match[1]);
+    } catch {
+      continue;
+    }
+    if (doc?.schema !== schema) continue;
+    const block = `\`\`\`yaml\n${yaml.trimEnd()}\n\`\`\``;
+    return text.slice(0, match.index) + block + text.slice(match.index + match[0].length);
+  }
+  throw new Error(`no ${schema} block to replace`);
+}
