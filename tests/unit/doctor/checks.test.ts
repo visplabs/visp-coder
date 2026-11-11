@@ -426,19 +426,33 @@ describe("the enforcement check", () => {
     expect(result.detail).not.toContain("mcp");
   });
 
-  it("warns that Codex scope checks happen at commit time", async () => {
+  async function installCodexGit() {
     const state = await workspace.state();
     await setConfigScalar(state.paths, "harness", "codex");
     const installed = await installHarness(
       state.paths,
-      {
-        harness: "codex",
-        hooks: ["git"],
-        mcp: false,
-      },
+      { harness: "codex", hooks: ["git"], mcp: false },
       { guardHandshake: healthyGuard },
     );
     if (!installed.ok) throw new Error(installed.error.message);
+  }
+
+  it("reports the Codex edit hook as enforcing when it is installed", async () => {
+    await installCodexGit();
+    const result = await check("enforcement");
+    expect(result.status).toBe("ok");
+    expect(result.detail).toContain("edit hook (apply_patch)");
+    expect(result.detail).not.toContain("not intercepted");
+  });
+
+  it("warns that Codex scope checks happen at commit time when the edit hook is missing", async () => {
+    await installCodexGit();
+    const file = join(workspace.root, ".codex/hooks.json");
+    const hooks = JSON.parse(await readFile(file, "utf8"));
+    hooks.hooks.PreToolUse = hooks.hooks.PreToolUse.filter(
+      (entry: { matcher: string }) => entry.matcher !== "apply_patch",
+    );
+    await writeFile(file, JSON.stringify(hooks));
     const result = await check("enforcement");
     expect(result.status).toBe("warn");
     expect(result.detail).toContain("commit-time only");
