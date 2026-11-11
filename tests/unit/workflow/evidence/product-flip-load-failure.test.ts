@@ -47,6 +47,12 @@ const PYTEST_COLLECT =
   "___________________ ERROR collecting test_calc.py ____________________\nImportError while importing test module '/tmp/tree/test_calc.py'.\nE   ImportError: cannot import name 'mul' from 'calc' (/tmp/tree/calc.py)\n!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!\n1 error in 0.12s\n";
 const NODE_MISSING_MODULE =
   "Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/tmp/tree/src/calc.mjs' imported from /tmp/tree/test/calc.test.mjs\n    at finalizeResolution (node:internal/modules/esm/resolve:272:11)\n✖ test/calc.test.mjs (31.2ms)\nℹ tests 1\nℹ pass 0\nℹ fail 1\n";
+// Node 22 prints TAP when stdout is not a terminal; Node 24 and later print the `✖ file` line.
+const NODE_MISSING_MODULE_TAP =
+  "TAP version 13\n# Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/tmp/tree/src/calc.mjs' imported from /tmp/tree/test/calc.test.mjs\n#     at finalizeResolution (node:internal/modules/esm/resolve:275:11)\n# Node.js v22.16.0\n# Subtest: test/calc.test.mjs\nnot ok 1 - test/calc.test.mjs\n  ---\n  duration_ms: 44.2\n  type: 'test'\n  failureType: 'testCodeFailure'\n  exitCode: 1\n  error: 'test failed'\n  code: 'ERR_TEST_FAILURE'\n  ...\n1..1\n# tests 1\n# pass 0\n# fail 1\n";
+const NODE_TAP_SUBTEST_FAILED =
+  "TAP version 13\n# Subtest: test/calc.test.mjs\n    # Subtest: loads lazily\n    not ok 1 - loads lazily\n      ---\n      failureType: 'testCodeFailure'\n      error: \"Cannot find module '/tmp/tree/src/calc.mjs'\"\n      code: 'ERR_MODULE_NOT_FOUND'\n      ...\n    1..1\nnot ok 1 - test/calc.test.mjs\n  ---\n  type: 'test'\n  failureType: 'subtestsFailed'\n  ...\n1..1\n# tests 1\n# pass 0\n# fail 1\n";
+const NODE_TAP_OTHERS_PASSED = NODE_MISSING_MODULE_TAP.replace("# pass 0", "# pass 2");
 const VITEST_COLLECT =
   " RUN  v3.2.7 /tmp/tree\n\n⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯\n\n FAIL  tests/calc.test.ts [ tests/calc.test.ts ]\nError: Cannot find module '../src/calc.js' imported from '/tmp/tree/tests/calc.test.ts'\n\n Test Files  1 failed (1)\n      Tests  no tests\n";
 const VITEST_COLLECT_AND_FAILURE = `${VITEST_COLLECT.replace("Tests  no tests", "Tests  2 failed | 3 passed (5)")}`;
@@ -55,6 +61,7 @@ it.each([
   ["a unittest import error", UNITTEST_IMPORT, ["calc.py"]],
   ["a pytest collection error", PYTEST_COLLECT, ["calc.py"]],
   ["a node missing module", NODE_MISSING_MODULE, ["src/calc.mjs"]],
+  ["a node missing module in TAP output", NODE_MISSING_MODULE_TAP, ["src/calc.mjs"]],
   ["a vitest suite that cannot load", VITEST_COLLECT, ["src/calc.ts"]],
 ])("marks %s as a check that could not load without the change", (_name, stdout, reverted) => {
   expect(classify(stdout, reverted)).toMatchObject({
@@ -68,6 +75,8 @@ it.each([
   ["a test that failed beside the import error", UNITTEST_IMPORT_AND_FAILURE, ["calc.py"]],
   ["other unittest tests that ran", UNITTEST_IMPORT_OTHERS_RAN, ["calc.py"]],
   ["a vitest run with failing tests as well", VITEST_COLLECT_AND_FAILURE, ["src/calc.ts"]],
+  ["a TAP file whose own test failed", NODE_TAP_SUBTEST_FAILED, ["src/calc.mjs"]],
+  ["a TAP run in which other tests passed", NODE_TAP_OTHERS_PASSED, ["src/calc.mjs"]],
   ["an assertion", "AssertionError: expected 1 to be 2\nFAILED (failures=1)\n", ["calc.py"]],
   [
     "a syntax error with no runner signal",

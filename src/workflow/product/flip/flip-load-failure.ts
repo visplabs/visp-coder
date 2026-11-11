@@ -12,6 +12,8 @@ const SCRIPT_LOAD_ERROR =
 /** A file the runner reports as failed before it ran a test in it (node:test, vitest, jest). */
 const SCRIPT_FILE_FAILED = [
   /^✖ (?:file:\/\/)?\S+\.[cm]?[jt]sx?\s+\(\d[\d.]*ms\)/m,
+  // node:test's TAP output (Node 22 off a terminal): the file itself failed, not a test in it.
+  /^not ok \d+ - \S+\.[cm]?[jt]sx?\r?\n(?: {2}\S.*\r?\n)*? {2}failureType: 'testCodeFailure'/m,
   /⎯+ Failed Suites\b/,
   /^\s*FAIL\s+(\S+)\s+\[\s*\1\s*\]/m,
   /Test suite failed to run/,
@@ -22,7 +24,7 @@ const TEST_RAN = [
   /^FAIL: /m,
   /FAILED \([^)]*failures=[1-9]/,
   /\b[1-9]\d* (?:passed|failed)\b/,
-  /ℹ pass [1-9]/,
+  /(?:ℹ|^#) pass [1-9]/m,
   /^ok \d+/m,
   /^\s*[✓✔]\s/m,
   /\.\.\. ok$/m,
