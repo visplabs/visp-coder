@@ -162,3 +162,19 @@ export async function testerLaunches(
   if (harness === "codex") return true;
   return harness === "claude-code" && !(await existingCode(workspace.paths.root));
 }
+
+/**
+ * For a full-profile feature, why VISP starts no tester: under Claude Code it tests new projects
+ * only, and this one has code. Nothing is said when the tester runs or would not apply anyway.
+ */
+export async function claudeNoTesterNote(
+  workspace: WorkspaceState,
+  brief: ProductRecord["brief"],
+): Promise<string | undefined> {
+  if (workspace.config.critic?.launch !== "claude-exec") return undefined;
+  if (featureProfile(workspace, { brief }).name !== "full") return undefined;
+  if (brief.acceptanceBaseline.length) return undefined;
+  if (!(await criticEnabled(workspace)) || !(await existingCode(workspace.paths.root)))
+    return undefined;
+  return "No independent tester runs for this feature: under Claude Code VISP starts it for new projects only, and this project has existing code.";
+}
