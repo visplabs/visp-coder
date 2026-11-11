@@ -96,6 +96,25 @@ describe("recall of earlier requests", () => {
     expect(second.projectMemory).toBeUndefined();
   });
 
+  it("says recall did not run and why, without the raw error, when the model call fails", async () => {
+    await project({}, REVIEWER);
+    gate.mockRejectedValue(new Error("codex exec exited 1: token sk-secret-123 rejected"));
+    const first = await feature("Archive items", ARCHIVING);
+    expect(first.recallNote).toBeUndefined();
+    const second = await feature("Restock", "Add restocking.");
+    expect(second.recallNote).toBe(
+      "Earlier decisions were not recalled: the reviewer's model call failed (error). This feature starts without them.",
+    );
+    gate.mockRejectedValue(new Error("Claude Code is not signed in for this process"));
+    expect((await feature("Ship", "Add shipping.")).recallNote).toContain("(not signed in)");
+  });
+
+  it("says nothing about recall when it is off or there is no earlier request", async () => {
+    await project({ recall: false }, REVIEWER);
+    await feature("Archive items", ARCHIVING);
+    expect((await feature("Restock", "Add restocking.")).recallNote).toBeUndefined();
+  });
+
   // Bench batch co1 (claude-exec): no second session was given an earlier decision, and
   // co1-archive-carryover-visp-dev-2 failed 4 of 7 memory checks without the restock cap.
   it("recalls with a VISP-launched Claude reviewer, using its model", async () => {
@@ -164,8 +183,12 @@ describe("recall of earlier requests", () => {
   // VISP calls a model only when the project lets it launch the reviewer.
   it("does not recall with a reviewer the host runs", async () => {
     await project({}, { enabled: true, harness: "claude-code" });
-    await feature("Archive items", ARCHIVING);
-    expect((await feature("Restock", "Add restocking.")).projectMemory).toBeUndefined();
+    expect((await feature("Archive items", ARCHIVING)).recallNote).toBeUndefined();
+    const second = await feature("Restock", "Add restocking.");
+    expect(second.projectMemory).toBeUndefined();
+    expect(second.recallNote).toBe(
+      "Earlier decisions were not recalled: VISP launches no reviewer here (critic.launch is not codex-exec or claude-exec).",
+    );
     expect(gate).not.toHaveBeenCalled();
   });
 

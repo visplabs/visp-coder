@@ -430,6 +430,7 @@ function compactBriefText(name: string, value: unknown, channel: ReplyChannel = 
     data.duplicateNote,
     data.testsNote,
     data.requirementsNote,
+    data.recallNote,
     data.draftNote,
     data.workNote,
   ]
