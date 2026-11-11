@@ -8,6 +8,7 @@ import * as packet from "./commands/packet.mjs";
 import * as preflight from "./commands/preflight.mjs";
 import * as pull from "./commands/pull.mjs";
 import * as releaseCheck from "./commands/release-check.mjs";
+import * as retro from "./commands/retro.mjs";
 import * as review from "./commands/review.mjs";
 import * as syncStatus from "./commands/sync-status.mjs";
 import * as trace from "./commands/trace.mjs";
@@ -20,6 +21,7 @@ const COMMANDS = {
   packet,
   jira,
   review,
+  retro,
   "check-pr": checkPr,
   "ci-failures": ciFailures,
   "sync-status": syncStatus,
@@ -33,6 +35,7 @@ const USAGE = `usage: sdlc <command>
   packet VISP-12 [--results <json>] write the owner packet
   jira show|create-task|edit-task|move|comment ...  Jira as the agent account (writes: clerk only)
   review --task VISP-12/VISP-13 --worktree <dir>  one Codex review round (reviewer only)
+  retro VISP-12                     the epic's retro report from the local records (read-only)
   check-pr <n> [--results <json>]   CI gate: spec approved, the task's linked tests pass
   ci-failures <n> --task VISP-13    print a PR's failed checks and log them as mistakes
   sync-status VISP-12               move task tickets forward to match their pull requests

@@ -87,6 +87,7 @@ The maintainer's agent workflow is recorded in [docs/adr/0001-agent-sdlc.md](doc
 | `pnpm sdlc preflight` | Check the agent account's Jira token and the reviewer's Codex login; the manager runs it before an epic's first stage |
 | `pnpm sdlc ci-failures <n> --task VISP-13` | Print a task PR's failed checks and new SonarQube Cloud issues, and log each to the mistake log; the manager runs it when CI fails |
 | `pnpm sdlc release-check <version>` | Fail when Sentry holds an unresolved issue first seen in that release in bench, dogfood or QE runs |
+| `pnpm sdlc retro VISP-12` | Print the epic's retro report from the local records: its own mistakes by signature, review findings carried over rounds, what was left to the owner, CI failures and the manager's retro notes. Read-only; `/retro VISP-12` turns it into proposed pipeline fixes |
 | `pnpm sdlc check-pr <n> [--results <vitest json>]` | The CI gate for a task PR (below) |
 
 A test case links its test as `<path> > <describe titles> > <test title>`. Produce results with `pnpm exec vitest run <files> --reporter=json --outputFile=results.json`. `.sdlc/` sits in the main checkout and is shared by every worktree.
@@ -97,6 +98,7 @@ A feature starts with two owner-only commands. They have `disable-model-invocati
 
 - `/feature <your request>` opens an epic holding your words verbatim and keeps a local copy; the session then starts `qe-spec`. When `qe-spec` stops, the stop hook checks its spec (valid blocks, your words unchanged, every must clause traced to a criterion and every criterion to a test case) and writes it into the epic with a generated Mermaid mind map.
 - `/approve VISP-12` only reads. Its first line says whether the spec is approved and, if not, why, listing each approval comment that does not count. Then it shows your words, the clauses, the criteria and one line, `SDLC approval VISP-12 spec <first 12 characters of the hash>`. To approve, post that line as a new comment on the epic from your own Jira account. It counts only while you wrote it, nobody edited it, the hash matches the spec, and it is newer than the epic's last description change; spaces around the line are ignored. A status or label never counts.
+- `/retro VISP-12`, after an epic, reads `pnpm sdlc retro VISP-12` and sorts what went wrong into pipeline, agent, task and expected items. For each pipeline item it names the cause as `file:line`, the smallest fix with its failing test, and whether `develop` already fixes it. It changes nothing; you pick which items become `sdlc-fix` issues.
 
 Start the pipeline from a terminal with the pipeline settings, which turn off claude.ai connectors (they act as you):
 
