@@ -34,3 +34,13 @@ export async function preCommitHookPath(root: string): Promise<Result<GitHookPat
     display: rel === "" || rel.startsWith("..") || isAbsolute(rel) ? absolute : rel,
   });
 }
+
+/** The value of `core.hooksPath` as configured, or undefined when it is unset or unreadable. */
+export async function configuredHooksPath(root: string): Promise<string | undefined> {
+  const result = await run("git", ["config", "--get", "core.hooksPath"], {
+    cwd: root,
+    env: { GIT_OPTIONAL_LOCKS: "0", GIT_TERMINAL_PROMPT: "0" },
+  });
+  const value = result.ok && result.value.exitCode === 0 ? result.value.stdout.trim() : "";
+  return value === "" ? undefined : value;
+}

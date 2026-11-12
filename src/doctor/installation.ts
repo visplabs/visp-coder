@@ -30,6 +30,7 @@ import {
 import { preCommitHookPath } from "../harness/git-hook.js";
 import { verifyGuardHandshake } from "../harness/guard-handshake.js";
 import {
+  CODEX_HOOK_SCRIPT,
   HOOK_MARKER,
   isCurrentGeneratedHook,
   renderPreCommitHook,
@@ -372,10 +373,12 @@ export async function checkEnforcement(
   }
 
   if (surfaces.inactive.length === 0) {
+    const codexUnchecked =
+      state.config.harness === "codex" && !surfaces.active.some((s) => s.startsWith("edit hook"));
     return {
       name: "enforcement",
-      status: state.config.harness === "codex" ? "warn" : "ok",
-      detail: `Refusals are enforced by local guardrails: ${surfaces.active.join(", ")}${installation?.hooks.includes("ci") ? ". CI checks pull requests" : ""}${state.config.harness === "codex" ? ". Codex scope checks are commit-time only (apply_patch is not intercepted)" : ""}`,
+      status: codexUnchecked ? "warn" : "ok",
+      detail: `Refusals are enforced by local guardrails: ${surfaces.active.join(", ")}${installation?.hooks.includes("ci") ? ". CI checks pull requests" : ""}${codexUnchecked ? ". Codex scope checks are commit-time only (the apply_patch edit hook is not installed)" : ""}`,
     };
   }
 
@@ -407,6 +410,9 @@ async function inspectEnforcementSurfaces(
   if (state.config.harness === "claude-code" && wantsClaude) {
     addSurface(surfaces, await inspectClaudeEditHook(state));
   }
+  if (state.config.harness === "codex") {
+    addSurface(surfaces, await inspectCodexEditHook(state));
+  }
   if (wantsGit) addSurface(surfaces, await inspectPreCommitHook(state));
   return surfaces;
 }
@@ -419,6 +425,35 @@ interface SurfaceState {
 function addSurface(surfaces: EnforcementSurfaces, state: SurfaceState): void {
   if (state.active) surfaces.active.push(state.active);
   if (state.inactive) surfaces.inactive.push(state.inactive);
+}
+
+/**
+ * Codex's edit hook is an `apply_patch` entry in `.codex/hooks.json` that runs the generated
+ * script. Whether Codex trusts the entry is the separate "codex hooks trust" check. A missing
+ * hook is reported by leaving the surface out, which keeps the commit-time warning.
+ */
+async function inspectCodexEditHook(state: WorkspaceState): Promise<SurfaceState> {
+  const script = await state.files.readTextIfExists(CODEX_HOOK_SCRIPT);
+  const registered = await state.files.readTextIfExists(".codex/hooks.json");
+  if (!script.ok || script.value === undefined || !registered.ok) return {};
+  return hasCodexEditEntry(registered.value) ? { active: "edit hook (apply_patch)" } : {};
+}
+
+function hasCodexEditEntry(text: string | undefined): boolean {
+  if (text === undefined) return false;
+  try {
+    const entries: unknown = JSON.parse(text)?.hooks?.PreToolUse;
+    return (
+      Array.isArray(entries) &&
+      entries.some(
+        (entry) =>
+          entry?.matcher === "apply_patch" &&
+          JSON.stringify(entry.hooks ?? []).includes("codex-hooks.mjs"),
+      )
+    );
+  } catch {
+    return false;
+  }
 }
 
 async function inspectClaudeEditHook(state: WorkspaceState): Promise<SurfaceState> {

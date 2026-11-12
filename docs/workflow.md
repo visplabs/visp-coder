@@ -2,6 +2,8 @@
 
 A feature is one brief plus the records VISP generates while the agent works through it. The agent authors only the brief; status, executions, reviews and summaries are generated and should not be edited.
 
+The workflow needs a Git repository without submodules: it refuses one that contains a submodule, and `visp doctor` names the submodule path.
+
 ## Starting a feature
 
 ```sh
@@ -80,7 +82,7 @@ slices:
 
 `scope.allowed` is the set of paths the agent may change while the slice is authorized; `expected` names the files the slice should touch; `forbidden` narrows `allowed`. `workflow.blockedPaths` from `visp.yml` refuse explicit guard checks and Claude edit-tool writes regardless of slice scope. Slash-free blocked patterns match at any depth, case-insensitively. Git-listed changes are checked at commit and `done`, and ignored `.env*` files are checked against the authorization baseline at `done`; other ignored files written through a shell are outside those after-the-fact checks. Keep the first slice to one usable behavior, including its result and failure path, before expanding.
 
-Scope is enforced by `visp guard`, which the installed hooks call: the Claude Code edit hook before each write, the Git `pre-commit` hook before each commit, and, if installed with `visp install --hooks claude git ci` (or `--hooks git ci` outside Claude Code), a CI job that checks the pull request diff against the slice scopes in the union of committed briefs for features changed in the PR diff or matching the branch (`visp guard --scope tasks`). `--hooks` replaces the default hook set, so include the local hooks you still need. Changing scope requires a brief update and a new `visp work`.
+Scope is enforced by `visp guard`, which the installed hooks call: the Claude Code edit hook before each write, the Git `pre-commit` hook before each commit, and, if installed with `visp install --hooks claude git ci` (or `--hooks git ci` outside Claude Code), a CI job that checks the pull request diff against the slice scopes in the union of committed briefs for features changed in the PR diff or matching the branch (`visp guard --scope tasks`). `--hooks` replaces the default hook set, so include the local hooks you still need. The `pre-commit` hook goes where Git looks for hooks; if `core.hooksPath` points outside the repository (a shared hooks directory), `visp install` stops and names the value, and you either rerun with `--no-hooks`, after which VISP cannot authorize coding, or set a worktree-local `core.hooksPath` as the message says. Changing scope requires a brief update and a new `visp work`.
 
 ## Checks
 

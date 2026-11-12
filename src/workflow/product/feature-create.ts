@@ -52,6 +52,7 @@ import {
 import { accountedRequirements } from "./requirements.js";
 import { withProductMutation } from "./runtime.js";
 import { json, recordMutations, statusMutation } from "./store.js";
+import { claudeNoTesterNote } from "./tester/independent-tests-mode.js";
 
 export async function createProductFeature(
   workspace: WorkspaceState,
@@ -234,8 +235,15 @@ async function createProductFeatureLocked(
         ...(branchWarning ? { branchWarning } : {}),
         ...inheritedOutcome(inherited, acceptedFeature),
         ...hooksWarning(workspace, host),
+        ...(await testerNote(workspace, brief)),
       })
     : saved;
+}
+
+/** Why no tester starts, when the profile is full and Claude Code cannot test existing code. */
+async function testerNote(workspace: WorkspaceState, brief: ProductBrief) {
+  const testsNote = await claudeNoTesterNote(workspace, brief);
+  return testsNote ? { testsNote } : {};
 }
 
 /** The requirements the request states, which the worker accounts for at `visp done`. */

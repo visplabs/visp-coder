@@ -183,8 +183,15 @@ async function execute(
       gate,
       options.signal,
     );
+    const { accountWarning } = prepared.value;
     return finished.ok
-      ? ok({ ...finished.value, ...flipBatchTiming(record, loaded.value) })
+      ? ok({
+          ...finished.value,
+          ...flipBatchTiming(record, loaded.value),
+          ...(accountWarning
+            ? { warnings: [...(finished.value.warnings ?? []), accountWarning] }
+            : {}),
+        })
       : finished;
   });
 }
@@ -414,6 +421,8 @@ interface PreparedExecution {
   source: string;
   snapshot: Record<string, string>;
   commands: ProductCheck[];
+  /** Said in the reply when the worker's `--account` was set aside. */
+  accountWarning?: string;
 }
 async function prepareExecution(
   workspace: WorkspaceState,
@@ -474,19 +483,26 @@ async function prepareExecution(
     commands,
     committedChanges,
     changed: close ? changed : [],
+    ...(accounted.value ? { accountWarning: accounted.value } : {}),
   });
 }
 
-/** Records the worker's account of listed requirements before the checks it cites run. */
+const ACCOUNT_IGNORED = "This request lists no requirements, so --account was ignored.";
+
+/**
+ * Records the worker's account of listed requirements before the checks it cites run. A request
+ * that lists none has nothing to account for: the account is read, ignored, and the warning says so.
+ */
 async function recordRequirementAccounts(
   workspace: WorkspaceState,
   record: ProductRecord,
   entries: readonly string[] | undefined,
-): Promise<Result<void>> {
+): Promise<Result<string | undefined>> {
   if (!entries?.length) return ok(undefined);
   const parsed = parseRequirementAccounts(entries);
   if (!parsed.ok) return parsed;
   const listed = accountedRequirements(record.brief.originalRequest);
+  if (!listed.length) return ok(ACCOUNT_IGNORED);
   const mutation = await requirementAccountMutation(
     workspace,
     record.brief.feature,

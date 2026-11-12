@@ -41,7 +41,7 @@ import {
 } from "./claude-settings.js";
 import { codexRegistrationAdvice, codexRegistrationProblem } from "./codex-mcp-registration.js";
 import { COMMAND_GUIDE_PATH, RETIRED_COMMAND_GUIDE_PATH } from "./command-guide.js";
-import { preCommitHookPath } from "./git-hook.js";
+import { configuredHooksPath, preCommitHookPath } from "./git-hook.js";
 import {
   HOOK_MARKER,
   renderCiWorkflow,
@@ -735,14 +735,14 @@ async function planGitHook(
   const resolved = await preCommitHookPath(paths.root);
   if (!resolved.ok) return resolved;
   if (paths.relative(resolved.value.absolute) === undefined) {
+    const configured = (await configuredHooksPath(paths.root)) ?? resolved.value.display;
     return err(
       vispError(
         "STAGE_BLOCKED",
-        `Git's effective hook path is outside this worktree: ${resolved.value.display}`,
+        `Git's core.hooksPath is ${configured}, which is outside this worktree, so the pre-commit hook cannot go there`,
         {
-          recovery:
-            "Either rerun with --no-hooks, or review Git's worktreeConfig migration warning, then run `git config extensions.worktreeConfig true` and `git config --worktree core.hooksPath .visp/hooks/git` before reinstalling",
-          details: { hookPath: resolved.value.absolute, projectRoot: paths.root },
+          recovery: `Choose one. (1) Rerun with --no-hooks: nothing changes in ${configured}, but an install without the Git hook cannot authorize coding. (2) Review Git's worktreeConfig migration warning, run \`git config extensions.worktreeConfig true\` and \`git config --worktree core.hooksPath .visp/hooks/git\`, then reinstall: the hooks in ${configured} stop running in this worktree.`,
+          details: { hookPath: resolved.value.absolute, projectRoot: paths.root, configured },
         },
       ),
     );

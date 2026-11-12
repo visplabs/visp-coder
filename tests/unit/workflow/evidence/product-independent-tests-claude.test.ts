@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { parse, stringify } from "yaml";
 import {
+  createProductFeatureChecked,
   independentTestsBeforeWork,
   writeConfiguredTests,
 } from "../../../../src/workflow/product/tester/independent-tests.js";
@@ -209,6 +210,45 @@ it("gives no notice on an existing codebase that did not opt in to tester runs",
   expect(work.ok, JSON.stringify(work)).toBe(true);
   expect(calls).toBe(0);
   expect(work.ok && work.value.independentTests).toBeUndefined();
+});
+
+async function featureOnExistingCode(profile: "lean" | "full", existing: boolean, critic = {}) {
+  const fixture = await claudeWorkspace(critic);
+  if (existing)
+    for (const name of ["a", "b", "c"])
+      await fixture.workspace.write(`lib/${name}.mjs`, "export const x = 1;\n");
+  const config = parse(await readFile(join(fixture.workspace.root, "visp.yml"), "utf8"));
+  config.workflow = { ...config.workflow, profile };
+  await fixture.workspace.write("visp.yml", stringify(config));
+  await fixture.workspace.write("NOTES.md", `${profile}\n`);
+  fixture.workspace.commit("existing code and profile");
+  const created = await createProductFeatureChecked(
+    await fixture.workspace.state(),
+    { goal: "Return two again", sourceBrief: "Make the public value two.", branch: false },
+    undefined,
+  );
+  if (!created.ok) throw new Error(created.error.message);
+  return created.value;
+}
+
+it("says a full-profile feature on existing code gets no tester under Claude Code", async () => {
+  const created = await featureOnExistingCode("full", true);
+  expect(created.profile?.name).toBe("full");
+  expect(created.testsNote).toBe(
+    "No independent tester runs for this feature: under Claude Code VISP starts it for new projects only, and this project has existing code.",
+  );
+});
+
+it("says nothing when the tester runs, the profile is lean or another launcher is set", async () => {
+  expect((await featureOnExistingCode("full", false)).testsNote).toBeUndefined();
+  await workspace?.destroy();
+  expect((await featureOnExistingCode("lean", true)).testsNote).toBeUndefined();
+  await workspace?.destroy();
+  const codex = await featureOnExistingCode("full", true, {
+    harness: "codex",
+    launch: "codex-exec",
+  });
+  expect(codex.testsNote).toBeUndefined();
 });
 
 it("records a failed tester with the reason when Claude Code is signed out", async () => {

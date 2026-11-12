@@ -4,7 +4,8 @@ import type { TestRunnerKind } from "./test-sources.js";
  * Which of the project's test files a check's run covered, where its output or command tells:
  * pytest's progress lines (`tests/test_a.py ....`), the start directory and pattern of
  * `python -m unittest discover`, the modules or files given to `python -m unittest` or `pytest`,
- * and the test files or directories a JavaScript runner's command names. A custom runner, a
+ * the test files or directories a JavaScript runner's command names, and the passed-file lines of
+ * vitest's and jest's default reporters (they win over the command). A custom runner, a
  * script or `npm test` does not tell: then the result is undefined and every test file counts.
  */
 
@@ -22,6 +23,25 @@ const DISCOVER_OPTIONS: Record<string, "start" | "pattern" | "top"> = {
   "-t": "top",
   "--top-level-directory": "top",
 };
+
+/** vitest's default line for a test file that passed: `✓ tests/cart.test.ts (2 tests) 3ms`. */
+const VITEST_PASSED_FILE =
+  /^[ \t]*[✓✔][ \t]+(?:\|[^|\n]+\|[ \t]+)?(\S+\.[cm]?[jt]sx?)[ \t]+\(\d+ tests?\)(?:[ \t]+[\d.]+m?s)?[ \t]*$/gm;
+/** jest's default line for a test file that passed: `PASS tests/cart.test.ts`, with an optional project name. */
+const JEST_PASSED_FILE =
+  /^[ \t]*PASS[ \t]+(?:\S+[ \t]+)?(\S+\.[cm]?[jt]sx?)(?:[ \t]+\([\d.]+ m?s\))?[ \t]*$/gm;
+
+/** The test files a JavaScript runner's default reporter shows as passed, one line per file. */
+export function passedFilesIn(output: string): string[] {
+  return [VITEST_PASSED_FILE, JEST_PASSED_FILE].flatMap((line) =>
+    [...output.matchAll(line)].map((match) => clean(match[1] ?? "")),
+  );
+}
+
+/** The output without its passed-file lines: what is left says whether the runner lists tests one by one. */
+export function withoutPassedFiles(output: string): string {
+  return output.replace(VITEST_PASSED_FILE, "").replace(JEST_PASSED_FILE, "");
+}
 
 const unquote = (word: string) => word.replace(/^(["'])(.*)\1$/, "$2");
 const clean = (path: string) => path.replace(/^\.\//, "").replace(/\/+$/, "");
@@ -159,6 +179,8 @@ export function testFilesRun(
     return words ? unittestCovers(words.args, words.directory) : undefined;
   }
   if (runner !== "js") return undefined;
+  const shown = passedFilesIn(output);
+  if (shown.length) return (path) => shown.includes(path);
   const words = runnerWords(command, (segment, at) =>
     /(?:^|\/)(?:node|jest|mocha|vitest)$/.test(segment[at] ?? ""),
   );

@@ -20,6 +20,7 @@ import {
   type RootNeedles,
   scanProjectFile,
 } from "./flip-environment.js";
+import { loadFailure } from "./flip-load-failure.js";
 import { type FlipEntry, inFlipTree, recoverFlipBaseline } from "./flip-tree.js";
 import { flipValidationPaths } from "./flip-validation.js";
 
@@ -280,6 +281,7 @@ export function classifyFlip(
         ...base,
         failsWithoutChange: true,
         signal: structural ? "structural" : "behavioral",
+        ...loadFailure(structural, raw),
         ...(first ? { reason: first } : {}),
       }
     : {

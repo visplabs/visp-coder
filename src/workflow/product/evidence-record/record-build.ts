@@ -12,7 +12,7 @@ import type { RegressionGateReport } from "../regression/regression-report.js";
 import type { ProductNext } from "../status.js";
 import type { ProductRecord } from "../store.js";
 import type { IndependentTestsRecord } from "../tester/independent-tests-model.js";
-import { accountGaps } from "./record-accounts.js";
+import { accountCounts, accountGaps } from "./record-accounts.js";
 import { checkEvidence } from "./record-checks.js";
 import { regressionGaps, regressionsFrom } from "./record-regressions.js";
 import type {
@@ -94,8 +94,10 @@ export function buildEvidenceRecord(inputs: EvidenceInputs): EvidenceRecord {
     lifecycle: record.state.status,
     subjectDigest: subject,
     summary: {
+      // A request that lists requirements is counted by them, as its account table is.
       requirements: done.length,
       verified: count("verified"),
+      ...(inputs.accounts?.length ? accountCounts(inputs.accounts) : {}),
       judged: count("judged"),
       failed: count("failed"),
       unverified: count("unverified"),

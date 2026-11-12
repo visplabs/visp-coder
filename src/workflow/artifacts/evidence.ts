@@ -125,6 +125,11 @@ export const flipCheckSchema = z
     /** What kind of failure the reverted tree produced, when it failed. */
     /** Product comparisons label recognizable test failures; this alone grants no evidence credit. */
     signal: z.enum(["behavioral", "structural", "unclassified"]).optional(),
+    /**
+     * True when the reverted tree's check could not import or collect its tests, on a clear runner
+     * signal: it failed to load, not a test that ran and failed. Absent when unknown or not so.
+     */
+    failedToLoad: z.boolean().optional(),
     /** Why it could not run, did not apply, or how the reverted tree was built. */
     reason: z.string().optional(),
     revertedFiles: z.array(z.string()).default([]),

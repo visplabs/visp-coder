@@ -250,9 +250,7 @@ export async function requirementAccountMutation(
     return err(
       vispError(
         "ARTIFACT_INVALID",
-        listed.length
-          ? `${unknown.join(", ")} ${unknown.length === 1 ? "is" : "are"} not listed; the request's requirements are ${listed[0]?.id}–${listed.at(-1)?.id}`
-          : "This request lists no requirements to account for",
+        `${unknown.join(", ")} ${unknown.length === 1 ? "is" : "are"} not listed; the request's requirements are ${listed[0]?.id}–${listed.at(-1)?.id}`,
       ),
     );
   const stored = await readRequirementAccounts(workspace, feature, listed);

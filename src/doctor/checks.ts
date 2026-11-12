@@ -5,7 +5,7 @@ import { browserExecutableIdentity } from "../core/browser-executable.js";
 import { CONFIG_FILE, LEGACY_STATE_IGNORE, PRODUCT_NAME, STATE_DIR } from "../core/constants.js";
 import { describeCommand, resolveCommand, run } from "../core/exec.js";
 import { inspectFileTransactions } from "../core/file-transaction.js";
-import { isRepository, workingTreeChanges } from "../core/git.js";
+import { isRepository, repositoryGitlinks, workingTreeChanges } from "../core/git.js";
 import { ok, type Result } from "../core/result.js";
 import { inspectStateLock, STATE_LOCK_DIRECTORY } from "../core/state-lock.js";
 import { checkCurrency, openProjectStore } from "../graph/index.js";
@@ -64,6 +64,7 @@ export async function runChecks(
     await checkInstalledRuntime(state),
     await checkPathRuntime(state),
     await checkGit(state),
+    await checkSubmodules(state),
     await checkForeignHostFiles(state),
     await checkHarnessAssets(state),
     await checkMcpRegistration(state),
@@ -422,6 +423,27 @@ async function checkGit(state: WorkspaceState): Promise<Check> {
       ? "Feature work exists outside a Git repository, so it cannot be authorized or evidenced against a before-tree"
       : "Not a git repository, so scope checks cannot read a diff",
     recovery: "git init",
+  };
+}
+
+/** The product workflow refuses a repository with a submodule, so say so before a feature does. */
+async function checkSubmodules(state: WorkspaceState): Promise<Check> {
+  const name = "git submodules";
+  if (!(await isRepository(state.paths.root)))
+    return { name, status: "ok", detail: "Not a Git repository, so there are no submodules" };
+  const links = await repositoryGitlinks(state.paths.root);
+  if (!links.ok)
+    return {
+      name,
+      status: "unknown",
+      detail: `Submodules could not be listed: ${links.error.message}`,
+    };
+  if (links.value.length === 0) return { name, status: "ok", detail: "No Git submodules" };
+  return {
+    name,
+    status: "warn",
+    detail: `Git submodule${links.value.length > 1 ? "s" : ""} at ${links.value.join(", ")}: ${PRODUCT_NAME}'s workflow refuses a repository that contains one`,
+    recovery: `Use ${PRODUCT_NAME} in a repository without submodules`,
   };
 }
 

@@ -18,6 +18,8 @@ export interface ProductFeatureOutcome {
   readonly projectMemory?: readonly string[];
   /** Commits made after the recalled requests were given, listed with the memory. */
   readonly projectMemoryLaterChanges?: readonly string[];
+  /** Set when recall of earlier decisions did not run (no reviewer VISP launches, or the call failed), and why. */
+  readonly recallNote?: string;
   readonly branchCreated?: string;
   readonly branchWarning?: string;
   readonly redactionNotice?: string;

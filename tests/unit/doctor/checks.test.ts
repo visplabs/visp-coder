@@ -426,19 +426,33 @@ describe("the enforcement check", () => {
     expect(result.detail).not.toContain("mcp");
   });
 
-  it("warns that Codex scope checks happen at commit time", async () => {
+  async function installCodexGit() {
     const state = await workspace.state();
     await setConfigScalar(state.paths, "harness", "codex");
     const installed = await installHarness(
       state.paths,
-      {
-        harness: "codex",
-        hooks: ["git"],
-        mcp: false,
-      },
+      { harness: "codex", hooks: ["git"], mcp: false },
       { guardHandshake: healthyGuard },
     );
     if (!installed.ok) throw new Error(installed.error.message);
+  }
+
+  it("reports the Codex edit hook as enforcing when it is installed", async () => {
+    await installCodexGit();
+    const result = await check("enforcement");
+    expect(result.status).toBe("ok");
+    expect(result.detail).toContain("edit hook (apply_patch)");
+    expect(result.detail).not.toContain("not intercepted");
+  });
+
+  it("warns that Codex scope checks happen at commit time when the edit hook is missing", async () => {
+    await installCodexGit();
+    const file = join(workspace.root, ".codex/hooks.json");
+    const hooks = JSON.parse(await readFile(file, "utf8"));
+    hooks.hooks.PreToolUse = hooks.hooks.PreToolUse.filter(
+      (entry: { matcher: string }) => entry.matcher !== "apply_patch",
+    );
+    await writeFile(file, JSON.stringify(hooks));
     const result = await check("enforcement");
     expect(result.status).toBe("warn");
     expect(result.detail).toContain("commit-time only");
@@ -1236,6 +1250,27 @@ describe("the git preflight check", () => {
 
     expect(result.status).toBe("fail");
     expect(result.detail).toContain("cannot be authorized or evidenced");
+  });
+});
+
+describe("the git submodules check", () => {
+  it("is ok without a submodule", async () => {
+    expect(await check("git submodules")).toMatchObject({ status: "ok" });
+  });
+
+  it("names the submodule path and says the workflow refuses the repository", async () => {
+    const added = spawnSync(
+      "git",
+      ["update-index", "--add", "--cacheinfo", `160000,${"a".repeat(40)},vendor/lib`],
+      { cwd: workspace.root, encoding: "utf8" },
+    );
+    expect(added.status).toBe(0);
+
+    const result = await check("git submodules");
+
+    expect(result.status).toBe("warn");
+    expect(result.detail).toContain("vendor/lib");
+    expect(result.detail).toContain("workflow refuses");
   });
 });
 

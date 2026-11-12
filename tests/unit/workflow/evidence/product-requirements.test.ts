@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { productEvidenceGaps } from "../../../../src/workflow/product/assessment.js";
 import { runProductDone } from "../../../../src/workflow/product/evidence.js";
-import { createProductFeature } from "../../../../src/workflow/product/index.js";
+import { createProductFeature, runProductReport } from "../../../../src/workflow/product/index.js";
 import {
   parseRequirementAccounts,
   requestRequirements,
@@ -380,6 +380,30 @@ describe("at visp done", () => {
     expect(feature).not.toHaveProperty("requirements");
     const closed = await runProductDone(await state(), {});
     expect(closed.ok && closed.value.closed).toBe(true);
+  });
+
+  it("counts the listed requirements in the evidence record, not the one outcome behind them", async () => {
+    await started("- Export value two.\n- Export label two.");
+    const closed = await runProductDone(await state(), {
+      account: ["R001=C001 two", "R002=not done: the label stays as the request leaves it"],
+    });
+    expect(closed.ok && closed.value.closed).toBe(true);
+    const report = await runProductReport(await state(), {});
+    if (!report.ok) throw new Error(report.error.message);
+    expect(report.value.record?.asked.requirements).toHaveLength(1);
+    expect(report.value.record?.accounts).toHaveLength(2);
+    expect(report.value.record?.summary).toMatchObject({ requirements: 2, verified: 1 });
+    expect(report.value.markdown).toContain("1 of 2 requirements shown by checks");
+  });
+
+  it("accepts an account for a request that lists no requirements and says it was ignored", async () => {
+    await started("Make the public value two.");
+    const closed = await runProductDone(await state(), { account: ["R001=C001 two"] });
+    expect(closed.ok && closed.value.closed).toBe(true);
+    expect(closed.ok && closed.value.warnings).toContain(
+      "This request lists no requirements, so --account was ignored.",
+    );
+    expect(closed.ok && closed.value).not.toHaveProperty("requirements");
   });
 
   it("moves a lean feature to the full profile when its change touches more than 15 files", async () => {
